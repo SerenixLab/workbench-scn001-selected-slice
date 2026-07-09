@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { SutReferenceError } from "./errors.js";
+import { SutBoundaryValidationError, SutReferenceError } from "./errors.js";
 
 export class RunState {
   constructor() {
@@ -74,6 +74,27 @@ export class RunState {
     };
   }
 
+  assertInputReferencesResolve(inputs) {
+    for (const input of inputs) {
+      const reference = input.kind === "state_reference"
+        ? input.stateRef
+        : input.kind === "simulator_realization"
+          ? input.requestedRef
+          : undefined;
+
+      if (reference && !this.records.has(reference)) {
+        throw new SutBoundaryValidationError(
+          `SUT-visible reference ${reference} does not resolve inside this run.`
+        );
+      }
+    }
+  }
+
+  processCurrentInteraction() {
+    this.deriveAttributedAssertions();
+    this.deriveTemporalEligibilityAssessments();
+  }
+
   snapshot() {
     return clone({
       runRef: this.runRef,
@@ -97,6 +118,120 @@ export class RunState {
     return clone(this.relations.filter((relation) => relation.fromRef === reference || relation.toRef === reference));
   }
 
+  deriveAttributedAssertions() {
+    const communicationFacts = this.inputFacts().filter((fact) => (
+      fact.role === "communication" && !this.hasDerivedRecord(fact.reference, "attributed_assertion")
+    ));
+    if (communicationFacts.length === 0) {
+      return;
+    }
+
+    const assertions = communicationFacts.map((fact) => ({
+      reference: createReference("state"),
+      family: "attributed_assertion",
+      origin: "sut",
+      sourceCommunicationRef: fact.reference,
+      sourceActorRef: fact.sourceActorRef,
+      context: fact.payload.context,
+      occurrenceOrder: fact.payload.occurrenceOrder,
+      epistemicStatus: "attributed_user_assertion",
+      statusOrigin: "sut_transition",
+      createdOrder: this.allocateOrder()
+    }));
+    const transition = this.createTransition(
+      "attribute_current_communications",
+      communicationFacts.map((fact) => fact.reference),
+      assertions.map((assertion) => assertion.reference)
+    );
+
+    this.commitDerivedRecords(assertions, transition);
+    for (const assertion of assertions) {
+      this.relations.push({
+        relationKind: "source",
+        fromRef: assertion.reference,
+        toRef: assertion.sourceActorRef,
+        targetRole: "semantic_source",
+        effectiveOrder: assertion.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+      this.relations.push({
+        relationKind: "basis",
+        fromRef: assertion.reference,
+        toRef: assertion.sourceCommunicationRef,
+        targetRole: "attributed_communication",
+        effectiveOrder: assertion.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+  }
+
+  deriveTemporalEligibilityAssessments() {
+    const currentChronology = this.currentChronologyFact();
+    if (!currentChronology) {
+      return;
+    }
+
+    const observations = this.inputFacts().filter((fact) => (
+      fact.role === "task_observation"
+      && fact.payload.occurrenceScenarioDay < currentChronology.payload.scenarioDay
+      && !this.hasDerivedRecord(fact.reference, "temporal_eligibility_assessment")
+    ));
+    if (observations.length === 0) {
+      return;
+    }
+
+    const assessments = observations.map((observation) => {
+      const ageDays = currentChronology.payload.scenarioDay - observation.payload.occurrenceScenarioDay;
+      return {
+        reference: createReference("state"),
+        family: "temporal_eligibility_assessment",
+        origin: "sut",
+        assessedObservationRef: observation.reference,
+        chronologyRef: currentChronology.reference,
+        useTarget: "independent_current_skill_authority",
+        dimension: observation.payload.dimension,
+        observationScenarioDay: observation.payload.occurrenceScenarioDay,
+        currentScenarioDay: currentChronology.payload.scenarioDay,
+        ageDays,
+        eligibility: ageDays > 90 ? "ineligible" : "eligible",
+        temporalUncertainty: "none",
+        statusOrigin: "sut_transition",
+        createdOrder: this.allocateOrder()
+      };
+    });
+    const transition = this.createTransition(
+      "assess_temporal_eligibility",
+      [...observations.map((observation) => observation.reference), currentChronology.reference],
+      assessments.map((assessment) => assessment.reference)
+    );
+
+    this.commitDerivedRecords(assessments, transition);
+    for (const assessment of assessments) {
+      this.relations.push({
+        relationKind: "basis",
+        fromRef: assessment.reference,
+        toRef: assessment.assessedObservationRef,
+        targetRole: "assessed_evidence",
+        semanticUseTarget: assessment.useTarget,
+        effectiveOrder: assessment.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+      this.relations.push({
+        relationKind: "basis",
+        fromRef: assessment.reference,
+        toRef: assessment.chronologyRef,
+        targetRole: "current_chronology",
+        semanticUseTarget: assessment.useTarget,
+        effectiveOrder: assessment.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+  }
+
   stageActor(sourceActor, stagedActors) {
     const existingReference = this.actorReferences.get(sourceActor);
     if (existingReference) {
@@ -117,6 +252,48 @@ export class RunState {
     };
     stagedActors.push(actor);
     return actor;
+  }
+
+  inputFacts() {
+    return [...this.records.values()].filter((record) => record.family === "input_fact");
+  }
+
+  currentChronologyFact() {
+    return this.inputFacts()
+      .filter((fact) => fact.role === "chronology_fact")
+      .sort((left, right) => (
+        right.payload.scenarioDay - left.payload.scenarioDay
+        || right.payload.sessionOrder - left.payload.sessionOrder
+        || right.payload.occurrenceOrder - left.payload.occurrenceOrder
+      ))[0];
+  }
+
+  hasDerivedRecord(inputReference, family) {
+    return this.relations.some((relation) => (
+      relation.relationKind === "basis"
+      && relation.toRef === inputReference
+      && this.records.get(relation.fromRef)?.family === family
+    ));
+  }
+
+  createTransition(transitionKind, inputReferences, resultReferences) {
+    return {
+      reference: createReference("transition"),
+      family: "sut_transition_evidence",
+      origin: "sut",
+      transitionKind,
+      inputReferences,
+      resultReferences,
+      createdOrder: this.allocateOrder(),
+      result: "accepted"
+    };
+  }
+
+  commitDerivedRecords(records, transition) {
+    for (const record of records) {
+      this.records.set(record.reference, record);
+    }
+    this.records.set(transition.reference, transition);
   }
 
   allocateOrder() {

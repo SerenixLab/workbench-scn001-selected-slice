@@ -34,14 +34,16 @@ export function createSutBoundary() {
     ingestSutVisibleInputs(...argumentsReceived) {
       assertArity("ingestSutVisibleInputs", argumentsReceived, 2);
       const [runRef, batch] = argumentsReceived;
+      const run = getRun(runs, runRef);
       const inputs = validateInputBatch(batch);
-      return getRun(runs, runRef).ingest(inputs);
+      run.assertInputReferencesResolve(inputs);
+      return run.ingest(inputs);
     },
 
     processCurrentInteraction(...argumentsReceived) {
       assertArity("processCurrentInteraction", argumentsReceived, 1);
       const [runRef] = argumentsReceived;
-      getRun(runs, runRef);
+      getRun(runs, runRef).processCurrentInteraction();
       return Object.freeze([]);
     },
 

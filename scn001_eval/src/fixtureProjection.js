@@ -5,11 +5,11 @@ const roleDefinitions = {
   },
   task_observation: {
     kind: "task_observation",
-    keys: ["itemRef", "taskMode", "dimension", "correct"]
+    keys: ["itemRef", "taskMode", "dimension", "correct", "occurrenceScenarioDay", "sessionId", "sessionOrder"]
   },
   chronology_fact: {
     kind: "chronology_fact",
-    keys: ["scenarioDay", "sessionOrder"]
+    keys: ["scenarioDay", "sessionId", "sessionOrder"]
   },
   context_label: {
     kind: "context_label",

@@ -9,19 +9,23 @@ const inputValidators = {
     assertString(input.context, `${path}.context`);
   },
   task_observation: (input, path) => {
-    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "itemRef", "taskMode", "dimension", "correct"], path);
+    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "itemRef", "taskMode", "dimension", "correct", "occurrenceScenarioDay", "sessionId", "sessionOrder"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertString(input.itemRef, `${path}.itemRef`);
     assertString(input.taskMode, `${path}.taskMode`);
     assertString(input.dimension, `${path}.dimension`);
     assertBoolean(input.correct, `${path}.correct`);
+    assertNonNegativeInteger(input.occurrenceScenarioDay, `${path}.occurrenceScenarioDay`);
+    assertString(input.sessionId, `${path}.sessionId`);
+    assertPositiveInteger(input.sessionOrder, `${path}.sessionOrder`);
   },
   chronology_fact: (input, path) => {
-    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "scenarioDay", "sessionOrder"], path);
+    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "scenarioDay", "sessionId", "sessionOrder"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertNonNegativeInteger(input.scenarioDay, `${path}.scenarioDay`);
+    assertString(input.sessionId, `${path}.sessionId`);
     assertPositiveInteger(input.sessionOrder, `${path}.sessionOrder`);
   },
   context_label: (input, path) => {

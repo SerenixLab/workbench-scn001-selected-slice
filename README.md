@@ -30,7 +30,7 @@ scn001_eval -> @zoey/scn001-sut-core public package export
 scn001_sut_core -> no evaluation dependency
 ```
 
-`scn001_sut_core` currently provides only the minimum run lifecycle, closed SUT-visible input ingress, run-scoped fact/transition/relation retention, and passive inspection surfaces. `scn001_eval` owns allowlist projection from evaluation records and a harness that calls only that public SUT boundary.
+`scn001_sut_core` provides the minimum run lifecycle, closed SUT-visible input ingress, run-scoped fact/transition/relation retention, and passive inspection surfaces. Its first semantic segment derives attributed current-user assertions and `>90`-scenario-day temporal eligibility from raw communications, observations, and chronology. It does not create current-skill facts, trial candidates, active trials, or behavior dispositions. `scn001_eval` owns allowlist projection from evaluation records and a harness that calls only that public SUT boundary.
 
 This is engineering conformance infrastructure. It is not a formal evaluation record, behavioral-compatibility claim, milestone acceptance, or `SCN-001` pass.
 

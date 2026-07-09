@@ -2,7 +2,7 @@
 
 This ledger records local enforcement status for governed non-throwaway work in this workbench.
 
-The initial two-package boundary spine exists. It supplies engineering-conformance mechanisms only: no selected-slice behavior transition, formal evaluation record, behavioral-compatibility claim, scoreability claim, or milestone-acceptance claim exists yet.
+The initial two-package boundary spine and first semantic segment exist. The SUT can derive attributed current-user assertions and selected temporal eligibility from raw input, but it does not create current-skill facts, trial candidates, active trials, behavior dispositions, or outcomes. No formal evaluation record, behavioral-compatibility claim, scoreability claim, or milestone-acceptance claim exists yet.
 
 Entries remain `review-only` until a human or project-owner-authorized reviewer records the required manual controls and repository branch protection confirms any required CI gate. Local automated mechanisms and commands are identified below.
 
@@ -58,12 +58,12 @@ Rule ID: `ENG-CONF-IMPORT-002`
 Rule revision: `R1`
 Governing source revisions: `ADR-008 R2`; `ENG-HEALTH-API-001 R1`
 Applies To: `scn001_eval`
-Actual mechanisms: SUT package export map; evaluation public-package import; static dependency checker; negative import test; manual-review
+Actual mechanisms: SUT package export map; evaluation public-package import; static dependency checker that forbids production dynamic loaders; negative import test; manual-review
 Actual test modes: contract; negative
 Promotion integration: local `npm run check:deps`; CI workflow `.github/workflows/ci.yml`
 Status: review-only
 Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_sut_core/package.json`; `scn001_eval/src/harness.js`; `scripts/check-dependency-boundary.mjs`; `scn001_eval/test/harness.test.js`
+Local evidence: `scn001_sut_core/package.json`; `scn001_eval/src/harness.js`; `scripts/check-dependency-boundary.mjs`; `scn001_eval/test/harness.test.js`; `tests/conformance/boundary.test.js`
 Residual risk: only the boundary spine exists; later behavior-evidence tests must remain public-boundary driven
 Reviewer/Owner: implementation maintainer
 Verified at: local `npm run check` on 2026-07-10; commit pending
@@ -72,7 +72,7 @@ Rule ID: `ENG-CONF-PAYLOAD-001`
 Rule revision: `R1`
 Governing source revisions: `ADR-005 R2`; `ADR-008 R2`
 Applies To: future SUT ingress and evaluation-origin payload projection
-Actual mechanisms: exact-key runtime validation; evaluation allowlist projection; atomic validation before run-state mutation; manual-review
+Actual mechanisms: exact-key runtime validation; evaluation allowlist projection; atomic validation and run-local reference resolution before run-state mutation; manual-review
 Actual test modes: contract; negative
 Promotion integration: local `npm run check:boundary`; CI workflow `.github/workflows/ci.yml`
 Status: review-only
@@ -116,12 +116,12 @@ Rule ID: `ENG-CONF-PAYLOAD-002`
 Rule revision: `R1`
 Governing source revisions: `ADR-005 R2`; `ADR-006 R2`; `ADR-008 R2`
 Applies To: SUT public input validation and ingestion
-Actual mechanisms: validation completes before run-state mutation; rejected input cannot consume semantic order; manual-review
+Actual mechanisms: validation and run-local reference resolution complete before run-state mutation; rejected input cannot consume semantic order; manual-review
 Actual test modes: negative; contract
 Promotion integration: local `npm run check:boundary`; CI workflow `.github/workflows/ci.yml`
 Status: review-only
 Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_sut_core/src/inputValidation.js`; `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/test/run-state.test.js`
+Local evidence: `scn001_sut_core/src/inputValidation.js`; `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js`
 Residual risk: later deserializers and telemetry paths do not exist and must preserve atomic rejection
 Reviewer/Owner: implementation maintainer
 Verified at: local `npm run check` on 2026-07-10; commit pending
@@ -170,9 +170,9 @@ Verified at: local `npm run check` on 2026-07-10; commit pending
 
 Rule ID: `ENG-CONF-STATE-002`
 Rule revision: `R1`
-Governing source revisions: `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2`
+Governing source revisions: `ADR-003 R2`; `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2`
 Applies To: SUT-owned input ingestion and transition evidence
-Actual mechanisms: ingestion records a SUT-owned transition with its contemporaneous input references and order; manual-review
+Actual mechanisms: ingestion, attribution, and temporal-assessment transitions record contemporaneous inputs, outputs, relations, and order; manual-review
 Actual test modes: contract; negative
 Promotion integration: local `npm run check:state`; CI workflow `.github/workflows/ci.yml`
 Status: review-only
@@ -184,15 +184,15 @@ Verified at: local `npm run check` on 2026-07-10; commit pending
 
 Rule ID: `ENG-CONF-DEP-001`
 Rule revision: `R1`
-Governing source revisions: `ADR-007 R3`; `ADR-008 R2`
+Governing source revisions: `ADR-003 R2`; `ADR-007 R3`; `ADR-008 R2`
 Applies To: source and basis relation capture
-Actual mechanisms: source and basis relations are created inside the same ingestion operation as the transition; manual-review
+Actual mechanisms: source and basis relations are created inside each ingestion, attribution, and temporal-assessment transition; manual-review
 Actual test modes: contract; negative
 Promotion integration: local `npm run check:state`; CI workflow `.github/workflows/ci.yml`
 Status: review-only
 Failure consequences: merge-blocking; claim-blocking
 Local evidence: `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js`
-Residual risk: no future dependency consumers or post-hoc capture paths exist yet
+Residual risk: trial, activation, and outcome dependency consumers do not exist yet and require their own no-post-hoc-repair tests
 Reviewer/Owner: implementation maintainer
 Verified at: local `npm run check` on 2026-07-10; commit pending
 
@@ -213,14 +213,14 @@ Verified at: local `npm run check` on 2026-07-10; commit pending
 Rule ID: `ENG-CONF-INSPECT-002`
 Rule revision: `R1`
 Governing source revisions: `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2`
-Applies To: inspection interleaved with current no-op processing/output paths
-Actual mechanisms: inspection does not alter records, relation sets, or order; current processing/output paths are read-only; manual-review
+Applies To: inspection interleaved with current attribution and temporal-eligibility processing/output paths
+Actual mechanisms: inspection does not alter records, relation sets, or order; interleaving tests compare later attribution and temporal-assessment output; manual-review
 Actual test modes: interleaving; replay; negative
 Promotion integration: local `npm run check:state`; CI workflow `.github/workflows/ci.yml`
 Status: review-only
 Failure consequences: merge-blocking; claim-blocking
 Local evidence: `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/test/run-state.test.js`
-Residual risk: equivalence must be re-proven once behavior-driving processing is introduced
+Residual risk: equivalence must be re-proven for candidate, activation, correction, and outcome transitions
 Reviewer/Owner: implementation maintainer
 Verified at: local `npm run check` on 2026-07-10; commit pending
 
@@ -242,13 +242,27 @@ Rule ID: `ENG-CONF-REF-001`
 Rule revision: `R1`
 Governing source revisions: `ADR-005 R2`; `ADR-007 R3`; `ADR-008 R2`
 Applies To: SUT run, state, transition, actor, and relation references
-Actual mechanisms: generated opaque SUT references; exact state-handle validation; evaluation-context identifier rejection; manual-review
+Actual mechanisms: generated opaque SUT references; exact state-handle validation; same-run resolution before ingress; evaluation-context identifier rejection; manual-review
 Actual test modes: contract; negative
 Promotion integration: local `npm run check:state`; CI workflow `.github/workflows/ci.yml`
 Status: review-only
 Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_sut_core/src/runState.js`; `scn001_sut_core/src/inputValidation.js`; `scn001_sut_core/test/run-state.test.js`
+Local evidence: `scn001_sut_core/src/runState.js`; `scn001_sut_core/src/inputValidation.js`; `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/test/run-state.test.js`
 Residual risk: lifecycle effective-endpoint versioning is not needed until mutable selected-slice state exists
+Reviewer/Owner: implementation maintainer
+Verified at: local `npm run check` on 2026-07-10; commit pending
+
+Rule ID: `ENG-BASE-001`
+Rule revision: `R1`
+Governing source revisions: `ADR-003 R2`; `ADR-005 R2`; `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2`; `ENGINEERING_STANDARD.md V0.4.1`
+Applies To: current attribution and temporal-eligibility implementation segment
+Actual mechanisms: raw chronology-only ingress; SUT-owned attribution and `>90`-day eligibility transitions; source/basis relation inspection; manual-review
+Actual test modes: contract; negative; regression
+Promotion integration: local `npm run check:state`; CI workflow `.github/workflows/ci.yml`
+Status: review-only
+Failure consequences: promotion-blocking; claim-blocking
+Local evidence: `scn001_sut_core/src/inputValidation.js`; `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js`
+Residual risk: fixture-initialized historical semantic status, recognition/production comparison, trial formation, and behavioral transitions remain unimplemented
 Reviewer/Owner: implementation maintainer
 Verified at: local `npm run check` on 2026-07-10; commit pending
 
