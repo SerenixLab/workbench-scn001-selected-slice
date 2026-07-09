@@ -1,0 +1,38 @@
+# Zoey Governance Lock
+
+Lock version: `V0.1.0`
+
+Repository role: `workbench`
+
+Governance classification: `governed non-throwaway implementation`
+
+Permitted architecture claim: `SCN-001 selected-slice scenario-provisional under ADR-001 R1 and ADR-008 R2`
+
+Canonical source: `Zoey/meta`
+
+Snapshot date: 2026-07-09
+
+## Active Governance
+
+| Artifact | Version / Revision | Snapshot path | SHA-256 |
+| --- | --- | --- | --- |
+| Engineering standard | `V0.4.1` | `governance/ENGINEERING_STANDARD.md` | `48fc55f0ff4272ff0175ab7068f3b8b27a7913f1be82bda6525450cd05980c64` |
+| Active profile | `SCN001_SELECTED_SLICE V0.2.1` | `governance/ACTIVE_PROFILE.md` | `270906a447a7a307445ecda165fe5ee38f6bf3bced04dd4b112721aab9d5ea33` |
+| Open questions | `V0.2.18` | `governance/sources/OPEN_QUESTIONS.md` | `bbcae65e5c951de0b038277a6091d4d4be4c7b6f4b79961b9faf7c6ac7a7750a` |
+
+## Governing Source Snapshots
+
+| Source | Revision | Snapshot path | SHA-256 |
+| --- | --- | --- | --- |
+| `ADR-001-first-vertical-slice.md` | `R1` | `governance/sources/ADR-001-first-vertical-slice.md` | `d3d7da1be5765d35d5727803ef99bc180c50738d17db40d6344f23f08ee8f206` |
+| `ADR-002-scn001-system-under-test-boundary.md` | `R2` | `governance/sources/ADR-002-scn001-system-under-test-boundary.md` | `335f30b41a911ff30deee3c50f44edd06e605fe16eca442c32fbbabde859405c` |
+| `ADR-003-scn001-selected-slice-trial-time-contract.md` | `R2` | `governance/sources/ADR-003-scn001-selected-slice-trial-time-contract.md` | `60f4fb8b9c7461306b75e8d1117e0d71643afe899dbb5d5790a64164b451b01a` |
+| `ADR-004-scn001-first-milestone-evaluation-policy.md` | `R3` | `governance/sources/ADR-004-scn001-first-milestone-evaluation-policy.md` | `b88817e511ab687be761090fe1ad05197323dba71126641498d4ab4b9d722e56` |
+| `ADR-005-scn001-selected-slice-fixture-oracle-contract.md` | `R2` | `governance/sources/ADR-005-scn001-selected-slice-fixture-oracle-contract.md` | `eb36a67b5f0231e2543bc2b9e2b4636822a90d01215293395a3b7900b9a2aba4` |
+| `ADR-006-scn001-selected-slice-state-contract.md` | `R2` | `governance/sources/ADR-006-scn001-selected-slice-state-contract.md` | `ed25768627a698bfecc38044db21b41a391d100b71326d1b2f8300a0d1750b5f` |
+| `ADR-007-scn001-selected-slice-dependency-identity.md` | `R3` | `governance/sources/ADR-007-scn001-selected-slice-dependency-identity.md` | `c260edaadf0c9e60164fab4f8abb1685354e25778d0db508ada715cf32307c4f` |
+| `ADR-008-scn001-selected-slice-internal-boundary.md` | `R2` | `governance/sources/ADR-008-scn001-selected-slice-internal-boundary.md` | `3f471ac93923b9b2af1b5d18e41f00eb4a5c2cad0aa7c2d12d16501c0a1ed827` |
+
+## Extraction Boundary
+
+Creation of a durable system-project repository under `projects/`, or extraction of workbench implementation into such a repository, triggers `REPO-001`.
