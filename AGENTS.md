@@ -39,21 +39,23 @@ The local governance files are derived snapshots. If they conflict with cited AD
 Required when instantiated:
 
 - `governance/`: local governance snapshots, lock, conformance ledger, and source snapshots.
-- `scn001_sut_core/`: TODO describe SUT-owned implementation package.
-- `scn001_eval/`: TODO describe evaluation-owned implementation package.
-- `tests/`: TODO describe test layout.
+- `scn001_sut_core/`: SUT-owned public boundary, run-scoped state, transition evidence, local relations, and passive inspection.
+- `scn001_eval/`: Evaluation-owned fixture projection and harness code that calls only the declared SUT public boundary.
+- `tests/`: Repository-level conformance tests; package tests live with their owning package.
+- `scripts/`: Dependency, governance, formatting, syntax, and aggregate local-gate checks.
 
 ## Commands
 
 Required when instantiated:
 
-- Format: TODO
-- Code quality: TODO
-- Architecture/dependency conformance: TODO
-- Boundary conformance: TODO
-- State integrity: TODO
-- Governance integrity: TODO
-- Tests: TODO
+- Format: `npm run check:format`
+- Code quality: `npm run check:quality`
+- Architecture/dependency conformance: `npm run check:deps`
+- Boundary conformance: `npm run check:boundary`
+- State integrity: `npm run check:state`
+- Governance integrity: `npm run check:governance`
+- Tests: `npm test`
+- All required local gates: `npm run check`
 
 Do not describe an unrun command as passing.
 

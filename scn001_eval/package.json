@@ -1,0 +1,9 @@
+{
+  "name": "@zoey/scn001-eval",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@zoey/scn001-sut-core": "file:../scn001_sut_core"
+  }
+}

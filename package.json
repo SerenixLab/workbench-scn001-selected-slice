@@ -1,0 +1,23 @@
+{
+  "name": "scn001-selected-slice-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0 <27.0.0"
+  },
+  "workspaces": [
+    "scn001_sut_core",
+    "scn001_eval"
+  ],
+  "scripts": {
+    "check": "node scripts/run-gates.mjs",
+    "check:boundary": "node --test tests/conformance/boundary.test.js scn001_sut_core/test/public-boundary.test.js scn001_eval/test/harness.test.js",
+    "check:deps": "node scripts/check-dependency-boundary.mjs",
+    "check:format": "node scripts/check-format.mjs",
+    "check:governance": "node scripts/check-governance-lock.mjs",
+    "check:quality": "node scripts/check-quality.mjs",
+    "check:state": "node --test scn001_sut_core/test/run-state.test.js",
+    "test": "node --test"
+  }
+}

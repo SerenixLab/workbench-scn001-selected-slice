@@ -21,6 +21,34 @@ scn001_sut_core -> no dependency on scn001_eval
 
 The package split is a selected-slice responsibility boundary. It is not a final Zoey repository map.
 
+## Implemented Boundary Spine
+
+The first implementation increment creates two Node.js workspace packages without external runtime dependencies:
+
+```text
+scn001_eval -> @zoey/scn001-sut-core public package export
+scn001_sut_core -> no evaluation dependency
+```
+
+`scn001_sut_core` currently provides only the minimum run lifecycle, closed SUT-visible input ingress, run-scoped fact/transition/relation retention, and passive inspection surfaces. `scn001_eval` owns allowlist projection from evaluation records and a harness that calls only that public SUT boundary.
+
+This is engineering conformance infrastructure. It is not a formal evaluation record, behavioral-compatibility claim, milestone acceptance, or `SCN-001` pass.
+
+## Local Commands
+
+Requires Node.js `>=22 <27`; no external runtime dependencies are used.
+
+- Format: `npm run check:format`
+- Code quality: `npm run check:quality`
+- Architecture/dependency conformance: `npm run check:deps`
+- Boundary conformance: `npm run check:boundary`
+- State integrity: `npm run check:state`
+- Governance integrity: `npm run check:governance`
+- Tests: `npm test`
+- All required local gates: `npm run check`
+
+The GitHub Actions workflow runs `npm run check` for pull requests and pushes to `main`. Repository branch-protection configuration remains an external review responsibility.
+
 ## Not Claimed
 
 This workbench does not claim:
