@@ -5,7 +5,7 @@ const roleDefinitions = {
   },
   task_observation: {
     kind: "task_observation",
-    keys: ["itemRef", "taskMode", "dimension", "correct", "occurrenceScenarioDay", "sessionId", "sessionOrder"]
+    keys: ["itemRef", "taskMode", "dimension", "performance", "occurrenceScenarioDay", "sessionId", "sessionOrder"]
   },
   chronology_fact: {
     kind: "chronology_fact",

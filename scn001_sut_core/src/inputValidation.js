@@ -10,13 +10,13 @@ const inputValidators = {
     assertOneOf(input.semanticStatusOrigin, ["unclassified", "fixture_initialized"], `${path}.semanticStatusOrigin`);
   },
   task_observation: (input, path) => {
-    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "itemRef", "taskMode", "dimension", "correct", "occurrenceScenarioDay", "sessionId", "sessionOrder"], path);
+    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "itemRef", "taskMode", "dimension", "performance", "occurrenceScenarioDay", "sessionId", "sessionOrder"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertString(input.itemRef, `${path}.itemRef`);
     assertString(input.taskMode, `${path}.taskMode`);
     assertString(input.dimension, `${path}.dimension`);
-    assertBoolean(input.correct, `${path}.correct`);
+    assertPerformance(input.performance, `${path}.performance`);
     assertNonNegativeInteger(input.occurrenceScenarioDay, `${path}.occurrenceScenarioDay`);
     assertString(input.sessionId, `${path}.sessionId`);
     assertPositiveInteger(input.sessionOrder, `${path}.sessionOrder`);
@@ -131,6 +131,27 @@ function assertBoolean(value, path) {
   if (typeof value !== "boolean") {
     throw new SutBoundaryValidationError(`${path} must be boolean.`);
   }
+}
+
+function assertPerformance(value, path) {
+  if (!isPlainObject(value) || typeof value.kind !== "string") {
+    throw new SutBoundaryValidationError(`${path}.kind must identify a supported raw performance form.`);
+  }
+  if (value.kind === "binary") {
+    assertExactKeys(value, ["kind", "correct"], path);
+    assertBoolean(value.correct, `${path}.correct`);
+    return;
+  }
+  if (value.kind === "aggregate") {
+    assertExactKeys(value, ["kind", "correctCount", "totalCount"], path);
+    assertNonNegativeInteger(value.correctCount, `${path}.correctCount`);
+    assertPositiveInteger(value.totalCount, `${path}.totalCount`);
+    if (value.correctCount > value.totalCount) {
+      throw new SutBoundaryValidationError(`${path}.correctCount must not exceed totalCount.`);
+    }
+    return;
+  }
+  throw new SutBoundaryValidationError(`${path}.kind is not an accepted raw performance form.`);
 }
 
 function assertPositiveInteger(value, path) {

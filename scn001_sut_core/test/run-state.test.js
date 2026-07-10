@@ -23,7 +23,10 @@ function taskObservationInput(overrides = {}) {
     itemRef: "particle-item-1",
     taskMode: "spontaneous_production",
     dimension: "particle_pattern_a",
-    correct: false,
+    performance: {
+      kind: "binary",
+      correct: false
+    },
     occurrenceScenarioDay: 0,
     sessionId: "session-current",
     sessionOrder: 2,
@@ -272,6 +275,134 @@ test("processing preserves current practice as independently eligible for its su
 
   assert.equal(snapshot.records.filter((record) => record.family === "temporal_eligibility_assessment").length, 0);
   assert.equal(observation.payload.occurrenceScenarioDay, 0);
+});
+
+test("processing derives a scoped recognition-production comparison from separate aggregate observations", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const ingested = boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [
+      taskObservationInput({
+        itemRef: "recognition-calibration-items",
+        taskMode: "recognition",
+        performance: { kind: "aggregate", correctCount: 4, totalCount: 4 },
+        occurrenceOrder: 1
+      }),
+      taskObservationInput({
+        itemRef: "production-calibration-items",
+        taskMode: "spontaneous_production",
+        performance: { kind: "aggregate", correctCount: 1, totalCount: 4 },
+        occurrenceOrder: 2
+      })
+    ]
+  });
+
+  boundary.processCurrentInteraction(runRef);
+  const snapshot = boundary.captureInspectionSnapshot(runRef);
+  const comparison = snapshot.records.find((record) => record.family === "dimension_comparison");
+  const recognition = boundary.inspectRecord(runRef, ingested.acceptedInputRefs[0]);
+  const production = boundary.inspectRecord(runRef, ingested.acceptedInputRefs[1]);
+
+  assert.equal(recognition.role, "task_observation");
+  assert.equal(recognition.payload.taskMode, "recognition");
+  assert.equal(production.role, "task_observation");
+  assert.equal(production.payload.taskMode, "spontaneous_production");
+  assert.equal(comparison.targetDimension, "particle_pattern_a");
+  assert.deepEqual(comparison.recognitionPerformance, { correctCount: 4, totalCount: 4 });
+  assert.deepEqual(comparison.productionPerformance, { correctCount: 1, totalCount: 4 });
+  assert.equal(comparison.comparisonResult, "recognition_score_higher");
+  assert.equal(comparison.uncertainty, "bounded_to_supplied_calibration");
+  assert.equal(comparison.recognitionObservationRefs[0], recognition.reference);
+  assert.equal(comparison.productionObservationRefs[0], production.reference);
+  assert.equal(snapshot.records.some((record) => (
+    ["current_skill_state", "global_skill_state", "trial_candidate", "active_trial"].includes(record.family)
+  )), false);
+
+  const relations = boundary.enumerateLocalRelations(runRef, comparison.reference);
+  assert.ok(relations.some((relation) => (
+    relation.targetRole === "recognition_observation"
+    && relation.semanticTaskMode === "recognition"
+  )));
+  assert.ok(relations.some((relation) => (
+    relation.targetRole === "production_observation"
+    && relation.semanticTaskMode === "spontaneous_production"
+  )));
+  assert.ok(relations.every((relation) => relation.semanticDimension === "particle_pattern_a"));
+  const transition = boundary.inspectRecord(runRef, comparison.createdByTransitionRef);
+  assert.equal(transition.transitionKind, "compare_recognition_and_spontaneous_production");
+  assert.ok(transition.resultReferences.includes(comparison.reference));
+});
+
+test("equal calibration remains a no-difference comparison and does not create production-focused state", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [
+      taskObservationInput({
+        itemRef: "recognition-calibration-items",
+        taskMode: "recognition",
+        performance: { kind: "aggregate", correctCount: 3, totalCount: 4 },
+        occurrenceOrder: 1
+      }),
+      taskObservationInput({
+        itemRef: "production-calibration-items",
+        taskMode: "spontaneous_production",
+        performance: { kind: "aggregate", correctCount: 3, totalCount: 4 },
+        occurrenceOrder: 2
+      })
+    ]
+  });
+
+  boundary.processCurrentInteraction(runRef);
+  const records = boundary.captureInspectionSnapshot(runRef).records;
+  const comparison = records.find((record) => record.family === "dimension_comparison");
+
+  assert.equal(comparison.comparisonResult, "no_observed_score_difference");
+  assert.equal(records.some((record) => (
+    ["trial_candidate", "production_focused_candidate", "active_trial"].includes(record.family)
+  )), false);
+});
+
+test("processing does not compare recognition and production observations across dimensions", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [
+      taskObservationInput({
+        taskMode: "recognition",
+        dimension: "particle_pattern_a",
+        performance: { kind: "aggregate", correctCount: 4, totalCount: 4 },
+        occurrenceOrder: 1
+      }),
+      taskObservationInput({
+        taskMode: "spontaneous_production",
+        dimension: "particle_pattern_b",
+        performance: { kind: "aggregate", correctCount: 1, totalCount: 4 },
+        occurrenceOrder: 2
+      })
+    ]
+  });
+
+  boundary.processCurrentInteraction(runRef);
+  assert.equal(boundary.captureInspectionSnapshot(runRef).records.some((record) => (
+    record.family === "dimension_comparison"
+  )), false);
+});
+
+test("invalid aggregate performance is rejected without semantic side effects", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const before = boundary.captureInspectionSnapshot(runRef);
+
+  assert.throws(
+    () => boundary.ingestSutVisibleInputs(runRef, {
+      inputs: [taskObservationInput({
+        performance: { kind: "aggregate", correctCount: 5, totalCount: 4 }
+      })]
+    }),
+    /must not exceed totalCount/
+  );
+  assert.deepEqual(boundary.captureInspectionSnapshot(runRef), before);
 });
 
 test("processing applies the selected >90-day rule without blanket-staling recent history", () => {

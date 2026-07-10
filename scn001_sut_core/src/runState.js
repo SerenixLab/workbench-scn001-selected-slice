@@ -165,7 +165,8 @@ export class RunState {
     const interactionFacts = interaction.inputReferences.map((reference) => this.records.get(reference));
     const semanticTransitionRefs = [
       this.deriveAttributedAssertions(interaction, interactionFacts),
-      this.deriveTemporalEligibilityAssessments(interaction, interactionFacts)
+      this.deriveTemporalEligibilityAssessments(interaction, interactionFacts),
+      this.deriveDimensionComparisons(interaction, interactionFacts)
     ].filter(Boolean);
     const processingTransition = this.createTransition(
       "process_interaction_segment",
@@ -353,6 +354,92 @@ export class RunState {
     return transition.reference;
   }
 
+  deriveDimensionComparisons(interaction, interactionFacts) {
+    const observationsByDimension = new Map();
+    for (const fact of interactionFacts) {
+      if (
+        fact.role !== "task_observation"
+        || !["recognition", "spontaneous_production"].includes(fact.payload.taskMode)
+      ) {
+        continue;
+      }
+
+      const grouped = observationsByDimension.get(fact.payload.dimension) ?? {
+        recognition: [],
+        spontaneousProduction: []
+      };
+      const target = fact.payload.taskMode === "recognition"
+        ? grouped.recognition
+        : grouped.spontaneousProduction;
+      target.push(fact);
+      observationsByDimension.set(fact.payload.dimension, grouped);
+    }
+
+    const comparisons = [];
+    for (const [dimension, grouped] of observationsByDimension) {
+      if (grouped.recognition.length === 0 || grouped.spontaneousProduction.length === 0) {
+        continue;
+      }
+
+      const recognitionPerformance = summarizePerformance(grouped.recognition);
+      const productionPerformance = summarizePerformance(grouped.spontaneousProduction);
+      comparisons.push({
+        reference: createReference("state"),
+        family: "dimension_comparison",
+        origin: "sut",
+        targetDimension: dimension,
+        recognitionTaskMode: "recognition",
+        productionTaskMode: "spontaneous_production",
+        recognitionObservationRefs: grouped.recognition.map((fact) => fact.reference),
+        productionObservationRefs: grouped.spontaneousProduction.map((fact) => fact.reference),
+        recognitionPerformance,
+        productionPerformance,
+        comparisonResult: comparePerformance(recognitionPerformance, productionPerformance),
+        uncertainty: "bounded_to_supplied_calibration",
+        statusOrigin: "sut_transition",
+        interactionRef: interaction.reference,
+        createdOrder: this.allocateOrder()
+      });
+    }
+    if (comparisons.length === 0) {
+      return undefined;
+    }
+
+    const transition = this.createTransition(
+      "compare_recognition_and_spontaneous_production",
+      uniqueReferences(comparisons.flatMap((comparison) => [
+        ...comparison.recognitionObservationRefs,
+        ...comparison.productionObservationRefs
+      ])),
+      comparisons.map((comparison) => comparison.reference),
+      interaction.reference
+    );
+    attachCreatingTransition(comparisons, transition);
+    this.commitDerivedRecords(comparisons, transition);
+
+    for (const comparison of comparisons) {
+      for (const reference of comparison.recognitionObservationRefs) {
+        this.relations.push(comparisonBasisRelation(
+          comparison,
+          reference,
+          "recognition_observation",
+          "recognition",
+          transition
+        ));
+      }
+      for (const reference of comparison.productionObservationRefs) {
+        this.relations.push(comparisonBasisRelation(
+          comparison,
+          reference,
+          "production_observation",
+          "spontaneous_production",
+          transition
+        ));
+      }
+    }
+    return transition.reference;
+  }
+
   stageActor(sourceActor, origin, stagedActors) {
     const identityKey = actorReferenceKey(sourceActor, origin);
     const existingReference = this.actorReferences.get(identityKey);
@@ -469,6 +556,48 @@ function attachCreatingTransition(records, transition) {
 
 function uniqueReferences(references) {
   return [...new Set(references)];
+}
+
+function summarizePerformance(observations) {
+  return observations.reduce((summary, observation) => {
+    const performance = observation.payload.performance;
+    if (performance.kind === "binary") {
+      summary.correctCount += performance.correct ? 1 : 0;
+      summary.totalCount += 1;
+    } else {
+      summary.correctCount += performance.correctCount;
+      summary.totalCount += performance.totalCount;
+    }
+    return summary;
+  }, { correctCount: 0, totalCount: 0 });
+}
+
+function comparePerformance(recognitionPerformance, productionPerformance) {
+  const crossProductDifference = (
+    recognitionPerformance.correctCount * productionPerformance.totalCount
+    - productionPerformance.correctCount * recognitionPerformance.totalCount
+  );
+  if (crossProductDifference > 0) {
+    return "recognition_score_higher";
+  }
+  if (crossProductDifference < 0) {
+    return "spontaneous_production_score_higher";
+  }
+  return "no_observed_score_difference";
+}
+
+function comparisonBasisRelation(comparison, reference, targetRole, taskMode, transition) {
+  return {
+    relationKind: "basis",
+    fromRef: comparison.reference,
+    toRef: reference,
+    targetRole,
+    semanticDimension: comparison.targetDimension,
+    semanticTaskMode: taskMode,
+    effectiveOrder: comparison.createdOrder,
+    createdOrder: transition.createdOrder,
+    assertedByRole: "sut"
+  };
 }
 
 function clone(value) {
