@@ -1,38 +1,344 @@
-# Zoey Governance Lock
-
-Lock version: `V0.1.0`
-
-Repository role: `workbench`
-
-Governance classification: `governed non-throwaway implementation`
-
-Permitted architecture claim: `SCN-001 selected-slice scenario-provisional under ADR-001 R1 and ADR-008 R2`
-
-Canonical source: `Zoey/meta`
-
-Snapshot date: 2026-07-09
-
-## Active Governance
-
-| Artifact | Version / Revision | Snapshot path | SHA-256 |
-| --- | --- | --- | --- |
-| Engineering standard | `V0.4.1` | `governance/ENGINEERING_STANDARD.md` | `48fc55f0ff4272ff0175ab7068f3b8b27a7913f1be82bda6525450cd05980c64` |
-| Active profile | `SCN001_SELECTED_SLICE V0.2.1` | `governance/ACTIVE_PROFILE.md` | `270906a447a7a307445ecda165fe5ee38f6bf3bced04dd4b112721aab9d5ea33` |
-| Open questions | `V0.2.18` | `governance/sources/OPEN_QUESTIONS.md` | `bbcae65e5c951de0b038277a6091d4d4be4c7b6f4b79961b9faf7c6ac7a7750a` |
-
-## Governing Source Snapshots
-
-| Source | Revision | Snapshot path | SHA-256 |
-| --- | --- | --- | --- |
-| `ADR-001-first-vertical-slice.md` | `R1` | `governance/sources/ADR-001-first-vertical-slice.md` | `d3d7da1be5765d35d5727803ef99bc180c50738d17db40d6344f23f08ee8f206` |
-| `ADR-002-scn001-system-under-test-boundary.md` | `R2` | `governance/sources/ADR-002-scn001-system-under-test-boundary.md` | `335f30b41a911ff30deee3c50f44edd06e605fe16eca442c32fbbabde859405c` |
-| `ADR-003-scn001-selected-slice-trial-time-contract.md` | `R2` | `governance/sources/ADR-003-scn001-selected-slice-trial-time-contract.md` | `60f4fb8b9c7461306b75e8d1117e0d71643afe899dbb5d5790a64164b451b01a` |
-| `ADR-004-scn001-first-milestone-evaluation-policy.md` | `R3` | `governance/sources/ADR-004-scn001-first-milestone-evaluation-policy.md` | `b88817e511ab687be761090fe1ad05197323dba71126641498d4ab4b9d722e56` |
-| `ADR-005-scn001-selected-slice-fixture-oracle-contract.md` | `R2` | `governance/sources/ADR-005-scn001-selected-slice-fixture-oracle-contract.md` | `eb36a67b5f0231e2543bc2b9e2b4636822a90d01215293395a3b7900b9a2aba4` |
-| `ADR-006-scn001-selected-slice-state-contract.md` | `R2` | `governance/sources/ADR-006-scn001-selected-slice-state-contract.md` | `ed25768627a698bfecc38044db21b41a391d100b71326d1b2f8300a0d1750b5f` |
-| `ADR-007-scn001-selected-slice-dependency-identity.md` | `R3` | `governance/sources/ADR-007-scn001-selected-slice-dependency-identity.md` | `c260edaadf0c9e60164fab4f8abb1685354e25778d0db508ada715cf32307c4f` |
-| `ADR-008-scn001-selected-slice-internal-boundary.md` | `R2` | `governance/sources/ADR-008-scn001-selected-slice-internal-boundary.md` | `3f471ac93923b9b2af1b5d18e41f00eb4a5c2cad0aa7c2d12d16501c0a1ed827` |
-
-## Extraction Boundary
-
-Creation of a durable system-project repository under `projects/`, or extraction of workbench implementation into such a repository, triggers `REPO-001`.
+{
+  "canonical_meta_commit": "74875799e76324608e7081884a5208f113bcac2e",
+  "canonical_meta_source": "Zoey/meta",
+  "canonical_meta_worktree_state": "dirty",
+  "conformance_index": {
+    "path": "governance/CONFORMANCE.md"
+  },
+  "content_digest_algorithm": "sha256",
+  "content_digest_canonicalization": "utf-8-lf",
+  "generated_at": "generated-by-zoey-governance",
+  "governing_source_snapshots": [
+    {
+      "canonical_path": "OPEN_QUESTIONS.md",
+      "content_digest": "bbcae65e5c951de0b038277a6091d4d4be4c7b6f4b79961b9faf7c6ac7a7750a",
+      "id": "OPEN_QUESTIONS",
+      "path": "governance/sources/OPEN_QUESTIONS.md",
+      "version_or_revision": "V0.2.18"
+    },
+    {
+      "canonical_path": "decisions/ADR-001-first-vertical-slice.md",
+      "content_digest": "d3d7da1be5765d35d5727803ef99bc180c50738d17db40d6344f23f08ee8f206",
+      "id": "ADR-001",
+      "path": "governance/sources/ADR-001-first-vertical-slice.md",
+      "version_or_revision": "R1"
+    },
+    {
+      "canonical_path": "decisions/ADR-002-scn001-system-under-test-boundary.md",
+      "content_digest": "335f30b41a911ff30deee3c50f44edd06e605fe16eca442c32fbbabde859405c",
+      "id": "ADR-002",
+      "path": "governance/sources/ADR-002-scn001-system-under-test-boundary.md",
+      "version_or_revision": "R2"
+    },
+    {
+      "canonical_path": "decisions/ADR-003-scn001-selected-slice-trial-time-contract.md",
+      "content_digest": "60f4fb8b9c7461306b75e8d1117e0d71643afe899dbb5d5790a64164b451b01a",
+      "id": "ADR-003",
+      "path": "governance/sources/ADR-003-scn001-selected-slice-trial-time-contract.md",
+      "version_or_revision": "R2"
+    },
+    {
+      "canonical_path": "decisions/ADR-004-scn001-first-milestone-evaluation-policy.md",
+      "content_digest": "b88817e511ab687be761090fe1ad05197323dba71126641498d4ab4b9d722e56",
+      "id": "ADR-004",
+      "path": "governance/sources/ADR-004-scn001-first-milestone-evaluation-policy.md",
+      "version_or_revision": "R3"
+    },
+    {
+      "canonical_path": "decisions/ADR-005-scn001-selected-slice-fixture-oracle-contract.md",
+      "content_digest": "eb36a67b5f0231e2543bc2b9e2b4636822a90d01215293395a3b7900b9a2aba4",
+      "id": "ADR-005",
+      "path": "governance/sources/ADR-005-scn001-selected-slice-fixture-oracle-contract.md",
+      "version_or_revision": "R2"
+    },
+    {
+      "canonical_path": "decisions/ADR-006-scn001-selected-slice-state-contract.md",
+      "content_digest": "ed25768627a698bfecc38044db21b41a391d100b71326d1b2f8300a0d1750b5f",
+      "id": "ADR-006",
+      "path": "governance/sources/ADR-006-scn001-selected-slice-state-contract.md",
+      "version_or_revision": "R2"
+    },
+    {
+      "canonical_path": "decisions/ADR-007-scn001-selected-slice-dependency-identity.md",
+      "content_digest": "c260edaadf0c9e60164fab4f8abb1685354e25778d0db508ada715cf32307c4f",
+      "id": "ADR-007",
+      "path": "governance/sources/ADR-007-scn001-selected-slice-dependency-identity.md",
+      "version_or_revision": "R3"
+    },
+    {
+      "canonical_path": "decisions/ADR-008-scn001-selected-slice-internal-boundary.md",
+      "content_digest": "3f471ac93923b9b2af1b5d18e41f00eb4a5c2cad0aa7c2d12d16501c0a1ed827",
+      "id": "ADR-008",
+      "path": "governance/sources/ADR-008-scn001-selected-slice-internal-boundary.md",
+      "version_or_revision": "R2"
+    }
+  ],
+  "integrations": [
+    {
+      "content_digest": "7daf04fc33991f5d5f1930cdadad8f0fc9608de5d0afef6890e2d86021ff77d7",
+      "path": "governance/integrations/CODEX_INTEGRATION.md",
+      "version": "V0.2.0"
+    }
+  ],
+  "lock_version": "V0.2.0",
+  "profiles": [
+    {
+      "content_digest": "954c992ac26771743f12245f410af6b36253c091dbc1976228d56d293fdd62cc",
+      "path": "governance/profiles/SCN001_SELECTED_SLICE.md",
+      "version": "V0.3.1"
+    }
+  ],
+  "rule_revisions": [
+    {
+      "revision": "R2",
+      "rule_id": "ENG-AGENT-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-AGENT-CODEX-001",
+      "source_artifact": "integrations/CODEX_INTEGRATION.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-AGENT-CODEX-002",
+      "source_artifact": "integrations/CODEX_INTEGRATION.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-AGENT-CODEX-003",
+      "source_artifact": "integrations/CODEX_INTEGRATION.md"
+    },
+    {
+      "revision": "R1",
+      "rule_id": "ENG-AGENT-CODEX-004",
+      "source_artifact": "integrations/CODEX_INTEGRATION.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-BASE-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-BASE-002",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-BASE-CONFORMANCE-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R1",
+      "rule_id": "ENG-BASE-CONFORMANCE-002",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R1",
+      "rule_id": "ENG-BASE-EXCEPTION-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-BASE-PROFILE-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-BASE-PUBLISH-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-BASE-REPO-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CHANGE-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CLAIM-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CLAIM-002",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CLAIM-WORKBENCH-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-CAPTURE-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-CLAIM-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-DEP-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-DEP-002",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-EVIDENCE-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-HARNESS-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-IMPORT-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-IMPORT-002",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-INSPECT-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-INSPECT-002",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-PAYLOAD-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-PAYLOAD-002",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-PUBLIC-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-REF-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-ROLE-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R3",
+      "rule_id": "ENG-CONF-RUN-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-SIM-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-STATE-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-CONF-STATE-002",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-HEALTH-ABSTRACTION-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-HEALTH-API-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-HEALTH-CHANGE-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-HEALTH-COMMENT-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-HEALTH-DEAD-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-HEALTH-DEPENDENCY-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-HEALTH-FAILURE-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-HEALTH-GEN-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-HEALTH-REPRO-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-HEALTH-STRUCTURE-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-HEALTH-TEST-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-HEALTH-TEST-002",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    },
+    {
+      "revision": "R2",
+      "rule_id": "ENG-HEALTH-TODO-001",
+      "source_artifact": "ENGINEERING_STANDARD.md"
+    }
+  ],
+  "serialization": "json",
+  "standard": {
+    "content_digest": "1e7424049d21315e4b15045905968456ac735ae5dc0fe0c59d3d39976d8c832f",
+    "path": "governance/ENGINEERING_STANDARD.md",
+    "version": "V0.5.0"
+  }
+}

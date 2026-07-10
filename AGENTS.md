@@ -2,11 +2,11 @@
 
 Template ID: `ZOEY-CODEX-AGENTS-BASE`
 
-Template version: `V0.2.0`
+Seeded from template: `ZOEY-CODEX-AGENTS-BASE` `V0.3.0`
 
-Integration: `CODEX_INTEGRATION.md` `V0.1.0`
+Repo-local guidance: `yes`
 
-Instantiation: starting repo-local guidance. Local specialization is allowed; active engineering rules must not be weakened.
+Canonical template equality: `not claimed`
 
 This repository contains governed non-throwaway Zoey implementation work.
 
@@ -25,12 +25,14 @@ Do not treat this workbench as a durable Zoey system-project repository. Creatio
 Before editing governed code:
 
 1. Read `governance/ZOEY_GOVERNANCE.lock`.
-2. Read `governance/CONFORMANCE.md`.
+2. Read the conformance-index path declared by the lock, normally `governance/CONFORMANCE.md`.
 3. Identify applicable `ENG-*` rules from changed paths and change type.
-4. Read only the applicable rule entries in `governance/ENGINEERING_STANDARD.md`, `governance/ACTIVE_PROFILE.md`, or `governance/CODEX_INTEGRATION.md`.
+4. Read only the applicable rule entries in the source artifact identified by the index: `governance/ENGINEERING_STANDARD.md`, `governance/profiles/`, or `governance/integrations/`.
 5. Read cited source snapshots in `governance/sources/` when the change may alter a governed semantic contract or the rule is ambiguous.
 
-Do not read the full standard/profile for every routine change. Use `CONFORMANCE.md` as the applicability index.
+Do not read the full standard/profile for every routine change. Use the complete conformance index as the applicability router; a missing rule row is an audit failure, not a non-applicability decision.
+
+For each governed path you will modify, identify every more-specific `AGENTS.override.md` or `AGENTS.md` between the current working directory and the target directory that was not automatically discovered. Read those files in path order before editing the target. If the task spans differently governed paths, repeat this routing for each path.
 
 The local governance files are derived snapshots. If they conflict with cited ADRs or registers, stop and report the conflict. Do not silently choose a weaker rule.
 
@@ -64,6 +66,8 @@ Do not describe an unrun command as passing.
 - `[ENG-BASE-001]` Preserve accepted Zoey decisions over implementation convenience.
 - `[ENG-BASE-PUBLISH-001]` Do not rely on a sibling `meta` checkout for routine governance discovery.
 - `[ENG-BASE-CONFORMANCE-001]` Do not call a rule enforced unless local evidence resolves and the declared gate runs.
+- `[ENG-BASE-CONFORMANCE-002]` Every active rule needs an explicit applicability disposition.
+- `[ENG-BASE-EXCEPTION-001]` Exceptions record residual risk; they do not waive accepted semantic obligations.
 - `[ENG-AGENT-001]` Keep agent guidance routed through local governance and conformance evidence.
 - `[ENG-HEALTH-CHANGE-001]` Keep changes focused and reviewable.
 - `[ENG-HEALTH-TEST-001]` Add or update tests for behavior changes.
@@ -76,7 +80,7 @@ Boundary-bearing code includes SUT/evaluation boundaries, fixture projection, si
 
 Before editing it:
 
-- identify applicable `ENG-CONF-*` rules through `governance/CONFORMANCE.md`;
+- identify applicable `ENG-CONF-*` rules through the lock-declared conformance index;
 - read the exact active rule entries;
 - read cited source snapshots when the semantic contract may change;
 - preserve or update local tests/gates that enforce the rule.
@@ -87,14 +91,14 @@ Before completing a governed task:
 
 1. Review the final diff for unrelated or accidental changes.
 2. Identify the `ENG-*` rules touched by the final diff.
-3. Run the gates required by `governance/CONFORMANCE.md` for those rules.
+3. Run the gates required by the lock-declared conformance index for those rules.
 4. Do not call an unrun check passing.
 5. Report every required gate not run and why.
 6. Report new residual risk.
-7. Update `CONFORMANCE.md` only when enforcement coverage, evidence identity, rule revision, gate mapping, or residual risk changed.
+7. Update the conformance index only when applicability, enforcement coverage, evidence identity, rule revision, gate mapping, active exception, or residual risk changed.
 
 ## Instruction Changes
 
-If a change modifies `AGENTS.md`, `AGENTS.override.md`, governance lock, active profile selection, Codex integration, or instruction routing, do not continue unrelated governed implementation under stale instructions without explicitly rereading guidance or starting a fresh Codex run.
+If a change modifies `AGENTS.md`, `AGENTS.override.md`, governance lock baseline fields, active profile/integration selection, Codex integration, or instruction routing, do not continue unrelated governed implementation under stale instructions without explicitly rereading guidance or starting a fresh Codex run.
 
 Nested `AGENTS.md` files may specialize or strengthen inherited active rules. They must not weaken, negate, bypass, or silently reinterpret them.

@@ -36,7 +36,7 @@ This is engineering conformance infrastructure. It is not a formal evaluation re
 
 ## Local Commands
 
-Requires Node.js `>=22 <27`; no external runtime dependencies are used.
+Requires Node.js `>=22 <27` and Python `>=3.11` for the portable governance checker; no external runtime dependencies are used.
 
 - Format: `npm run check:format`
 - Code quality: `npm run check:quality`

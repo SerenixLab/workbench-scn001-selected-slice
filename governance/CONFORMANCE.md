@@ -279,3 +279,59 @@ Local evidence: `README.md`; `governance/CONFORMANCE.md`; `governance/sources/OP
 Residual risk: first evaluation-record, scoreability, and acceptance claims must re-triage `EVAL-004`, `EVAL-005`, and `SLICE-005`
 Reviewer/Owner: implementation maintainer
 Verified at: local `npm run check` on 2026-07-10; commit pending
+
+## Applicability Index Migration
+
+This generated migration section completes lock coverage. Each row remains `revalidation-required` until the repository owner maps legacy evidence to the current rule revision.
+
+| Rule ID | Revision | Rule source artifact | Applicability | Rationale / applies to paths and change types | Status | Local evidence | Actual promotion mechanism |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `ENG-AGENT-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-AGENT-CODEX-001` | `R2` | `integrations/CODEX_INTEGRATION.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-AGENT-CODEX-002` | `R2` | `integrations/CODEX_INTEGRATION.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-AGENT-CODEX-003` | `R2` | `integrations/CODEX_INTEGRATION.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-AGENT-CODEX-004` | `R1` | `integrations/CODEX_INTEGRATION.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-BASE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-BASE-002` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-BASE-CONFORMANCE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-BASE-CONFORMANCE-002` | `R1` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-BASE-EXCEPTION-001` | `R1` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-BASE-PROFILE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-BASE-PUBLISH-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-BASE-REPO-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CLAIM-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CLAIM-002` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CLAIM-WORKBENCH-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-CAPTURE-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-CLAIM-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-DEP-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-DEP-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-EVIDENCE-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-HARNESS-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-IMPORT-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-IMPORT-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-INSPECT-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-INSPECT-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-PAYLOAD-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-PAYLOAD-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-PUBLIC-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-REF-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-ROLE-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-RUN-001` | `R3` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-SIM-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-STATE-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-CONF-STATE-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-HEALTH-ABSTRACTION-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-HEALTH-API-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-HEALTH-COMMENT-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-HEALTH-DEAD-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-HEALTH-DEPENDENCY-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-HEALTH-FAILURE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-HEALTH-GEN-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-HEALTH-REPRO-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-HEALTH-STRUCTURE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-HEALTH-TEST-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-HEALTH-TEST-002` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+| `ENG-HEALTH-TODO-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |

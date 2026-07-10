@@ -2,11 +2,11 @@
 
 Template ID: `ZOEY-CODEX-AGENTS-SUT`
 
-Template version: `V0.2.0`
+Seeded from template: `ZOEY-CODEX-AGENTS-SUT` `V0.3.0`
 
-Integration: `CODEX_INTEGRATION.md` `V0.1.0`
+Repo-local guidance: `yes`
 
-Instantiation: starting nested SUT guidance. Local specialization is allowed; inherited active rules must not be weakened.
+Canonical template equality: `not claimed`
 
 This directory is SUT-owned implementation code.
 
@@ -45,4 +45,3 @@ Before completing a SUT change, check whether it affects:
 - claim labels or report text.
 
 If yes, update tests or the conformance ledger for the applicable `ENG-CONF-*` rules.
-

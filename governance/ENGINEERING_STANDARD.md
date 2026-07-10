@@ -1,10 +1,10 @@
 # Zoey Engineering Standard
 
-Document version: `V0.4.1`
+Document version: `V0.5.0`
 
 Status: `Draft`
 
-Date: 2026-07-09
+Date: 2026-07-10
 
 Release context:
 
@@ -55,10 +55,10 @@ Engineering rule IDs are stable. Do not reuse a rule ID after removal, retiremen
 Every canonical rule has a rule revision:
 
 ```text
-ENG-HEALTH-API-001 R1
+ENG-HEALTH-API-001 R2
 ```
 
-Editorial wording may preserve the same rule revision. A material change to the rule target, obligation, required check, expected enforcement, claim-support minimum, or failure consequence increments the rule revision. A materially different target creates a new rule ID.
+Editorial wording may preserve the same rule revision. A material change to the rule target, obligation, required check, eligible protection, review actor, minimum promotion enforcement, claim-support minimum, or failure consequence increments the rule revision. A materially different target creates a new rule ID.
 
 Retired rules keep a tombstone that names the replacement rule or retirement reason where practical.
 
@@ -90,9 +90,11 @@ Applies when:
 Rule:
 Forbidden shapes:
 Required checks:
-Expected mechanisms:
+Eligible protection mechanisms:
 Expected test modes:
-Promotion integration:
+Allowed review actors:
+Minimum promotion enforcement:
+Minimum promotion integration:
 Minimum claim-support enforcement:
 Failure consequences:
 Review question:
@@ -101,12 +103,16 @@ Notes:
 
 Optional fields may be omitted when not applicable. Local enforcement status is never stored in the canonical rule. It belongs only in the implementation repo's conformance ledger.
 
-Expected mechanisms describe how protection can be implemented:
+`Governing sources` identifies external semantic sources, accepted rule references, or explicit governance records that constrain the rule. The canonical rule artifact and rule revision are pinned separately in the governance lock. For a base rule with no external semantic source, `this standard` means the canonical rule entry itself and is revalidated only when that rule revision changes, not whenever the document version changes. Broad references such as "all accepted ADRs" are not source-closure identifiers.
+
+Eligible protection mechanisms describe usable protection shapes. They are not alternatives silently selected by a ledger author; the minimum promotion-enforcement field states what must actually exist:
 
 - `structural`: design makes violation impossible or materially hard;
 - `static`: lint, dependency analysis, schema validation, type checks, or build rules;
 - `automated-test`: deterministic tests, contract tests, negative tests, replay tests, or property tests;
 - `manual-review`: explicit qualifying reviewer action and recorded outcome.
+
+Unless a rule states a stricter minimum, minimum promotion enforcement is: every required check resolves through at least one eligible protection mechanism, and the local ledger status is neither `uncovered` nor `revalidation-required` when the rule applies to the promoted change.
 
 Expected test modes describe test shape:
 
@@ -118,15 +124,16 @@ Expected test modes describe test shape:
 - `property`;
 - `regression`.
 
-Promotion integration describes where checks block work:
+Minimum promotion integration states the lowest acceptable integration for the required enforcement:
 
 - `none`;
-- `local`;
-- `CI`;
-- `required-CI`;
-- `protected-branch`.
+- `local-recorded`: a documented local command or recorded qualifying review is required before promotion;
+- `CI-visible`: CI executes and reports the check, but branch/release policy need not require it;
+- `CI-required`: promotion cannot proceed without the successful CI check.
 
-Failure consequences describe what a failure blocks:
+`protected-branch` is an implementation mechanism for `CI-required`, not a provider-neutral canonical integration level. A rule may declare more than one integration when they are cumulative. For example, `local-recorded` plus `CI-required` requires both a reproducible local control and a protected CI gate. `CI-visible` plus `CI-required` is redundant and must be normalized to `CI-required`. The local ledger records the actual provider mechanism.
+
+Failure consequences describe what a failure blocks. Unqualified consequences are cumulative. A condition-qualified consequence applies only under the stated condition:
 
 - `merge-blocking`;
 - `promotion-blocking`;
@@ -137,13 +144,18 @@ Failure consequences describe what a failure blocks:
 
 Manual review is not satisfied merely because text says a rule was reviewed.
 
-Review actor classes:
+Review and check categories:
 
 - `human-review`: explicit human or project-owner-authorized reviewer action;
 - `agent-review`: review performed by a coding agent or separate automated reasoning task;
-- `automated-check`: non-discretionary tool result.
+- `automated-check`: non-discretionary tool result, which is a mechanism rather than a discretionary review actor.
 
-Unless a rule explicitly permits `agent-review`, `manual-review` means `human-review` or another project-owner-authorized reviewer. The same agent that implements a change cannot self-attest a manual-review control for that change.
+When an entry omits `Allowed review actors`, these canonical defaults apply:
+
+- `ENG-HEALTH-*`: `human-review` or `agent-review` by an independent agent/task;
+- `ENG-BASE-*`, `ENG-AGENT-*`, `ENG-CLAIM-*`, `ENG-CHANGE-*`, and active-profile rules: `human-review`.
+
+A rule may explicitly narrow or broaden its allowed actors. The same agent that implements a change cannot self-attest a manual-review control for that change.
 
 A manual-review control is enforceable only when:
 
@@ -158,21 +170,27 @@ Otherwise the rule is `uncovered` in the local conformance ledger.
 
 Every governed non-throwaway implementation repo keeps a conformance ledger. It may be Markdown, a test manifest, CI configuration, or another inspectable local artifact.
 
+Every governed repo must also publish a human-readable `CONFORMANCE.md` applicability index at the path declared by its governance lock. The index may be generated from another local manifest, but it is the required router for agents and reviewers.
+
 Minimum ledger fields:
 
 ```text
 Rule ID:
 Rule revision:
+Rule source artifact:
 Governing source revisions:
+Applicability:
+Applicability rationale:
 Applies To:
 Actual mechanisms:
 Actual test modes:
-Promotion integration:
+Actual promotion mechanism:
 Status:
 Failure consequences:
 Local evidence:
 Residual risk:
 Reviewer/Owner:
+Active exception:
 Verified at:
 ```
 
@@ -196,16 +214,19 @@ governed implementation repo
     AGENTS.md
     governance/
         ENGINEERING_STANDARD.md
-        ACTIVE_PROFILE.md
-        CODEX_INTEGRATION.md       if Codex is used
+        profiles/
+            SCN001_SELECTED_SLICE.md
+        integrations/
+            CODEX_INTEGRATION.md   if Codex is used
         ZOEY_GOVERNANCE.lock
         CONFORMANCE.md
+        EXCEPTIONS.md              if an exception is active
         sources/
             OPEN_QUESTIONS.md
             ADR-*.md
 ```
 
-The local governance snapshot is not a new authority. It records exactly which canonical release, active profiles, integration contracts, source snapshots, content digests, and local conformance mechanisms the repo consumes.
+The local governance snapshot is not a new authority. Its lock records exactly which canonical release, active profiles, integration contracts, source snapshots, rule revisions, and content digests the repo consumes. The ledger records mutable local conformance truth; it is never a digested governance input.
 
 Do not solve governance consumption by relying on conversational memory, a developer remembering to paste rules, a sibling repository being present, or a personal global coding-agent instruction file. Repository-level governance must travel with the repository.
 
@@ -238,12 +259,9 @@ When a recurring failure becomes mechanically impossible, remove redundant agent
 
 ### ENG-BASE-001 - Source Authority
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
-- accepted Zoey ADRs and registers
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Scope: all governed non-throwaway implementation work.
 
@@ -262,7 +280,7 @@ Required checks:
 - cite governing sources in local governance locks and conformance ledgers;
 - mark affected local ledger entries `revalidation-required` when governing sources change.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - manual-review
 - static
@@ -271,10 +289,11 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
+Allowed review actors:
 
-- local
-- CI
+- human-review
+
+Minimum promotion integration: `CI-required`.
 
 Minimum claim-support enforcement: local ledger identifies governing source revisions for claim-bearing rules.
 
@@ -287,30 +306,29 @@ Review question: does this change preserve the accepted governing source, or doe
 
 ### ENG-BASE-002 - Rule-Level Revalidation
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Scope: all standard/profile releases and governed implementation repos.
 
-Applies when: a governing source revision, rule revision, profile revision, integration contract, or local governance lock changes.
+Applies when: a pinned governing source revision, rule revision, active profile set, active integration set, or canonical snapshot digest changes.
 
-Rule: rule validity is tied to cited sources and rule revisions. When a cited source revision changes, every rule citing it becomes revalidation-required until the standard/profile is reissued or the rule is explicitly confirmed unchanged.
+Rule: rule validity is tied to cited sources and rule revisions. When a pinned source revision, rule revision, active rule set, or canonical snapshot digest changes, affected rules become `revalidation-required` until explicitly confirmed against the changed baseline. Volatile lock metadata, local ledger changes, and active-exception edits do not by themselves change the canonical governance baseline.
 
 Forbidden shapes:
 
 - treating the whole standard as silently valid after source changes;
 - treating the whole standard as invalid when only a source-bound subset needs review;
+- treating a lock timestamp or local ledger update as a source change;
 - omitting source revisions or rule revisions from local governance locks.
 
 Required checks:
 
-- local governance lock lists standard version, active profile versions, active integration versions, source revisions, rule revisions, and content digests;
+- local governance lock lists standard version, active profile versions, active integration versions, source revisions, rule revisions, and canonical content digests;
 - conformance ledger can identify rules affected by source changes.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - structural
 - static
@@ -320,10 +338,11 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
+Allowed review actors:
 
-- local
-- CI
+- human-review
+
+Minimum promotion integration: `CI-required`.
 
 Minimum claim-support enforcement: source-bound affected rules are not `uncovered` or silently stale.
 
@@ -335,11 +354,9 @@ Review question: which local rules cite the changed source or rule revision?
 
 ### ENG-BASE-PUBLISH-001 - Repository Governance Projection
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Scope: every governed non-throwaway implementation repo.
 
@@ -357,9 +374,10 @@ Required checks:
 
 - local governance snapshot or lock exists before non-throwaway implementation work is promoted;
 - local projection includes applicable source snapshots or another repo-self-sufficient access mechanism;
-- local lock records content digests or equivalent integrity identifiers.
+- local lock records canonical content digests, digest algorithm, and canonicalization semantics;
+- projection derives governing source snapshots from the active rule-source closure.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - structural
 - static
@@ -369,10 +387,11 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
+Allowed review actors:
 
-- local
-- CI
+- human-review
+
+Minimum promotion integration: `CI-required`.
 
 Minimum claim-support enforcement: governance projection and source snapshots are present and integrity-checkable.
 
@@ -385,12 +404,11 @@ Review question: can this repository prove which governance and source snapshots
 
 ### ENG-BASE-REPO-001 - Repository Role And Architecture Claim Declaration
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
-- this standard
-- `OPEN_QUESTIONS.md`
+- `OPEN_QUESTIONS.md V0.2.18`
 
 Scope: every governed non-throwaway implementation repository or workbench.
 
@@ -411,7 +429,7 @@ Required checks:
 - repository guidance points to `governance/ZOEY_GOVERNANCE.lock` as the governance baseline authority;
 - durable project creation or workbench-to-project extraction checks the applicable open-question trigger.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - structural
 - manual-review
@@ -420,9 +438,9 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
+- local-recorded
 
 Minimum claim-support enforcement: claim-bearing work identifies the repository role, permitted architecture claim, and governance lock reference.
 
@@ -435,30 +453,28 @@ Review question: what repository role and architecture claim does this work rely
 
 ### ENG-BASE-CONFORMANCE-001 - Conformance Evidence Must Resolve
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Scope: local conformance ledgers, gates, tests, and governance locks.
 
 Applies when: a rule is marked `enforced` or `review-only`, local evidence is renamed or deleted, gates are changed, or governance is audited.
 
-Rule: a local rule may be marked `enforced` only when every required local enforcement reference resolves to an inspectable mechanism and the declared promotion integration actually executes or requires that mechanism.
+Rule: a local rule may be marked `enforced` only when every required local enforcement reference resolves to an inspectable mechanism and the actual promotion mechanism satisfies the rule's minimum promotion integration.
 
 Forbidden shapes:
 
 - ledger cites a deleted test, renamed CI job, removed checker config, skipped test, or missing tool;
 - ledger says `static` after the dependency checker is removed;
-- gate exists but no longer runs on the protected branch or required promotion path;
+- gate exists but no longer runs on the required promotion path;
 - `Last checked` date is used as proof after evidence disappeared.
 
 Required checks:
 
-- conformance audit verifies rule IDs, rule revisions, source revisions, evidence paths, gate names, and status consistency.
+- conformance audit verifies rule IDs, rule revisions, source revisions, evidence paths, gate names, actual promotion mechanisms, and status consistency.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - static
 - automated-test
@@ -468,10 +484,7 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
-
-- CI
-- required-CI
+Minimum promotion integration: `CI-required`.
 
 Minimum claim-support enforcement: no claim-supporting rule is marked enforced with missing evidence.
 
@@ -482,33 +495,124 @@ Failure consequences:
 
 Review question: does every claimed local enforcement reference still resolve and run where the ledger says it runs?
 
-### ENG-BASE-PROFILE-001 - Profile Composition
+### ENG-BASE-CONFORMANCE-002 - Applicability Completeness
 
 Rule revision: `R1`
 
-Governing sources:
+Governing sources: canonical governance lock.
 
-- this standard
+Scope: the complete active canonical rule set and every repository-local `CONFORMANCE.md` applicability index.
+
+Applies when: governance is projected or audited, an active standard/profile/integration changes, or the conformance index is changed.
+
+Rule: every rule in the pinned active rule set receives exactly one explicit repository applicability disposition. Missing from the index is an audit failure, not an implicit `not-applicable` result.
+
+Forbidden shapes:
+
+- listing only rules a ledger author remembered to apply;
+- treating a missing index row as non-applicability;
+- marking a rule `not-applicable` without a repository-specific rationale;
+- retaining a stale applicability disposition after scope, paths, active profiles, or integrations change.
+
+Required checks:
+
+- projection initializes an index row for every active rule with rule ID, revision, and source artifact;
+- conformance audit compares the index to the active lock rule set;
+- every `not-applicable` disposition has a rationale and is reviewable.
+
+Eligible protection mechanisms:
+
+- static
+- automated-test
+- manual-review
+
+Allowed review actors:
+
+- human-review
+
+Minimum promotion enforcement: complete applicability disposition and a passing conformance audit.
+
+Minimum promotion integration: `CI-required`.
+
+Failure consequences:
+
+- promotion-blocking
+- claim-blocking
+
+Review question: does every active rule have a truthful, explicit applicability disposition?
+
+### ENG-BASE-EXCEPTION-001 - Scoped Engineering Exceptions
+
+Rule revision: `R1`
+
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
+
+Scope: repository-local exceptions to engineering controls.
+
+Applies when: a repository cannot meet an applicable engineering control and proposes a temporary deviation, compensating control, or `AGENTS.override.md` exception.
+
+Rule: an engineering exception is a time-bounded, human-approved record of residual risk for a specific rule revision and scope. It does not change canonical rule meaning, silently satisfy minimum enforcement, or waive an accepted semantic obligation.
+
+Forbidden shapes:
+
+- an exception without rule ID/revision, scope, compensating control, human approval, and expiry or reconsideration trigger;
+- using an exception to permit behavior prohibited by a cited ADR/register;
+- reporting an excepted rule as `enforced` merely because an exception exists;
+- using an open-ended "temporary" exception.
+
+Required checks:
+
+- active exception resolves from the affected `CONFORMANCE.md` entry;
+- exception register records reason, compensating control, approval, effective date, expiry/reconsideration, promotion consequence, and claim consequence;
+- conformance audit flags expired or out-of-scope exceptions.
+
+Eligible protection mechanisms:
+
+- manual-review
+- static
+
+Allowed review actors:
+
+- human-review
+
+Minimum promotion enforcement: active exception is valid, scoped, and its compensating control resolves; otherwise the affected rule is `uncovered` or `revalidation-required`.
+
+Minimum promotion integration: `CI-required`.
+
+Failure consequences:
+
+- promotion-blocking
+- claim-blocking
+
+Review question: does this exception record residual risk without weakening an accepted semantic obligation?
+
+### ENG-BASE-PROFILE-001 - Profile Composition
+
+Rule revision: `R2`
+
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Scope: active profiles and profile rule catalogues.
 
 Applies when: a profile is created, activated, retired, combined with another profile, or changed.
 
-Rule: profiles may add rules, cite base rules, or strengthen minimum enforcement. They must not silently weaken, redefine, or reuse rule IDs.
+Rule: profiles may add rules, cite base rules, or strengthen minimum enforcement. They must not silently weaken, redefine, or reuse rule IDs. The active profile set is represented as separately pinned source artifacts, not a concatenated singular profile file.
 
 Forbidden shapes:
 
 - two active profiles define the same rule ID differently;
 - a profile weakens a base rule without an accepted source change;
 - profile activation order is used to resolve a semantic conflict;
+- publishing a multi-profile set through a singular `ACTIVE_PROFILE.md` abstraction.
 - retired profile IDs or rule IDs are reused.
 
 Required checks:
 
 - profile rule IDs are globally unique;
-- active profile conflicts are resolved or scoped before promotion.
+- active profile conflicts are resolved before promotion;
+- active profile source artifacts and rule IDs are listed in the governance lock and conformance index.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - manual-review
 - static
@@ -517,10 +621,7 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
-
-- local
-- CI
+Minimum promotion integration: `CI-required`.
 
 Minimum claim-support enforcement: active profile set has no unresolved conflicts.
 
@@ -533,11 +634,9 @@ Review question: does this profile add or strengthen rules without redefining ex
 
 ### ENG-AGENT-001 - Persistent Agent Governance
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Scope: repository-integrated coding agents.
 
@@ -558,7 +657,7 @@ Required checks:
 - specialized guidance cites relevant rule IDs where practical;
 - inherited rules may be specialized or strengthened, not silently weakened.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - structural
 - manual-review
@@ -567,9 +666,9 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
+- local-recorded
 
 Minimum claim-support enforcement: agent guidance routes to local governance, but claim support still depends on ledger evidence.
 
@@ -581,11 +680,9 @@ Review question: can an agent starting in this repo find applicable rules and ga
 
 ### ENG-HEALTH-CHANGE-001 - Focused Change
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Rationale references:
 
@@ -607,13 +704,13 @@ Required checks:
 - review identifies primary purpose;
 - broad changes record why splitting would be riskier than combining.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - manual-review
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
+- local-recorded
 
 Minimum claim-support enforcement: claim-bearing changes identify their primary purpose and applicable rules.
 
@@ -626,11 +723,9 @@ Review question: what is the primary purpose of this change, and is it small eno
 
 ### ENG-HEALTH-TEST-001 - Behavior-Change Test Obligation
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Rationale references:
 
@@ -651,7 +746,7 @@ Required checks:
 
 - test evidence or recorded exception appears in the change review.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - automated-test
 - manual-review
@@ -662,10 +757,10 @@ Expected test modes:
 - negative
 - regression
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
-- CI
+- local-recorded
+- CI-required
 
 Minimum claim-support enforcement: behavior relevant to claims has tests or an explicit recorded exception.
 
@@ -678,11 +773,9 @@ Review question: which test fails without this behavior change?
 
 ### ENG-HEALTH-TEST-002 - Test Validity
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Rationale references:
 
@@ -705,7 +798,7 @@ Required checks:
 
 - test review identifies the responsibility under test and what would make the test fail.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - automated-test
 - manual-review
@@ -716,10 +809,10 @@ Expected test modes:
 - negative
 - regression
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
-- CI
+- local-recorded
+- CI-required
 
 Minimum claim-support enforcement: claim-supporting tests do not precompute the claimed behavior.
 
@@ -732,11 +825,9 @@ Review question: does this test actually exercise the responsibility it claims t
 
 ### ENG-HEALTH-API-001 - Minimal Public API
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Scope: all public implementation APIs.
 
@@ -755,7 +846,7 @@ Required checks:
 - public API additions identify governing source and consumer;
 - tests use local/internal seams rather than broadening public boundaries.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - static
 - manual-review
@@ -764,10 +855,10 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
-- CI
+- local-recorded
+- CI-required
 
 Minimum claim-support enforcement: public APIs used for claim evidence are declared and reviewed.
 
@@ -780,11 +871,9 @@ Review question: why must this be public, and which governed consumer needs it?
 
 ### ENG-HEALTH-STRUCTURE-001 - Bounded Module Responsibility
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Scope: top-level directories, packages, shared modules, and broad helpers.
 
@@ -803,30 +892,29 @@ Required checks:
 - repository map or local guidance is updated when a new top-level project area is introduced;
 - review can state the responsibility in one sentence.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - manual-review
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
+- local-recorded
 
 Minimum claim-support enforcement: claim-bearing code lives in areas with clear ownership.
 
 Failure consequences:
 
-- merge-blocking
-- advisory
+- advisory: an ownership label is imprecise but does not mislead a reviewer or claim;
+- merge-blocking: ownership ambiguity hides SUT/evaluation, state, or claim responsibility.
 
 Review question: what is this module's responsibility, and what does not belong here?
 
 ### ENG-HEALTH-ABSTRACTION-001 - Current Justification For Abstractions
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
-- this standard
 - `ADR-001 R1`
 
 Scope: non-throwaway implementation abstractions and shared helpers.
@@ -844,30 +932,28 @@ Required checks:
 
 - review records the abstraction responsibility and current justification.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - manual-review
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
+- local-recorded
 
 Minimum claim-support enforcement: shared abstractions involved in claims have current justification.
 
 Failure consequences:
 
-- merge-blocking
-- advisory
+- advisory: a local abstraction has limited cleanup value but does not alter a governed boundary;
+- merge-blocking: an abstraction obscures ownership, state origin, or an active governed contract.
 
 Review question: what current pressure justifies this abstraction, and why is a local implementation insufficient?
 
 ### ENG-HEALTH-DEPENDENCY-001 - Production Dependency Discipline
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Scope: production/runtime dependencies and build-critical dependencies.
 
@@ -885,15 +971,15 @@ Required checks:
 
 - dependency addition rationale appears in review or local dependency record.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - manual-review
 - static
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
-- CI
+- local-recorded
+- CI-required
 
 Minimum claim-support enforcement: claim-bearing code does not depend on unreviewed production dependencies.
 
@@ -906,11 +992,9 @@ Review question: why is this dependency needed now, and what ownership/maintenan
 
 ### ENG-HEALTH-REPRO-001 - Reproducible Project Commands
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Scope: required gates, local commands, CI commands, and documented developer setup.
 
@@ -929,7 +1013,7 @@ Required checks:
 - repo guidance lists exact commands for required gates;
 - command docs are updated when gates change.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - manual-review
 - automated-test
@@ -938,10 +1022,10 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
-- CI
+- local-recorded
+- CI-required
 
 Minimum claim-support enforcement: required claim-supporting gates are reproducible from documented commands.
 
@@ -954,11 +1038,9 @@ Review question: can a clean checkout run this gate using documented commands?
 
 ### ENG-HEALTH-FAILURE-001 - Failure Transparency
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Scope: contract checks, conformance gates, SUT/evaluation boundaries, inspection, reporting, and operational helpers.
 
@@ -977,7 +1059,7 @@ Required checks:
 
 - failure paths expose violated contract or residual risk without leaking prohibited evaluation metadata.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - automated-test
 - manual-review
@@ -987,10 +1069,10 @@ Expected test modes:
 - negative
 - regression
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
-- CI
+- local-recorded
+- CI-required
 
 Minimum claim-support enforcement: claim-supporting checks fail closed and report failure transparently.
 
@@ -1003,11 +1085,9 @@ Review question: does this failure path preserve the difference between success,
 
 ### ENG-HEALTH-DEAD-001 - Dead Code And Throwaway Promotion
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Scope: non-throwaway implementation code and throwaway artifacts.
 
@@ -1026,7 +1106,7 @@ Required checks:
 - review flags throwaway imports and commented-out dead code;
 - promotion review applies active rules and tests.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - static
 - manual-review
@@ -1035,9 +1115,9 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
+- local-recorded
 
 Minimum claim-support enforcement: claim-bearing code does not depend on throwaway code.
 
@@ -1050,11 +1130,9 @@ Review question: is this code active, deleted, or intentionally throwaway?
 
 ### ENG-HEALTH-TODO-001 - Tracked TODO Identity
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Scope: TODOs in non-throwaway code.
 
@@ -1072,14 +1150,14 @@ Required checks:
 
 - review flags untracked TODOs in non-throwaway code.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - static
 - manual-review
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
+- local-recorded
 
 Minimum claim-support enforcement: claim-bearing code has no untracked architecture TODOs.
 
@@ -1092,11 +1170,9 @@ Review question: what stable follow-up identity owns this TODO?
 
 ### ENG-HEALTH-COMMENT-001 - Useful Comment Discipline
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Scope: comments in non-throwaway code.
 
@@ -1114,30 +1190,28 @@ Required checks:
 
 - review removes or corrects misleading or low-value comments.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - manual-review
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
+- local-recorded
 
 Minimum claim-support enforcement: comments used in claims or conformance explanations are accurate.
 
 Failure consequences:
 
-- advisory
-- merge-blocking
+- advisory: a comment is merely low value and does not mislead a reviewer;
+- merge-blocking: a comment misstates conformance, a contract, or a governing decision.
 
 Review question: does this comment explain an invariant, trade-off, or consequence that code alone does not show?
 
 ### ENG-HEALTH-GEN-001 - Generated Artifact Review
 
-Rule revision: `R1`
+Rule revision: `R2`
 
-Governing sources:
-
-- this standard
+Governing sources: none; base engineering rule authored in this canonical rule artifact.
 
 Scope: AI-generated or tool-generated code, schemas, tests, docs, and project structure.
 
@@ -1155,7 +1229,7 @@ Required checks:
 
 - generated public contracts, shared packages, fixture projections, simulator records, capture records, and inspection surfaces receive explicit review.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - automated-test
 - manual-review
@@ -1165,9 +1239,9 @@ Expected test modes:
 - contract
 - negative
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
+- local-recorded
 
 Minimum claim-support enforcement: generated claim-bearing contracts are reviewed against active rules.
 
@@ -1180,12 +1254,11 @@ Review question: did generation introduce hidden ownership, state, boundary, or 
 
 ### ENG-CLAIM-001 - Claim Domain Separation
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
 - `OPEN_QUESTIONS.md V0.2.18`
-- this standard
 
 Scope: docs, tests, reports, traces, demos, README text, and review language.
 
@@ -1204,7 +1277,7 @@ Required checks:
 - artifact labels and documentation use claim language that matches their domain;
 - compatibility claims trigger the relevant evaluation-record metadata question.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - static
 - manual-review
@@ -1213,10 +1286,10 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
-- CI
+- local-recorded
+- CI-required
 
 Minimum claim-support enforcement: claim-bearing artifacts use bounded language and trigger required open questions.
 
@@ -1229,7 +1302,7 @@ Review question: which claim domain does this artifact support, and what does it
 
 ### ENG-CLAIM-002 - Formal Evaluation Artifact Reservation
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
@@ -1252,7 +1325,7 @@ Required checks:
 
 - reports and docs distinguish development artifact, engineering conformance result, and formal evaluation artifact.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - static
 - manual-review
@@ -1261,9 +1334,9 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
+- local-recorded
 
 Minimum claim-support enforcement: formal-evaluation language is absent or authorized by governing decisions.
 
@@ -1275,12 +1348,11 @@ Review question: does this artifact imply formal evaluation evidence before the 
 
 ### ENG-CHANGE-001 - Open Question Trigger Discipline
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
 - `OPEN_QUESTIONS.md V0.2.18`
-- this standard
 
 Scope: implementation work that crosses unresolved governance frontiers.
 
@@ -1297,13 +1369,13 @@ Required checks:
 
 - review asks whether the change triggers `SLICE-005`, `EVAL-004`, `EVAL-005`, `DEP-003`, `REPO-001`, `MEM-*`, `TRUST-*`, `PROD-*`, `SURF-*`, `CONT-*`, or `LEG-*`.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - manual-review
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
+- local-recorded
 
 Minimum claim-support enforcement: triggered open questions are resolved or scoped before dependent claims.
 

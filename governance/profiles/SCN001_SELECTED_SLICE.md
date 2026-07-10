@@ -1,12 +1,12 @@
 # SCN-001 Selected-Slice Engineering Profile
 
-Profile version: `V0.2.1`
+Profile version: `V0.3.1`
 
 Status: `Draft`
 
-Date: 2026-07-09
+Date: 2026-07-10
 
-Base standard: `ENGINEERING_STANDARD.md` `V0.4.1`
+Base standard: `ENGINEERING_STANDARD.md` `V0.5.0`
 
 Decision basis:
 
@@ -51,14 +51,14 @@ Known-key scanners for strings such as `expected_transition`, `oracle_rule_id`, 
 
 ### ENG-CLAIM-WORKBENCH-001 - Scenario-Provisional Workbench Boundary
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
 - `ADR-001 R1`
 - `ADR-008 R2`
-- `OPEN_QUESTIONS.md`
-- `ENG-BASE-REPO-001 R1`
+- `OPEN_QUESTIONS.md V0.2.18`
+- `ENG-BASE-REPO-001 R2`
 
 Scope: first `SCN-001` selected-slice implementation repository or workbench.
 
@@ -79,7 +79,7 @@ Required checks:
 - workbench-to-project extraction checks the `REPO-001` trigger before creating durable project claims;
 - local conformance ledger keeps selected-slice rules active for non-throwaway workbench code.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - structural
 - manual-review
@@ -88,9 +88,9 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
+- local-recorded
 
 Minimum claim-support enforcement: claim-bearing workbench artifacts cite the scenario-provisional claim boundary and do not claim durable system-project status.
 
@@ -103,7 +103,7 @@ Review question: does this artifact treat the workbench as governed scenario-pro
 
 ### ENG-CONF-IMPORT-001 - SUT Has No Evaluation Dependency
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
@@ -127,7 +127,7 @@ Required checks:
 - direct and transitive dependency conformance where tooling can see it;
 - dynamic loading surfaces are forbidden or explicitly reviewed with residual risk.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - static
 - manual-review
@@ -136,10 +136,9 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
-- required-CI
+- CI-required
 
 Minimum claim-support enforcement: static dependency conformance or an explicitly equivalent structural barrier plus review of dynamic-loading residual risk.
 
@@ -152,12 +151,12 @@ Review question: can SUT code reach evaluation-owned semantics directly or trans
 
 ### ENG-CONF-IMPORT-002 - Evaluation Uses Declared SUT Public Surface Only
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
 - `ADR-008 R2`
-- `ENG-HEALTH-API-001 R1`
+- `ENG-HEALTH-API-001 R2`
 
 Scope: `scn001_eval`.
 
@@ -177,7 +176,7 @@ Required checks:
 - import/export rules distinguish declared public SUT surface from private internals;
 - behavior-evidence samples drive SUT through the declared public boundary.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - static
 - automated-test
@@ -188,9 +187,9 @@ Expected test modes:
 - contract
 - negative
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
+- CI-required
 
 Minimum claim-support enforcement: public-surface access is structurally declared and negative-tested for private/internal access where practical.
 
@@ -203,7 +202,7 @@ Review question: is evaluation calling only the declared SUT public boundary?
 
 ### ENG-CONF-PAYLOAD-001 - Closed SUT Ingress
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
@@ -229,7 +228,7 @@ Required checks:
 - if representation permits arbitrary fields, unknown fields are rejected before semantic ingestion;
 - negative tests submit full answer-bearing records and prohibited evaluation-context fields.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - structural
 - static
@@ -240,10 +239,9 @@ Expected test modes:
 - contract
 - negative
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
-- required-CI
+- CI-required
 
 Minimum claim-support enforcement: structural or static closed-ingress barrier plus automated negative tests for answer-bearing records.
 
@@ -256,7 +254,7 @@ Review question: can any undeclared evaluation-origin material reach SUT semanti
 
 ### ENG-CONF-PAYLOAD-002 - Rejected Ingress Is Semantically Atomic
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
@@ -282,7 +280,7 @@ Required checks:
 - `rejected_payload_has_no_semantic_side_effect` negative test or equivalent;
 - rejected ingress may create segregated technical/error telemetry but does not alter semantic state, transition evidence, semantic relations, consumer history, or material transition order.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - structural
 - automated-test
@@ -292,9 +290,9 @@ Expected test modes:
 - negative
 - contract
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
+- CI-required
 
 Minimum claim-support enforcement: automated side-effect negative test.
 
@@ -307,7 +305,7 @@ Review question: what semantic state remains unchanged after a rejected payload?
 
 ### ENG-CONF-ROLE-001 - Role And State-Origin Preservation
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
@@ -332,7 +330,7 @@ Required checks:
 - adapter tests prove raw communications, observations, chronology facts, context labels, affordances, simulator facts, and state references keep their accepted role;
 - negative tests catch pre-promoted semantic conclusions.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - automated-test
 - manual-review
@@ -342,9 +340,9 @@ Expected test modes:
 - contract
 - negative
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
+- CI-required
 
 Minimum claim-support enforcement: adapter role/state-origin preservation covered by contract or negative tests.
 
@@ -357,12 +355,12 @@ Review question: does this adapter preserve evidence role, or does it make a SUT
 
 ### ENG-CONF-PUBLIC-001 - No Answer Selectors In SUT Public Boundary
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
 - `ADR-008 R2`
-- `ENG-HEALTH-API-001 R1`
+- `ENG-HEALTH-API-001 R2`
 
 Scope: SUT public commands, methods, endpoints, schemas, and harness-callable interfaces.
 
@@ -380,7 +378,7 @@ Required checks:
 
 - public boundary review and where possible static/API checks reject answer-selector surfaces.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - static
 - automated-test
@@ -391,9 +389,9 @@ Expected test modes:
 - contract
 - negative
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
+- CI-required
 
 Minimum claim-support enforcement: public boundary surface is declared and checked for answer-selector APIs.
 
@@ -406,16 +404,16 @@ Review question: can the public boundary tell the SUT which semantic transition 
 
 ### ENG-CONF-EVIDENCE-001 - Behavior Evidence Uses Public Boundary
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
 - `ADR-008 R2`
-- `ENG-CLAIM-001 R1`
+- `ENG-CLAIM-001 R2`
 
 Scope: tests, traces, demos, and reports that claim selected-slice behavior evidence.
 
-Applies when: artifacts are used to support behavior evidence, engineering conformance claims, or selected-slice claims.
+Applies when: an artifact is used as selected-slice behavior evidence or supports an evaluated claim about SUT behavior.
 
 Rule: selected-slice behavior evidence drives SUT behavior through the accepted public boundary. Internal unit tests may test internals but do not count as selected-slice behavior evidence.
 
@@ -429,7 +427,7 @@ Required checks:
 - behavior evidence cites public boundary calls;
 - internal-transition tests are labeled implementation evidence only.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - automated-test
 - manual-review
@@ -438,10 +436,10 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
-- CI
+- local-recorded
+- CI-required
 
 Minimum claim-support enforcement: claim-bearing behavior artifacts cite public-boundary execution.
 
@@ -453,7 +451,7 @@ Review question: is this artifact behavior evidence or only implementation evide
 
 ### ENG-CONF-HARNESS-001 - Harness Non-Arbitration
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
@@ -476,7 +474,7 @@ Required checks:
 - negative test where SUT emits competing candidates and harness does not rescue the run;
 - trace identifies which output was SUT-selected for realization.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - automated-test
 - manual-review
@@ -486,9 +484,9 @@ Expected test modes:
 - negative
 - contract
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
+- CI-required
 
 Minimum claim-support enforcement: automated negative test for competing-output non-arbitration.
 
@@ -501,10 +499,11 @@ Review question: does the harness transport the SUT-selected output or choose fo
 
 ### ENG-CONF-RUN-001 - Independent Run Isolation
 
-Rule revision: `R1`
+Rule revision: `R3`
 
 Governing sources:
 
+- `ADR-003 R2`
 - `ADR-004 R3`
 - `ADR-008 R2`
 
@@ -529,7 +528,7 @@ Required checks:
 - run A state, relations, outcomes, candidates, and active trials are not resolvable in run B;
 - run A state does not affect run B behavior.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - structural
 - automated-test
@@ -539,10 +538,9 @@ Expected test modes:
 - negative
 - replay
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
-- required-CI
+- CI-required
 
 Minimum claim-support enforcement: automated independent-run isolation test.
 
@@ -555,7 +553,7 @@ Review question: can any selected-slice semantic state cross independent run bou
 
 ### ENG-CONF-STATE-001 - Bounded Selected-Slice State Access
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
@@ -582,7 +580,7 @@ Required checks:
 - later-use paths resolve opaque SUT-owned handles or local relations, not broad retrieval;
 - if broader retrieval is needed to pass, stop and re-triage the relevant open question before milestone claims.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - structural
 - automated-test
@@ -593,9 +591,9 @@ Expected test modes:
 - contract
 - negative
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
+- CI-required
 
 Minimum claim-support enforcement: bounded access covered by tests or structural limitation; no unresolved retrieval dependency.
 
@@ -608,7 +606,7 @@ Review question: is this state access selected-slice bounded, or did it become r
 
 ### ENG-CONF-STATE-002 - Transition-Attributable Semantic Mutation
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
@@ -633,7 +631,7 @@ Required checks:
 - tests or review inspect mutation provenance for behavior-driving state changes;
 - helper layers that can mutate semantic state are explicitly bounded and reviewed.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - structural
 - automated-test
@@ -644,10 +642,9 @@ Expected test modes:
 - contract
 - negative
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
-- required-CI
+- CI-required
 
 Minimum claim-support enforcement: behavior-driving mutation provenance is automated-test or structurally enforced for claim-bearing transitions.
 
@@ -660,7 +657,7 @@ Review question: which SUT-owned transition responsibility caused this semantic 
 
 ### ENG-CONF-DEP-001 - No Post-Hoc Dependency Repair
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
@@ -684,7 +681,7 @@ Required checks:
 
 - negative tests or review cases for missing lineage, capture-created consumption evidence, backdated reporting relation, post-hoc basis proof, and later snapshot substitution.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - automated-test
 - manual-review
@@ -694,10 +691,9 @@ Expected test modes:
 - negative
 - replay
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
-- required-CI
+- CI-required
 
 Minimum claim-support enforcement: no post-hoc repair is covered by negative tests for claim-bearing dependency evidence.
 
@@ -710,7 +706,7 @@ Review question: was this dependency evidence preserved at material order, or re
 
 ### ENG-CONF-DEP-002 - Historical Effective Endpoint Identity
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
@@ -732,7 +728,7 @@ Required checks:
 
 - test where an earlier relation consumes a state under scope/status A, later mutation changes scope/status B, and inspection of the earlier relation still recovers A.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - structural
 - automated-test
@@ -743,10 +739,9 @@ Expected test modes:
 - replay
 - negative
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
-- required-CI
+- CI-required
 
 Minimum claim-support enforcement: automated historical-endpoint mutation test or structural immutable/effective-version mechanism.
 
@@ -759,7 +754,7 @@ Review question: can later lifecycle mutation rewrite what an earlier relation m
 
 ### ENG-CONF-INSPECT-001 - Passive Inspection Invariance
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
@@ -783,7 +778,7 @@ Required checks:
 
 - inspection mutation tests compare semantic state, relation set, transition order, and lifecycle status before and after inspection.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - automated-test
 - manual-review
@@ -793,10 +788,9 @@ Expected test modes:
 - contract
 - negative
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
-- required-CI
+- CI-required
 
 Minimum claim-support enforcement: automated inspection invariance test.
 
@@ -809,7 +803,7 @@ Review question: what selected-slice evidence is guaranteed unchanged after insp
 
 ### ENG-CONF-INSPECT-002 - Inspection Interleaving Passivity
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
@@ -834,7 +828,7 @@ Required checks:
 
 - `process(A); process(B)` is oracle-materially equivalent to `process(A); inspect(...); inspect(...); process(B)`.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - automated-test
 
@@ -844,10 +838,9 @@ Expected test modes:
 - replay
 - negative
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
-- required-CI
+- CI-required
 
 Minimum claim-support enforcement: automated inspection interleaving test.
 
@@ -860,7 +853,7 @@ Review question: can adding inspection between transitions change later behavior
 
 ### ENG-CONF-SIM-001 - Simulator Isolation And Projection
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
@@ -886,7 +879,7 @@ Required checks:
 - simulator output returning to SUT passes the same closed-ingress projection as fixture inputs;
 - negative tests submit full simulator evaluation records to SUT ingress.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - static
 - structural
@@ -897,9 +890,9 @@ Expected test modes:
 - contract
 - negative
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
+- CI-required
 
 Minimum claim-support enforcement: simulator isolation and projection are covered by dependency checks and negative ingress tests.
 
@@ -912,7 +905,7 @@ Review question: does the simulator realize SUT choice, or choose/repair behavio
 
 ### ENG-CONF-CAPTURE-001 - Capture And Reporting Do Not Drive Or Repair Behavior
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
@@ -938,7 +931,7 @@ Required checks:
 - replay/restore paths preserve the same visibility and state-origin rules as SUT input;
 - tests or review prove evaluation-only metadata is not reintroduced into SUT behavior.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - structural
 - automated-test
@@ -950,9 +943,9 @@ Expected test modes:
 - negative
 - replay
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
+- CI-required
 
 Minimum claim-support enforcement: capture/reporting non-repair and non-reingestion are tested or structurally impossible.
 
@@ -965,7 +958,7 @@ Review question: can capture/reporting become behavior input or repair missing e
 
 ### ENG-CONF-REF-001 - SUT-Safe References And Handles
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
@@ -990,7 +983,7 @@ Required checks:
 - negative tests reject literal path-qualified fixture IDs where they reveal evaluation context;
 - review checks semantic leakage, not only reserved word matches.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - structural
 - automated-test
@@ -1001,9 +994,9 @@ Expected test modes:
 - contract
 - negative
 
-Promotion integration:
+Minimum promotion integration:
 
-- CI
+- CI-required
 
 Minimum claim-support enforcement: SUT-visible handles are structurally opaque or negative-tested for evaluation-context leakage.
 
@@ -1016,14 +1009,14 @@ Review question: does this reference reveal evaluation context by meaning, not j
 
 ### ENG-CONF-CLAIM-001 - Selected-Slice Claim Boundary
 
-Rule revision: `R1`
+Rule revision: `R2`
 
 Governing sources:
 
 - `OPEN_QUESTIONS.md V0.2.18`
 - `ADR-004 R3`
 - `ADR-005 R2`
-- `ENG-CLAIM-001 R1`
+- `ENG-CLAIM-001 R2`
 
 Scope: SCN-001 reports, tests, traces, demos, README text, and implementation docs.
 
@@ -1044,7 +1037,7 @@ Required checks:
 - final scoreability claims trigger `EVAL-005`;
 - first selected-slice completion/acceptance claims trigger `SLICE-005`.
 
-Expected mechanisms:
+Eligible protection mechanisms:
 
 - static
 - manual-review
@@ -1053,10 +1046,10 @@ Expected test modes:
 
 - contract
 
-Promotion integration:
+Minimum promotion integration:
 
-- local
-- CI
+- local-recorded
+- CI-required
 
 Minimum claim-support enforcement: claim-bearing artifacts are review-checked and do not use reserved formal-evaluation status before triggers resolve.
 
