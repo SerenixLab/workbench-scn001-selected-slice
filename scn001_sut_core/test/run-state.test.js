@@ -10,6 +10,7 @@ function communicationInput(overrides = {}) {
     occurrenceOrder: 1,
     content: "Please continue the practice session.",
     context: "japanese_practice",
+    semanticStatusOrigin: "unclassified",
     ...overrides
   };
 }
@@ -65,6 +66,7 @@ test("closed ingress retains role-preserving fixture facts with contemporaneous 
   });
   const snapshot = boundary.captureInspectionSnapshot(runRef);
   const fact = boundary.inspectRecord(runRef, result.acceptedInputRefs[0]);
+  const interaction = snapshot.records.find((record) => record.family === "interaction_segment");
   const relations = boundary.enumerateLocalRelations(runRef, result.acceptedInputRefs[0]);
 
   assert.equal(fact.family, "input_fact");
@@ -74,6 +76,58 @@ test("closed ingress retains role-preserving fixture facts with contemporaneous 
   assert.equal(relations.filter((relation) => relation.relationKind === "source").length, 1);
   assert.equal(relations.filter((relation) => relation.relationKind === "basis").length, 1);
   assert.ok(fact.createdOrder < boundary.inspectRecord(runRef, result.transitionRef).createdOrder);
+  assert.deepEqual(interaction.inputReferences, result.acceptedInputRefs);
+  assert.equal(interaction.createdByTransitionRef, result.transitionRef);
+});
+
+test("fixture-initialized historical assertions retain fixture origin without SUT re-attribution", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const result = boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [communicationInput({
+      content: "I always freeze on particles.",
+      semanticStatusOrigin: "fixture_initialized"
+    })]
+  });
+
+  const beforeProcessing = boundary.captureInspectionSnapshot(runRef);
+  const initializedAssertion = beforeProcessing.records.find((record) => record.family === "attributed_assertion");
+
+  assert.equal(initializedAssertion.origin, "fixture");
+  assert.equal(initializedAssertion.statusOrigin, "fixture_initialized");
+  assert.equal(initializedAssertion.createdByTransitionRef, result.transitionRef);
+  assert.ok(boundary.inspectRecord(runRef, result.transitionRef).resultReferences.includes(initializedAssertion.reference));
+
+  boundary.processCurrentInteraction(runRef);
+  const assertions = boundary.captureInspectionSnapshot(runRef).records.filter((record) => (
+    record.family === "attributed_assertion"
+  ));
+  assert.equal(assertions.length, 1);
+  assert.equal(assertions[0].statusOrigin, "fixture_initialized");
+});
+
+test("simulator realization inputs retain simulator record and source origin", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const requested = boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [communicationInput()]
+  });
+  const realization = boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [{
+      kind: "simulator_realization",
+      sourceActor: "simulated-dependency",
+      occurrenceOrder: 2,
+      requestedRef: requested.acceptedInputRefs[0],
+      realizedBehavior: "Please continue.",
+      fidelity: "match"
+    }]
+  });
+
+  const realizationFact = boundary.inspectRecord(runRef, realization.acceptedInputRefs[0]);
+  const source = boundary.inspectRecord(runRef, realizationFact.sourceActorRef);
+
+  assert.equal(realizationFact.origin, "simulator");
+  assert.equal(source.origin, "simulator");
 });
 
 test("inspection is passive before a later processing transition", () => {
@@ -114,7 +168,7 @@ test("state-reference handles reject evaluation-bearing or unknown identifiers b
         sourceActor: "fixture-driver",
         occurrenceOrder: 1,
         stateRef: "SCN001-SSFO-V0.2.0-CF-DRILL-OPT-IN",
-        purpose: "later use"
+        purpose: "independent_current_skill_authority"
       }]
     }),
     /opaque SUT state reference/
@@ -129,7 +183,7 @@ test("state-reference handles reject evaluation-bearing or unknown identifiers b
         sourceActor: "fixture-driver",
         occurrenceOrder: 1,
         stateRef: "state_00000000-0000-0000-0000-000000000000",
-        purpose: "later use"
+        purpose: "independent_current_skill_authority"
       }]
     }),
     /does not resolve inside this run/
@@ -154,7 +208,7 @@ test("state-reference handles resolve only to state already owned by the same ru
         sourceActor: "fixture-driver",
         occurrenceOrder: 1,
         stateRef: firstResult.acceptedInputRefs[0],
-        purpose: "later use"
+        purpose: "independent_current_skill_authority"
       }]
     }),
     /does not resolve inside this run/
@@ -167,7 +221,7 @@ test("state-reference handles resolve only to state already owned by the same ru
       sourceActor: "fixture-driver",
       occurrenceOrder: 2,
       stateRef: firstResult.acceptedInputRefs[0],
-      purpose: "later use"
+      purpose: "independent_current_skill_authority"
     }]
   });
   assert.equal(boundary.inspectRecord(firstRun, accepted.acceptedInputRefs[0]).role, "state_reference");
@@ -195,6 +249,9 @@ test("processing attributes current communications without creating current-skil
     const relations = boundary.enumerateLocalRelations(runRef, assertion.reference);
     assert.equal(relations.filter((relation) => relation.relationKind === "source").length, 1);
     assert.equal(relations.filter((relation) => relation.relationKind === "basis").length, 1);
+    const transition = boundary.inspectRecord(runRef, assertion.createdByTransitionRef);
+    assert.equal(transition.transitionKind, "attribute_current_communications");
+    assert.ok(transition.resultReferences.includes(assertion.reference));
   }
   assert.equal(ingested.acceptedInputRefs.length, 2);
 });
@@ -257,6 +314,58 @@ test("processing applies the selected >90-day rule without blanket-staling recen
   const beforeRepeatedProcessing = oldBoundary.captureInspectionSnapshot(oldRun);
   oldBoundary.processCurrentInteraction(oldRun);
   assert.deepEqual(oldBoundary.captureInspectionSnapshot(oldRun), beforeRepeatedProcessing);
+});
+
+test("processing consumes interactions in order and reassesses referenced evidence at the current chronology", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const firstInteraction = boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [
+      taskObservationInput({ occurrenceScenarioDay: 0, sessionId: "session-old", sessionOrder: 1 }),
+      chronologyInput({ scenarioDay: 30 })
+    ]
+  });
+  const secondInteraction = boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [
+      {
+        kind: "state_reference",
+        sourceActor: "fixture-driver",
+        occurrenceOrder: 3,
+        stateRef: firstInteraction.acceptedInputRefs[0],
+        purpose: "independent_current_skill_authority"
+      },
+      chronologyInput({ occurrenceOrder: 4, scenarioDay: 135, sessionOrder: 3 })
+    ]
+  });
+
+  boundary.processCurrentInteraction(runRef);
+  let assessments = boundary.captureInspectionSnapshot(runRef).records.filter((record) => (
+    record.family === "temporal_eligibility_assessment"
+  ));
+  assert.equal(assessments.length, 1);
+  assert.equal(assessments[0].ageDays, 30);
+  assert.equal(assessments[0].eligibility, "eligible");
+  assert.equal(assessments[0].chronologyRef, firstInteraction.acceptedInputRefs[1]);
+  const firstFact = boundary.inspectRecord(runRef, firstInteraction.acceptedInputRefs[0]);
+  const processedInteractions = boundary.captureInspectionSnapshot(runRef).records.filter((record) => (
+    record.transitionKind === "process_interaction_segment"
+  ));
+  assert.equal(processedInteractions.length, 1);
+  assert.equal(processedInteractions[0].interactionRef, firstFact.interactionRef);
+
+  boundary.processCurrentInteraction(runRef);
+  assessments = boundary.captureInspectionSnapshot(runRef).records.filter((record) => (
+    record.family === "temporal_eligibility_assessment"
+  ));
+  assert.equal(assessments.length, 2);
+  const laterAssessment = assessments.find((assessment) => assessment.ageDays === 135);
+  assert.equal(laterAssessment.eligibility, "ineligible");
+  assert.equal(laterAssessment.assessedObservationRef, firstInteraction.acceptedInputRefs[0]);
+  assert.equal(laterAssessment.chronologyRef, secondInteraction.acceptedInputRefs[1]);
+  assert.equal(laterAssessment.evidenceReferenceRef, secondInteraction.acceptedInputRefs[0]);
+  const transition = boundary.inspectRecord(runRef, laterAssessment.createdByTransitionRef);
+  assert.ok(transition.resultReferences.includes(laterAssessment.reference));
+  assert.ok(transition.inputReferences.includes(secondInteraction.acceptedInputRefs[0]));
 });
 
 test("inspection interleaving does not change attribution or temporal-assessment results", () => {

@@ -1,337 +1,125 @@
 # SCN-001 Workbench Conformance Ledger
 
-This ledger records local enforcement status for governed non-throwaway work in this workbench.
+This ledger is the complete applicability router for the 49 rules pinned by
+`governance/ZOEY_GOVERNANCE.lock`. It records the combined repository working
+tree based on `HEAD` `644843d`, including implementation/test changes already
+present while this ledger was revalidated.
 
-The initial two-package boundary spine and first semantic segment exist. The SUT can derive attributed current-user assertions and selected temporal eligibility from raw input, but it does not create current-skill facts, trial candidates, active trials, behavior dispositions, or outcomes. No formal evaluation record, behavioral-compatibility claim, scoreability claim, or milestone-acceptance claim exists yet.
+The workbench contains a two-package boundary spine and the first semantic
+segment. The SUT derives attributed current-user assertions and selected
+temporal eligibility from raw input. It does not create current-skill facts,
+trial candidates, active trials, behavior dispositions, or outcomes. There is
+no formal evaluation record, behavioral-compatibility claim, scoreability
+claim, milestone-acceptance claim, replay/restore path, or durable repository
+extraction.
 
-Entries remain `review-only` until a human or project-owner-authorized reviewer records the required manual controls and repository branch protection confirms any required CI gate. Local automated mechanisms and commands are identified below.
+## Ledger Conventions
 
-## Repository Claim Boundary
+The table below is the sole authoritative applicability disposition. A rule is
+`not-applicable` only when its canonical trigger is absent from the current
+repository. Adding the named surface or artifact invalidates that disposition
+and requires a ledger update.
 
-Rule ID: `ENG-BASE-REPO-001`
-Rule revision: `R1`
-Governing source revisions: `ENGINEERING_STANDARD.md V0.4.1`; `OPEN_QUESTIONS.md V0.2.18`
-Applies To: workbench repository role and architecture claim
-Actual mechanisms: structural declaration; `scripts/check-governance-lock.mjs`; manual-review
-Actual test modes: contract
-Promotion integration: local `npm run check:governance`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: promotion-blocking; claim-blocking
-Local evidence: `README.md`; `governance/ZOEY_GOVERNANCE.lock`; `scripts/check-governance-lock.mjs`; `tests/conformance/boundary.test.js`
-Residual risk: protected-branch required-check configuration and human review are not verified locally
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
+All rows remain `revalidation-required` until a repository-owner-authorized
+human reviewer confirms the R2/R3 remapping, as required by
+`ENG-BASE-002 R2`. The **Mapped status** column records the status supported by
+the current local evidence after that confirmation:
 
-Rule ID: `ENG-CLAIM-WORKBENCH-001`
-Rule revision: `R1`
-Governing source revisions: `ADR-001 R1`; `ADR-008 R2`; `OPEN_QUESTIONS.md V0.2.18`; `ENG-BASE-REPO-001 R1`
-Applies To: workbench placement, README claims, extraction boundary
-Actual mechanisms: structural declaration; manual-review
-Actual test modes: contract
-Promotion integration: local `npm run check`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: promotion-blocking; claim-blocking
-Local evidence: `README.md`; `governance/ZOEY_GOVERNANCE.lock`
-Residual risk: `projects/` extraction has no automated trigger check yet; protected-branch review is not verified locally
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
+- `review-only`: local structural, static, automated, or review evidence
+  exists, but qualifying human controls and any required protected-branch
+  configuration are not verified locally;
+- `uncovered`: a canonical required check is missing;
+- `not-applicable`: the trigger is absent, so enforcement status does not
+  apply until the stated future trigger occurs.
 
-## Boundary-Critical Rules
+Unless a row says otherwise:
 
-These rules must be upgraded before claim-bearing selected-slice behavior work.
+- **Reviewer/Owner:** implementation maintainer; repository-owner-authorized
+  confirmation pending.
+- **Active exception:** none; `governance/EXCEPTIONS.md` does not exist.
+- **Actual promotion mechanism:** local `npm run check`; GitHub Actions
+  `.github/workflows/ci.yml` runs the same command for pull requests and pushes
+  to `main`; required-check/branch-protection configuration is not verified
+  locally.
+- **Verified at:** evidence resolved against the combined working tree based on
+  `HEAD` `644843d`; command results are recorded after the table.
 
-Rule ID: `ENG-CONF-IMPORT-001`
-Rule revision: `R1`
-Governing source revisions: `ADR-008 R2`
-Applies To: `scn001_sut_core`
-Actual mechanisms: package exports; `scripts/check-dependency-boundary.mjs`; manual-review
-Actual test modes: contract
-Promotion integration: local `npm run check:deps`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_sut_core/package.json`; `scn001_sut_core/index.js`; `scripts/check-dependency-boundary.mjs`; `tests/conformance/boundary.test.js`
-Residual risk: checker covers local ESM source and declared dependencies only; required-CI and human review are not verified locally
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
+## Complete Applicability And Evidence Index
 
-Rule ID: `ENG-CONF-IMPORT-002`
-Rule revision: `R1`
-Governing source revisions: `ADR-008 R2`; `ENG-HEALTH-API-001 R1`
-Applies To: `scn001_eval`
-Actual mechanisms: SUT package export map; evaluation public-package import; static dependency checker that forbids production dynamic loaders; negative import test; manual-review
-Actual test modes: contract; negative
-Promotion integration: local `npm run check:deps`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_sut_core/package.json`; `scn001_eval/src/harness.js`; `scripts/check-dependency-boundary.mjs`; `scn001_eval/test/harness.test.js`; `tests/conformance/boundary.test.js`
-Residual risk: only the boundary spine exists; later behavior-evidence tests must remain public-boundary driven
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
+| Rule ID | Revision | Rule source artifact | Applicability | Rationale / applies to paths and change types | Governing source revisions | Actual mechanisms and test modes | Local evidence | Actual promotion mechanism | Status | Mapped status | Failure consequences | Residual risk |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `ENG-AGENT-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Coding agents perform governed work; applies to repository guidance and every governed agent change. | Rule entry; `ENG-BASE-PUBLISH-001 R2`; `ENG-BASE-CONFORMANCE-002 R1` | Structural guidance; governance audit; manual review. Contract mode. | `AGENTS.md`; nested package `AGENTS.md` files; `governance/ZOEY_GOVERNANCE.lock`; `governance/CONFORMANCE.md`; `scripts/check-governance-lock.mjs` | Default plus local guidance reread required before governed edits. | revalidation-required | review-only | promotion-blocking | Human review outcome and protected required check are not verified. |
+| `ENG-AGENT-CODEX-001` | `R2` | `integrations/CODEX_INTEGRATION.md` | applicable | Codex is active and this index is its rule router; applies to guidance, routing paths, and instruction-budget changes. | `ENG-AGENT-001 R2`; `ENG-BASE-CONFORMANCE-002 R1` | Structural routing; static governance audit. Contract mode. | `AGENTS.md`; `governance/zoey_governance.py`; `scripts/check-governance-lock.mjs`; nested package `AGENTS.md` files | Default | revalidation-required | uncovered | promotion-blocking | The audit checks routing terms and stale paths but does not calculate every automatic instruction chain against the configured byte budget. |
+| `ENG-AGENT-CODEX-002` | `R2` | `integrations/CODEX_INTEGRATION.md` | applicable | Root and nested Codex guidance exist; applies whenever any such file or tracked override changes. | `ENG-AGENT-001 R2`; `ENG-BASE-EXCEPTION-001 R1` | Structural inherited guidance; partial static audit; manual review. Contract mode. | `AGENTS.md`; `scn001_sut_core/AGENTS.md`; `scn001_eval/AGENTS.md`; `governance/zoey_governance.py` | Default | revalidation-required | uncovered | merge-blocking; promotion-blocking | No automated monotonic-specialization comparison or tracked-override-to-exception validation exists. |
+| `ENG-AGENT-CODEX-003` | `R2` | `integrations/CODEX_INTEGRATION.md` | applicable | Governance and instruction routing were migrated and may change; applies to baseline, profile, integration, and routing changes. | `ENG-AGENT-001 R2` | Manual refresh decision recorded in task reports. | `AGENTS.md`; `governance/integrations/CODEX_INTEGRATION.md` | Local-recorded; this task explicitly reread guidance before editing. | revalidation-required | review-only | advisory or promotion-blocking by condition | A fresh-run decision remains a human promotion control after future routing changes. |
+| `ENG-AGENT-CODEX-004` | `R1` | `integrations/CODEX_INTEGRATION.md` | applicable | Nested SUT and evaluation guidance exists below the repository working directory; applies to edits under either package. | `ENG-AGENT-CODEX-001 R2` | Root routing instruction; manual path-chain review. | `AGENTS.md`; `scn001_sut_core/AGENTS.md`; `scn001_eval/AGENTS.md` | Default | revalidation-required | uncovered | promotion-blocking; claim-blocking | The governance audit does not exercise representative SUT/evaluation paths or prove every changed-path chain resolved. |
+| `ENG-BASE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | All implementation, tests, docs, and governance artifacts depend on accepted Zoey decisions. | `OPEN_QUESTIONS.md V0.2.18`; pinned ADR snapshots | Local pinned sources; governance digest audit; manual source-authority review. Contract mode. | `governance/ZOEY_GOVERNANCE.lock`; `governance/sources/`; `scripts/check-governance-lock.mjs`; `README.md` | Default | revalidation-required | review-only | promotion-blocking; claim-blocking | Semantic source review remains human; the canonical meta snapshot was recorded from a dirty source worktree. |
+| `ENG-BASE-002` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The pinned standard, profile, integration, sources, digests, and rule revisions changed at `HEAD`; this ledger is the required remapping. | Rule entry | Lock-to-index structural mapping; owner-authorized human review. Contract mode. | `governance/ZOEY_GOVERNANCE.lock`; this complete ledger | Local governance audit plus repository-owner-authorized confirmation. | revalidation-required | review-only | claim-blocking | Human confirmation of this mapping is pending. |
+| `ENG-BASE-CONFORMANCE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | This ledger is being audited and cites gates, evidence paths, revisions, and statuses. | Rule entry | Evidence-path review; partial static conformance audit; aggregate local gate. Contract mode. | `governance/CONFORMANCE.md`; `governance/zoey_governance.py`; `scripts/run-gates.mjs`; `.github/workflows/ci.yml` | Default | revalidation-required | uncovered | promotion-blocking; claim-blocking | The checker validates coverage and non-applicable rationales but not revisions, evidence existence, gate names, promotion integration, or status consistency. |
+| `ENG-BASE-CONFORMANCE-002` | `R1` | `ENGINEERING_STANDARD.md` | applicable | The active governance set changed and this index must disposition all 49 locked rules exactly once. | Canonical governance lock | Complete table; lock coverage audit; repository-specific rationales. Contract mode. | `governance/ZOEY_GOVERNANCE.lock`; this table; `governance/zoey_governance.py` | Default | revalidation-required | review-only | promotion-blocking; claim-blocking | Applicability truth requires repository-owner-authorized human confirmation; checker does not detect duplicate rows or revision mismatch. |
+| `ENG-BASE-EXCEPTION-001` | `R1` | `ENGINEERING_STANDARD.md` | not-applicable | No exception, compensating-control proposal, or tracked `AGENTS.override.md` exists. Future trigger: creation of any such artifact or proposed deviation. | Rule entry | Repository inventory and governance audit. | No `governance/EXCEPTIONS.md` or tracked `AGENTS.override.md`; `rg --files` inventory | Not applicable until trigger. | revalidation-required | not-applicable | promotion-blocking; claim-blocking | Applicability must be revisited before any deviation is proposed. |
+| `ENG-BASE-PROFILE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The selected-slice profile is active in the lock; applies to profile activation, composition, retirement, or change. | Rule entry | Lock structure and digest validation; manual conflict review. Contract mode. | `governance/ZOEY_GOVERNANCE.lock`; `governance/profiles/SCN001_SELECTED_SLICE.md`; `scripts/check-governance-lock.mjs` | Default | revalidation-required | review-only | promotion-blocking; claim-blocking | Automated checks cannot establish semantic non-conflict between profiles; only one profile is active. |
+| `ENG-BASE-PUBLISH-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | This governed workbench consumes a pinned local projection and may be synchronized or promoted. | Rule entry | Local snapshot/digest validation and completeness audit. Contract mode. | `governance/`; `governance/ZOEY_GOVERNANCE.lock`; `governance/zoey_governance.py`; `scripts/check-governance-lock.mjs` | Default | revalidation-required | review-only | promotion-blocking; claim-blocking | Protected required check is unverified; canonical meta worktree state in the lock is dirty. |
+| `ENG-BASE-REPO-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The repository is a governed workbench used for claim-bearing non-throwaway implementation. | `OPEN_QUESTIONS.md V0.2.18` | Structural declarations; governance and boundary contract checks; manual review. | `README.md`; `AGENTS.md`; `governance/ZOEY_GOVERNANCE.lock`; `tests/conformance/boundary.test.js` | Default | revalidation-required | review-only | promotion-blocking; claim-blocking | No automated `projects/` extraction trigger check; protected branch and human review are unverified. |
+| `ENG-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The workbench is bounded by unresolved acceptance, evaluation, maintenance, repository, memory, trust, product, surface, continuity, and legacy frontiers. | `OPEN_QUESTIONS.md V0.2.18` | README claim boundary; local source snapshot; manual trigger review. | `README.md`; `AGENTS.md`; `governance/sources/OPEN_QUESTIONS.md`; `governance/CONFORMANCE.md` | Local-recorded review | revalidation-required | review-only | promotion-blocking; claim-blocking | Trigger detection is manual; future capability work can silently cross a frontier without a dedicated check. |
+| `ENG-CLAIM-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | README, tests, ledger, and review language describe engineering capability and conformance. | `OPEN_QUESTIONS.md V0.2.18` | Bounded claim text; manual review; governance/boundary tests. Contract mode. | `README.md`; `governance/CONFORMANCE.md`; `governance/sources/OPEN_QUESTIONS.md`; `tests/conformance/boundary.test.js` | Default | revalidation-required | review-only | claim-blocking; promotion-blocking | No dedicated lexical/semantic claim-language checker; qualifying human review is pending. |
+| `ENG-CLAIM-002` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Repository artifacts explicitly discuss and deny formal evaluation, pass, scoreability, and acceptance status. | `OPEN_QUESTIONS.md V0.2.18`; `ADR-004 R3`; `ADR-005 R2` | Reserved-language boundary in README and ledger; manual review. Contract mode. | `README.md`; `governance/CONFORMANCE.md`; `governance/sources/OPEN_QUESTIONS.md` | Local-recorded review | revalidation-required | review-only | claim-blocking | No automated reserved-formal-artifact scan; formal record contracts remain unresolved. |
+| `ENG-CLAIM-WORKBENCH-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | This is the first selected-slice scenario-provisional workbench and its placement/claims are documented. | `ADR-001 R1`; `ADR-008 R2`; `OPEN_QUESTIONS.md V0.2.18`; `ENG-BASE-REPO-001 R2` | Structural declarations; manual review. Contract mode. | `README.md`; `AGENTS.md`; `governance/ZOEY_GOVERNANCE.lock`; `governance/CONFORMANCE.md` | Local-recorded review | revalidation-required | review-only | promotion-blocking; claim-blocking | Extraction trigger is not automated; owner review is pending. |
+| `ENG-CONF-CAPTURE-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Public inspection capture exists and its snapshots are used by tests; applies to capture, logs, reports, replay, or restore. | `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2` | Closed ingress; passive cloned snapshot; negative non-reingestion test. Contract, negative, replay-limited modes. | `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js`; `scn001_eval/src/harness.js` | Default | revalidation-required | review-only | merge-blocking; claim-blocking | No replay/restore implementation exists; capture non-repair is tested only for current in-memory paths. |
+| `ENG-CONF-CLAIM-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | README and ledger describe selected-slice conformance, behavior boundaries, evidence, and denied claims. | `OPEN_QUESTIONS.md V0.2.18`; `ADR-004 R3`; `ADR-005 R2`; `ENG-CLAIM-001 R2` | Bounded claim text; manual review. Contract mode. | `README.md`; `governance/CONFORMANCE.md`; `governance/sources/OPEN_QUESTIONS.md` | Default | revalidation-required | review-only | claim-blocking | No dedicated reserved-status checker; evaluation and acceptance triggers remain manual. |
+| `ENG-CONF-DEP-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Current SUT transitions create source/basis relations consumed by inspection snapshots. | `ADR-007 R3`; `ADR-008 R2` | Contemporaneous relation creation; passive inspection tests. Contract and negative-limited modes. | `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js` | Default | revalidation-required | uncovered | merge-blocking; claim-blocking | Tests cover contemporaneous current relations but not all required missing-lineage, backdated-reporting, post-hoc-basis, and later-snapshot attack cases. |
+| `ENG-CONF-DEP-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | not-applicable | No mutable/lifecycle-bearing semantic state, narrowing, retirement, supersession, conflict, or versioned endpoint exists. Future trigger: adding any such state or relation endpoint. | `ADR-007 R3` | Repository state-family and relation inventory. | `scn001_sut_core/src/runState.js`; `README.md` explicitly denies active trials/outcomes | Not applicable until trigger. | revalidation-required | not-applicable | merge-blocking; claim-blocking | Must become applicable before the first lifecycle mutation; the required historical-endpoint test does not yet exist. |
+| `ENG-CONF-EVIDENCE-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | not-applicable | Current tests are implementation/conformance evidence only; no artifact claims selected-slice behavioral compatibility or evaluated SUT behavior. Future trigger: first such trace, demo, report, or claim-supporting test. | `ADR-008 R2`; `ENG-CLAIM-001 R2` | Claim-boundary inventory and explicit README denial. | `README.md`; `governance/CONFORMANCE.md`; current tests | Not applicable until trigger; future rule requires local-recorded plus CI-required. | revalidation-required | not-applicable | claim-blocking | Tests must be relabeled/reviewed if reused as behavior evidence. |
+| `ENG-CONF-HARNESS-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Evaluation harness delivery, output forwarding, and inspection capture exist. | `ADR-008 R2` | Thin public-boundary transport; output forwarding; projection tests. Contract mode. | `scn001_eval/src/harness.js`; `scn001_eval/test/harness.test.js`; `scn001_sut_core/src/publicBoundary.js` | Default | revalidation-required | uncovered | merge-blocking; claim-blocking | No SUT competing candidates exist, so the required competing-output non-arbitration negative test and SUT-selected realization trace are absent. |
+| `ENG-CONF-IMPORT-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | SUT source, dependencies, imports, and public package boundary exist. | `ADR-008 R2` | Static source/dependency scan forbids evaluation paths and dynamic loaders; manual transitive review. Contract mode. | `scn001_sut_core/package.json`; `scn001_sut_core/index.js`; `scripts/check-dependency-boundary.mjs`; `tests/conformance/boundary.test.js` | Default | revalidation-required | review-only | merge-blocking; claim-blocking | Scanner covers local ESM and declared dependencies only; transitive/generated/plugin surfaces remain review risks. |
+| `ENG-CONF-IMPORT-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Evaluation harness, fixture projection, and tests call SUT code. | `ADR-008 R2`; `ENG-HEALTH-API-001 R2` | Package export map; static import checker; dynamic-loader negative test; private import negative test. Contract and negative modes. | `scn001_sut_core/package.json`; `scn001_eval/src/harness.js`; `scripts/check-dependency-boundary.mjs`; `scn001_eval/test/harness.test.js`; `tests/conformance/boundary.test.js` | Default | revalidation-required | review-only | merge-blocking; claim-blocking | Static checker is regex-based and production-source scoped; behavior-evidence use remains future-triggered. |
+| `ENG-CONF-INSPECT-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Public snapshots, record inspection, and relation enumeration exist. | `ADR-006 R2`; `ADR-008 R2` | Clone-only inspection; before/after state equality tests. Contract and negative modes. | `scn001_sut_core/src/runState.js`; `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/test/run-state.test.js` | Default | revalidation-required | review-only | merge-blocking; claim-blocking | Tests cover current state/order/relations indirectly; no lifecycle status exists yet. |
+| `ENG-CONF-INSPECT-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Inspection can run between ingestion and semantic processing. | `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2` | Automated interleaving equivalence test and repeated passive inspection. Interleaving, replay, negative modes. | `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js` | Default | revalidation-required | review-only | merge-blocking; claim-blocking | No RNG, model, tool, provider, or lazy cache exists; each future surface requires expanded interleaving coverage. |
+| `ENG-CONF-PAYLOAD-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | SUT ingress and evaluation fixture/simulator projection exist. | `ADR-005 R2`; `ADR-008 R2` | Exact-key SUT validation; role allowlist projection; answer-bearing-field negative tests. Contract and negative modes. | `scn001_sut_core/src/inputValidation.js`; `scn001_eval/src/fixtureProjection.js`; `scn001_sut_core/test/run-state.test.js`; `scn001_eval/test/harness.test.js` | Default | revalidation-required | review-only | merge-blocking; claim-blocking | New roles, serializers, and simulator record shapes require new full-record negative cases. |
+| `ENG-CONF-PAYLOAD-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Validation, reference resolution, ingestion ordering, and rejection handling exist. | `ADR-005 R2`; `ADR-006 R2`; `ADR-008 R2` | Validation and reference resolution precede mutation; before/after negative tests. Negative and contract modes. | `scn001_sut_core/src/inputValidation.js`; `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js` | Default | revalidation-required | review-only | merge-blocking; claim-blocking | No deserializer or telemetry path exists; future rejection paths need equivalent atomicity checks. |
+| `ENG-CONF-PUBLIC-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | A declared SUT public boundary is used by evaluation. | `ADR-008 R2`; `ENG-HEALTH-API-001 R2` | Frozen narrow method object; exact arity checks; name/surface negative tests. Contract and negative modes. | `scn001_sut_core/index.js`; `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/test/public-boundary.test.js` | Default | revalidation-required | review-only | merge-blocking; claim-blocking | Semantic answer-selector review is partly lexical and manual; future outputs may widen risk. |
+| `ENG-CONF-REF-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Run, actor, state, transition, interaction, and relation references cross public and inspection surfaces. | `ADR-005 R2`; `ADR-007 R3`; `ADR-008 R2` | UUID-backed opaque references; closed validation; cross-run/evaluation-bearing negative tests. Contract and negative modes. | `scn001_sut_core/src/runState.js`; `scn001_sut_core/src/inputValidation.js`; `scn001_sut_core/test/run-state.test.js`; `scn001_eval/src/fixtureProjection.js` | Default | revalidation-required | review-only | merge-blocking; claim-blocking | Semantic leakage review remains manual; future serialization and lifecycle endpoints expand the surface. |
+| `ENG-CONF-ROLE-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Evaluation adapters project fixture and simulator records into SUT-visible inputs. | `ADR-005 R2`; `ADR-006 R2` | Role-specific allowlist; explicit semantic-origin field; pre-promotion rejection tests. Contract and negative modes. | `scn001_eval/src/fixtureProjection.js`; `scn001_eval/test/harness.test.js`; `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js` | Default | revalidation-required | review-only | merge-blocking; claim-blocking | Fuller fixture roles and future simulator paths require role/origin review and tests. |
+| `ENG-CONF-RUN-001` | `R3` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Public run lifecycle, closure-owned state, harness lifecycle, and cross-run tests exist. | `ADR-003 R2`; `ADR-004 R3`; `ADR-008 R2` | Closure-owned run map; run disposal; opaque refs; current-record isolation test. Negative and replay-limited modes. | `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js`; `scn001_eval/src/harness.js` | Default | revalidation-required | uncovered | merge-blocking; claim-blocking | R3 requires run A to create candidate/active-trial/outcome state and prove none affects run B; those state families and the required test do not exist. |
+| `ENG-CONF-SIM-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Simulator-realization fixture projection and SUT ingress roles already exist even though no simulator service exists. | `ADR-002 R2`; `ADR-005 R2`; `ADR-008 R2` | Shared closed ingress; simulator role/origin preservation; answer-bearing-field negative test; dependency scan. Contract and negative modes. | `scn001_eval/src/fixtureProjection.js`; `scn001_eval/test/harness.test.js`; `scn001_sut_core/src/inputValidation.js`; `scn001_sut_core/test/run-state.test.js`; `scripts/check-dependency-boundary.mjs` | Default | revalidation-required | review-only | merge-blocking; claim-blocking | No simulator implementation or SUT-selected proposal exists, so realization non-arbitration is not yet exercised end to end. |
+| `ENG-CONF-STATE-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Current processing resolves run-local records and direct references. | `ADR-004 R3`; `ADR-006 R2`; `ADR-007 R3` | Run-local map; direct reference resolution; no retrieval/ranking API; cross-run negative test. Contract and negative modes. | `scn001_sut_core/src/runState.js`; `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/test/run-state.test.js` | Default | revalidation-required | review-only | merge-blocking; claim-blocking | Later-use trial behavior is absent; future helpers must not become retrieval/context assembly. |
+| `ENG-CONF-STATE-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Ingestion, attribution, and temporal assessment mutate behavior-driving selected-slice state. | `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2` | SUT transition records preserve order, inputs, results, origin, and creating-transition refs; provenance tests. Contract and negative modes. | `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js` | Default | revalidation-required | review-only | merge-blocking; claim-blocking | Trial, activation, disposition, and outcome mutations do not exist and require their own provenance coverage. |
+| `ENG-HEALTH-ABSTRACTION-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Public boundary, harness, validation, fixture-projection, and run-state abstractions are non-throwaway. | `ADR-001 R1` | Bounded package/module responsibilities; manual justification review. | `README.md`; `scn001_sut_core/src/`; `scn001_eval/src/`; package `AGENTS.md` files | Local-recorded review | revalidation-required | review-only | advisory or merge-blocking by condition | Abstraction justification is not captured by an automated check; future generalization could outrun concrete pressure. |
+| `ENG-HEALTH-API-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Both packages expose public exports and the harness consumes the SUT public surface. | Rule entry | Export map; frozen exact public surface; static and contract checks. | `scn001_sut_core/package.json`; `scn001_sut_core/index.js`; `scn001_eval/index.js`; `scn001_sut_core/test/public-boundary.test.js`; `scripts/check-dependency-boundary.mjs` | Default | revalidation-required | review-only | merge-blocking; claim-blocking | Governing consumer/need review for future API additions remains manual. |
+| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | All non-throwaway code, tests, governance, build, and documentation changes are in scope. | Rule entry | Focused-diff review; repository instructions; git diff inspection. | `AGENTS.md`; current working-tree diff | Local-recorded review | revalidation-required | review-only | advisory or merge-blocking by condition | Focus and unrelated-change detection are manual. |
+| `ENG-HEALTH-COMMENT-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No JavaScript implementation/test comment is present or used to justify behavior. Future trigger: adding, generating, or relying on a code comment. | Rule entry | Source inventory. | `rg` over `scn001_sut_core`, `scn001_eval`, `tests`, and `scripts` returned no JavaScript comment lines | Not applicable until trigger. | revalidation-required | not-applicable | advisory or merge-blocking by condition | Governance prose is controlled as documentation/claims; code comments require review when introduced. |
+| `ENG-HEALTH-DEAD-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No dead, commented-out, prototype, experiment, or throwaway implementation artifact is present. Future trigger: introducing or promoting one. | Rule entry | Repository and source inventory; manual review. | Current package/source tree; no throwaway directory or commented-out implementation | Not applicable until trigger. | revalidation-required | not-applicable | merge-blocking; promotion-blocking | Static gate does not comprehensively prove reachability; disposition must change if a prototype appears. |
+| `ENG-HEALTH-DEPENDENCY-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Evaluation declares a runtime dependency on the local SUT package and CI installs the workspace lock. | Rule entry | Local file dependency; lockfile; dependency-boundary static check; no external runtime dependency. | `package-lock.json`; `scn001_eval/package.json`; `scn001_sut_core/package.json`; `scripts/check-dependency-boundary.mjs`; `README.md` | Default | revalidation-required | review-only | merge-blocking; promotion-blocking | Dependency rationale/maintenance review is manual; future external dependencies require a new review record. |
+| `ENG-HEALTH-FAILURE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Boundary code rejects invalid input/references and gates report contract failures. | Rule entry | Typed errors; fail-closed validation; negative tests; gate failures include rule IDs. Negative and regression modes. | `scn001_sut_core/src/errors.js`; `scn001_sut_core/src/inputValidation.js`; `scripts/check-dependency-boundary.mjs`; `scripts/check-governance-lock.mjs`; package tests | Default | revalidation-required | review-only | merge-blocking; claim-blocking | No operational fallback/reporting layer exists; unexpected-error transparency review remains manual. |
+| `ENG-HEALTH-GEN-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Agent/tool-generated code, tests, docs, governance snapshots, and project structure are non-throwaway. | Rule entry | Local tests/gates; manual generated-artifact review; pinned governance digests. Contract and negative modes. | Repository implementation and governance tree; `npm run check`; `governance/ZOEY_GOVERNANCE.lock` | Local-recorded review plus applicable default gates | revalidation-required | review-only | merge-blocking; promotion-blocking | The implementing agent cannot self-attest the required independent/human review of generated public and claim-bearing artifacts. |
+| `ENG-HEALTH-REPRO-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The repository defines local/CI quality, test, boundary, state, dependency, and governance gates. | Rule entry | Documented npm scripts; aggregate runner; CI invokes clean-install and aggregate gate. Contract mode. | `README.md`; `AGENTS.md`; `package.json`; `scripts/run-gates.mjs`; `.github/workflows/ci.yml`; `package-lock.json` | Default | revalidation-required | review-only | promotion-blocking; claim-blocking | Python availability is documented but not installed by CI explicitly; branch protection is unverified. |
+| `ENG-HEALTH-STRUCTURE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Top-level SUT/evaluation packages, governance, tests, and scripts have declared responsibilities. | Rule entry | Repository map and package guidance; manual ownership review. | `AGENTS.md`; `README.md`; `scn001_sut_core/AGENTS.md`; `scn001_eval/AGENTS.md`; package manifests | Local-recorded review | revalidation-required | review-only | advisory or merge-blocking by condition | Responsibility review is manual; future shared/top-level areas require an index and guidance update. |
+| `ENG-HEALTH-TEST-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Current non-throwaway semantic, boundary, and failure behavior was introduced with tests. | Rule entry | Positive, negative, contract, regression, replay, and interleaving tests; aggregate gate. | `scn001_sut_core/test/`; `scn001_eval/test/`; `tests/conformance/`; `package.json` | Default | revalidation-required | review-only | merge-blocking; promotion-blocking | This ledger-only change has no behavior change; future behavior changes still require change-specific fail-without-it evidence. |
+| `ENG-HEALTH-TEST-002` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Tests are used throughout this ledger as implementation and conformance evidence. | Rule entry | Public-boundary, state, negative, interleaving, and static contract tests; manual validity review. | `scn001_sut_core/test/`; `scn001_eval/test/`; `tests/conformance/` | Default | revalidation-required | review-only | merge-blocking; claim-blocking | Test-validity review is not independently recorded; tests are not behavioral-compatibility evidence. |
+| `ENG-HEALTH-TODO-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No TODO, FIXME, temporary-workaround, or deferred-work marker exists in non-throwaway implementation. Future trigger: adding any such marker. | Rule entry | Source inventory. | `rg` over implementation, tests, and scripts returned no marker | Not applicable until trigger. | revalidation-required | not-applicable | merge-blocking; promotion-blocking | No dedicated TODO gate exists; the disposition must change when a marker is introduced. |
 
-Rule ID: `ENG-CONF-PAYLOAD-001`
-Rule revision: `R1`
-Governing source revisions: `ADR-005 R2`; `ADR-008 R2`
-Applies To: future SUT ingress and evaluation-origin payload projection
-Actual mechanisms: exact-key runtime validation; evaluation allowlist projection; atomic validation and run-local reference resolution before run-state mutation; manual-review
-Actual test modes: contract; negative
-Promotion integration: local `npm run check:boundary`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_sut_core/src/inputValidation.js`; `scn001_eval/src/fixtureProjection.js`; `scn001_sut_core/test/run-state.test.js`; `scn001_eval/test/harness.test.js`
-Residual risk: later input roles and serializers require new negative cases before use
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
+## Verification Record
 
-Rule ID: `ENG-CONF-PUBLIC-001`
-Rule revision: `R1`
-Governing source revisions: `ADR-008 R2`; `ENG-HEALTH-API-001 R1`
-Applies To: future SUT public boundary
-Actual mechanisms: narrow boundary-method object; exact arity validation; public API contract test; manual-review
-Actual test modes: contract; negative
-Promotion integration: local `npm run check:boundary`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/test/public-boundary.test.js`
-Residual risk: future public API additions require source and consumer review
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
+This revalidation task changes only this ledger. The combined working tree also
+contains implementation/test changes not made by this task; the evidence map
+and command results cover that combined state. This task does not alter public
+APIs, governance-lock inputs, active profile/integration selection, or
+instruction files.
 
-Rule ID: `ENG-CONF-RUN-001`
-Rule revision: `R1`
-Governing source revisions: `ADR-004 R3`; `ADR-008 R2`
-Applies To: future run lifecycle and run-scoped state
-Actual mechanisms: closure-owned run map; run disposal; opaque run references; independent-run test; manual-review
-Actual test modes: negative; replay
-Promotion integration: local `npm run check:state`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js`
-Residual risk: no provider, cache, replay, or simulator integration exists yet; each requires its own isolation coverage
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
+Required local commands for the final diff:
 
-## Additional Boundary-Spine Rules
+- `npm run check:governance`: passed on 2026-07-10 before the final
+  verification-record edit;
+- `npm run check`: passed on 2026-07-10 against the combined working tree (24
+  tests passed; governance, formatting, syntax, dependency-boundary, and test
+  gates passed).
 
-Rule ID: `ENG-CONF-PAYLOAD-002`
-Rule revision: `R1`
-Governing source revisions: `ADR-005 R2`; `ADR-006 R2`; `ADR-008 R2`
-Applies To: SUT public input validation and ingestion
-Actual mechanisms: validation and run-local reference resolution complete before run-state mutation; rejected input cannot consume semantic order; manual-review
-Actual test modes: negative; contract
-Promotion integration: local `npm run check:boundary`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_sut_core/src/inputValidation.js`; `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js`
-Residual risk: later deserializers and telemetry paths do not exist and must preserve atomic rejection
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
+External controls not verifiable from this checkout:
 
-Rule ID: `ENG-CONF-ROLE-001`
-Rule revision: `R1`
-Governing source revisions: `ADR-005 R2`; `ADR-006 R2`
-Applies To: evaluation fixture projection
-Actual mechanisms: role-specific allowlist projection with exact input keys; adapter negative test; manual-review
-Actual test modes: contract; negative
-Promotion integration: local `npm run check:boundary`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_eval/src/fixtureProjection.js`; `scn001_eval/test/harness.test.js`
-Residual risk: simulator and fuller fixture role projections are not implemented yet
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
+- GitHub required-check and protected-branch configuration;
+- repository-owner-authorized human confirmation of this R2/R3 mapping;
+- qualifying independent review of generated artifacts and manual-only rules.
 
-Rule ID: `ENG-CONF-HARNESS-001`
-Rule revision: `R1`
-Governing source revisions: `ADR-008 R2`
-Applies To: evaluation harness delivery and output routing
-Actual mechanisms: harness transports projected inputs through the public boundary and has no semantic-output selection; manual-review
-Actual test modes: contract
-Promotion integration: local `npm run check:boundary`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_eval/src/harness.js`; `scn001_eval/test/harness.test.js`
-Residual risk: no simulator or competing SUT output exists yet; non-arbitration requires negative tests when those paths are added
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
-
-Rule ID: `ENG-CONF-STATE-001`
-Rule revision: `R1`
-Governing source revisions: `ADR-004 R3`; `ADR-006 R2`; `ADR-007 R3`
-Applies To: current SUT run-scoped state access
-Actual mechanisms: run-local record map and direct reference lookup only; no retrieval/ranking API; manual-review
-Actual test modes: contract; negative
-Promotion integration: local `npm run check:state`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_sut_core/src/runState.js`; `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/test/run-state.test.js`
-Residual risk: later-use applicability behavior is not implemented and must remain locally bounded
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
-
-Rule ID: `ENG-CONF-STATE-002`
-Rule revision: `R1`
-Governing source revisions: `ADR-003 R2`; `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2`
-Applies To: SUT-owned input ingestion and transition evidence
-Actual mechanisms: ingestion, attribution, and temporal-assessment transitions record contemporaneous inputs, outputs, relations, and order; manual-review
-Actual test modes: contract; negative
-Promotion integration: local `npm run check:state`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js`
-Residual risk: no behavior-driving trial mutation exists yet; each future transition requires its own mutation-provenance tests
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
-
-Rule ID: `ENG-CONF-DEP-001`
-Rule revision: `R1`
-Governing source revisions: `ADR-003 R2`; `ADR-007 R3`; `ADR-008 R2`
-Applies To: source and basis relation capture
-Actual mechanisms: source and basis relations are created inside each ingestion, attribution, and temporal-assessment transition; manual-review
-Actual test modes: contract; negative
-Promotion integration: local `npm run check:state`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js`
-Residual risk: trial, activation, and outcome dependency consumers do not exist yet and require their own no-post-hoc-repair tests
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
-
-Rule ID: `ENG-CONF-INSPECT-001`
-Rule revision: `R1`
-Governing source revisions: `ADR-006 R2`; `ADR-008 R2`
-Applies To: public SUT inspection surfaces
-Actual mechanisms: inspection returns cloned state/relations and never calls mutation paths; invariance test; manual-review
-Actual test modes: contract; negative
-Promotion integration: local `npm run check:state`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js`
-Residual risk: inspection coverage must expand with lifecycle and derived projections
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
-
-Rule ID: `ENG-CONF-INSPECT-002`
-Rule revision: `R1`
-Governing source revisions: `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2`
-Applies To: inspection interleaved with current attribution and temporal-eligibility processing/output paths
-Actual mechanisms: inspection does not alter records, relation sets, or order; interleaving tests compare later attribution and temporal-assessment output; manual-review
-Actual test modes: interleaving; replay; negative
-Promotion integration: local `npm run check:state`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/test/run-state.test.js`
-Residual risk: equivalence must be re-proven for candidate, activation, correction, and outcome transitions
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
-
-Rule ID: `ENG-CONF-CAPTURE-001`
-Rule revision: `R1`
-Governing source revisions: `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2`
-Applies To: harness capture of SUT inspection snapshots
-Actual mechanisms: capture calls passive inspection only; closed ingress rejects captured snapshots as input; manual-review
-Actual test modes: contract; negative; replay
-Promotion integration: local `npm run check:state`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_eval/src/harness.js`; `scn001_sut_core/src/inputValidation.js`; `scn001_sut_core/test/run-state.test.js`
-Residual risk: reporting, snapshot restore, and replay features are not implemented yet
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
-
-Rule ID: `ENG-CONF-REF-001`
-Rule revision: `R1`
-Governing source revisions: `ADR-005 R2`; `ADR-007 R3`; `ADR-008 R2`
-Applies To: SUT run, state, transition, actor, and relation references
-Actual mechanisms: generated opaque SUT references; exact state-handle validation; same-run resolution before ingress; evaluation-context identifier rejection; manual-review
-Actual test modes: contract; negative
-Promotion integration: local `npm run check:state`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: merge-blocking; claim-blocking
-Local evidence: `scn001_sut_core/src/runState.js`; `scn001_sut_core/src/inputValidation.js`; `scn001_sut_core/src/publicBoundary.js`; `scn001_sut_core/test/run-state.test.js`
-Residual risk: lifecycle effective-endpoint versioning is not needed until mutable selected-slice state exists
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
-
-Rule ID: `ENG-BASE-001`
-Rule revision: `R1`
-Governing source revisions: `ADR-003 R2`; `ADR-005 R2`; `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2`; `ENGINEERING_STANDARD.md V0.4.1`
-Applies To: current attribution and temporal-eligibility implementation segment
-Actual mechanisms: raw chronology-only ingress; SUT-owned attribution and `>90`-day eligibility transitions; source/basis relation inspection; manual-review
-Actual test modes: contract; negative; regression
-Promotion integration: local `npm run check:state`; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: promotion-blocking; claim-blocking
-Local evidence: `scn001_sut_core/src/inputValidation.js`; `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js`
-Residual risk: fixture-initialized historical semantic status, recognition/production comparison, trial formation, and behavioral transitions remain unimplemented
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
-
-Rule ID: `ENG-CONF-CLAIM-001`
-Rule revision: `R1`
-Governing source revisions: `OPEN_QUESTIONS.md V0.2.18`; `ADR-004 R3`; `ADR-005 R2`; `ENG-CLAIM-001 R1`
-Applies To: current README, tests, and conformance ledger
-Actual mechanisms: bounded engineering-conformance language; manual-review
-Actual test modes: contract
-Promotion integration: local review; CI workflow `.github/workflows/ci.yml`
-Status: review-only
-Failure consequences: claim-blocking
-Local evidence: `README.md`; `governance/CONFORMANCE.md`; `governance/sources/OPEN_QUESTIONS.md`
-Residual risk: first evaluation-record, scoreability, and acceptance claims must re-triage `EVAL-004`, `EVAL-005`, and `SLICE-005`
-Reviewer/Owner: implementation maintainer
-Verified at: local `npm run check` on 2026-07-10; commit pending
-
-## Applicability Index Migration
-
-This generated migration section completes lock coverage. Each row remains `revalidation-required` until the repository owner maps legacy evidence to the current rule revision.
-
-| Rule ID | Revision | Rule source artifact | Applicability | Rationale / applies to paths and change types | Status | Local evidence | Actual promotion mechanism |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `ENG-AGENT-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-AGENT-CODEX-001` | `R2` | `integrations/CODEX_INTEGRATION.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-AGENT-CODEX-002` | `R2` | `integrations/CODEX_INTEGRATION.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-AGENT-CODEX-003` | `R2` | `integrations/CODEX_INTEGRATION.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-AGENT-CODEX-004` | `R1` | `integrations/CODEX_INTEGRATION.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-BASE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-BASE-002` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-BASE-CONFORMANCE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-BASE-CONFORMANCE-002` | `R1` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-BASE-EXCEPTION-001` | `R1` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-BASE-PROFILE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-BASE-PUBLISH-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-BASE-REPO-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CLAIM-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CLAIM-002` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CLAIM-WORKBENCH-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-CAPTURE-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-CLAIM-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-DEP-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-DEP-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-EVIDENCE-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-HARNESS-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-IMPORT-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-IMPORT-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-INSPECT-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-INSPECT-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-PAYLOAD-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-PAYLOAD-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-PUBLIC-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-REF-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-ROLE-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-RUN-001` | `R3` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-SIM-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-STATE-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-CONF-STATE-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-HEALTH-ABSTRACTION-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-HEALTH-API-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-HEALTH-COMMENT-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-HEALTH-DEAD-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-HEALTH-DEPENDENCY-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-HEALTH-FAILURE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-HEALTH-GEN-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-HEALTH-REPRO-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-HEALTH-STRUCTURE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-HEALTH-TEST-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-HEALTH-TEST-002` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
-| `ENG-HEALTH-TODO-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Seeded during governance migration; owner must confirm scope. | revalidation-required | Legacy evidence requires rule-revision remapping. | TBD |
+No new semantic-contract exception is introduced. The mapped `uncovered`
+rules and residual risks above block stronger enforcement or claim assertions;
+they do not waive accepted selected-slice obligations.

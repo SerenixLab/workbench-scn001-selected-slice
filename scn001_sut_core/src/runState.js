@@ -9,42 +9,85 @@ export class RunState {
     this.records = new Map();
     this.relations = [];
     this.actorReferences = new Map();
+    this.pendingInteractions = [];
   }
 
   ingest(inputs) {
+    const interactionRef = createReference("interaction");
     const stagedActors = [];
     const stagedFacts = [];
 
     for (const input of inputs) {
-      const actor = this.stageActor(input.sourceActor, stagedActors);
+      const origin = inputOrigin(input);
+      const actor = this.stageActor(input.sourceActor, origin, stagedActors);
       stagedFacts.push({
         reference: createReference("state"),
         family: "input_fact",
-        origin: "fixture",
+        origin,
         role: input.kind,
         payload: input,
+        interactionRef,
         createdOrder: this.allocateOrder(),
         sourceActorRef: actor.reference
       });
     }
+
+    const initializedAssertions = stagedFacts
+      .filter((fact) => (
+        fact.role === "communication"
+        && fact.payload.semanticStatusOrigin === "fixture_initialized"
+      ))
+      .map((fact) => ({
+        reference: createReference("state"),
+        family: "attributed_assertion",
+        origin: "fixture",
+        sourceCommunicationRef: fact.reference,
+        sourceActorRef: fact.sourceActorRef,
+        context: fact.payload.context,
+        occurrenceOrder: fact.payload.occurrenceOrder,
+        epistemicStatus: "attributed_user_assertion",
+        statusOrigin: "fixture_initialized",
+        interactionRef,
+        createdOrder: this.allocateOrder()
+      }));
+    const interaction = {
+      reference: interactionRef,
+      family: "interaction_segment",
+      origin: "sut",
+      inputReferences: stagedFacts.map((fact) => fact.reference),
+      createdOrder: this.allocateOrder()
+    };
 
     const transition = {
       reference: createReference("transition"),
       family: "sut_transition_evidence",
       origin: "sut",
       transitionKind: "ingest_sut_visible_inputs",
+      interactionRef,
       inputReferences: stagedFacts.map((fact) => fact.reference),
+      resultReferences: [
+        interaction.reference,
+        ...initializedAssertions.map((assertion) => assertion.reference)
+      ],
       createdOrder: this.allocateOrder(),
       result: "accepted"
     };
+    for (const assertion of initializedAssertions) {
+      assertion.createdByTransitionRef = transition.reference;
+    }
+    interaction.createdByTransitionRef = transition.reference;
 
     for (const actor of stagedActors) {
       this.records.set(actor.reference, actor);
-      this.actorReferences.set(actor.sourceActor, actor.reference);
+      this.actorReferences.set(actorReferenceKey(actor.sourceActor, actor.origin), actor.reference);
     }
     for (const fact of stagedFacts) {
       this.records.set(fact.reference, fact);
     }
+    for (const assertion of initializedAssertions) {
+      this.records.set(assertion.reference, assertion);
+    }
+    this.records.set(interaction.reference, interaction);
     this.records.set(transition.reference, transition);
 
     for (const fact of stagedFacts) {
@@ -67,6 +110,29 @@ export class RunState {
         assertedByRole: "sut"
       });
     }
+
+    for (const assertion of initializedAssertions) {
+      this.relations.push({
+        relationKind: "source",
+        fromRef: assertion.reference,
+        toRef: assertion.sourceActorRef,
+        targetRole: "semantic_source",
+        effectiveOrder: assertion.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "fixture"
+      });
+      this.relations.push({
+        relationKind: "basis",
+        fromRef: assertion.reference,
+        toRef: assertion.sourceCommunicationRef,
+        targetRole: "initialized_communication",
+        effectiveOrder: assertion.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "fixture"
+      });
+    }
+
+    this.pendingInteractions.push(interaction);
 
     return {
       acceptedInputRefs: stagedFacts.map((fact) => fact.reference),
@@ -91,8 +157,36 @@ export class RunState {
   }
 
   processCurrentInteraction() {
-    this.deriveAttributedAssertions();
-    this.deriveTemporalEligibilityAssessments();
+    const interaction = this.pendingInteractions[0];
+    if (!interaction) {
+      return;
+    }
+
+    const interactionFacts = interaction.inputReferences.map((reference) => this.records.get(reference));
+    const semanticTransitionRefs = [
+      this.deriveAttributedAssertions(interaction, interactionFacts),
+      this.deriveTemporalEligibilityAssessments(interaction, interactionFacts)
+    ].filter(Boolean);
+    const processingTransition = this.createTransition(
+      "process_interaction_segment",
+      [interaction.reference, ...interaction.inputReferences],
+      semanticTransitionRefs,
+      interaction.reference
+    );
+    processingTransition.result = "processed";
+    this.records.set(processingTransition.reference, processingTransition);
+    for (const reference of [interaction.reference, ...interaction.inputReferences]) {
+      this.relations.push({
+        relationKind: "basis",
+        fromRef: processingTransition.reference,
+        toRef: reference,
+        targetRole: reference === interaction.reference ? "processed_interaction" : "processed_input",
+        effectiveOrder: processingTransition.createdOrder,
+        createdOrder: processingTransition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    this.pendingInteractions.shift();
   }
 
   snapshot() {
@@ -118,12 +212,13 @@ export class RunState {
     return clone(this.relations.filter((relation) => relation.fromRef === reference || relation.toRef === reference));
   }
 
-  deriveAttributedAssertions() {
-    const communicationFacts = this.inputFacts().filter((fact) => (
-      fact.role === "communication" && !this.hasDerivedRecord(fact.reference, "attributed_assertion")
+  deriveAttributedAssertions(interaction, interactionFacts) {
+    const communicationFacts = interactionFacts.filter((fact) => (
+      fact.role === "communication"
+      && fact.payload.semanticStatusOrigin === "unclassified"
     ));
     if (communicationFacts.length === 0) {
-      return;
+      return undefined;
     }
 
     const assertions = communicationFacts.map((fact) => ({
@@ -136,13 +231,16 @@ export class RunState {
       occurrenceOrder: fact.payload.occurrenceOrder,
       epistemicStatus: "attributed_user_assertion",
       statusOrigin: "sut_transition",
+      interactionRef: interaction.reference,
       createdOrder: this.allocateOrder()
     }));
     const transition = this.createTransition(
       "attribute_current_communications",
       communicationFacts.map((fact) => fact.reference),
-      assertions.map((assertion) => assertion.reference)
+      assertions.map((assertion) => assertion.reference),
+      interaction.reference
     );
+    attachCreatingTransition(assertions, transition);
 
     this.commitDerivedRecords(assertions, transition);
     for (const assertion of assertions) {
@@ -165,24 +263,24 @@ export class RunState {
         assertedByRole: "sut"
       });
     }
+    return transition.reference;
   }
 
-  deriveTemporalEligibilityAssessments() {
-    const currentChronology = this.currentChronologyFact();
+  deriveTemporalEligibilityAssessments(interaction, interactionFacts) {
+    const currentChronology = this.currentChronologyFact(interactionFacts);
     if (!currentChronology) {
-      return;
+      return undefined;
     }
 
-    const observations = this.inputFacts().filter((fact) => (
-      fact.role === "task_observation"
-      && fact.payload.occurrenceScenarioDay < currentChronology.payload.scenarioDay
-      && !this.hasDerivedRecord(fact.reference, "temporal_eligibility_assessment")
-    ));
-    if (observations.length === 0) {
-      return;
+    const evidenceEntries = this.temporalEvidenceEntries(interactionFacts)
+      .filter(({ observation }) => (
+        observation.payload.occurrenceScenarioDay < currentChronology.payload.scenarioDay
+      ));
+    if (evidenceEntries.length === 0) {
+      return undefined;
     }
 
-    const assessments = observations.map((observation) => {
+    const assessments = evidenceEntries.map(({ observation, referenceFact }) => {
       const ageDays = currentChronology.payload.scenarioDay - observation.payload.occurrenceScenarioDay;
       return {
         reference: createReference("state"),
@@ -198,14 +296,24 @@ export class RunState {
         eligibility: ageDays > 90 ? "ineligible" : "eligible",
         temporalUncertainty: "none",
         statusOrigin: "sut_transition",
+        evidenceReferenceRef: referenceFact?.reference,
+        interactionRef: interaction.reference,
         createdOrder: this.allocateOrder()
       };
     });
+    const inputReferences = uniqueReferences([
+      ...evidenceEntries.flatMap(({ observation, referenceFact }) => (
+        referenceFact ? [observation.reference, referenceFact.reference] : [observation.reference]
+      )),
+      currentChronology.reference
+    ]);
     const transition = this.createTransition(
       "assess_temporal_eligibility",
-      [...observations.map((observation) => observation.reference), currentChronology.reference],
-      assessments.map((assessment) => assessment.reference)
+      inputReferences,
+      assessments.map((assessment) => assessment.reference),
+      interaction.reference
     );
+    attachCreatingTransition(assessments, transition);
 
     this.commitDerivedRecords(assessments, transition);
     for (const assessment of assessments) {
@@ -229,16 +337,32 @@ export class RunState {
         createdOrder: transition.createdOrder,
         assertedByRole: "sut"
       });
+      if (assessment.evidenceReferenceRef) {
+        this.relations.push({
+          relationKind: "basis",
+          fromRef: assessment.reference,
+          toRef: assessment.evidenceReferenceRef,
+          targetRole: "evidence_reference",
+          semanticUseTarget: assessment.useTarget,
+          effectiveOrder: assessment.createdOrder,
+          createdOrder: transition.createdOrder,
+          assertedByRole: "sut"
+        });
+      }
     }
+    return transition.reference;
   }
 
-  stageActor(sourceActor, stagedActors) {
-    const existingReference = this.actorReferences.get(sourceActor);
+  stageActor(sourceActor, origin, stagedActors) {
+    const identityKey = actorReferenceKey(sourceActor, origin);
+    const existingReference = this.actorReferences.get(identityKey);
     if (existingReference) {
       return this.records.get(existingReference);
     }
 
-    const alreadyStaged = stagedActors.find((actor) => actor.sourceActor === sourceActor);
+    const alreadyStaged = stagedActors.find((actor) => (
+      actor.sourceActor === sourceActor && actor.origin === origin
+    ));
     if (alreadyStaged) {
       return alreadyStaged;
     }
@@ -246,7 +370,7 @@ export class RunState {
     const actor = {
       reference: createReference("actor"),
       family: "semantic_source",
-      origin: "fixture",
+      origin,
       sourceActor,
       createdOrder: this.allocateOrder()
     };
@@ -254,12 +378,8 @@ export class RunState {
     return actor;
   }
 
-  inputFacts() {
-    return [...this.records.values()].filter((record) => record.family === "input_fact");
-  }
-
-  currentChronologyFact() {
-    return this.inputFacts()
+  currentChronologyFact(interactionFacts) {
+    return interactionFacts
       .filter((fact) => fact.role === "chronology_fact")
       .sort((left, right) => (
         right.payload.scenarioDay - left.payload.scenarioDay
@@ -268,20 +388,42 @@ export class RunState {
       ))[0];
   }
 
-  hasDerivedRecord(inputReference, family) {
-    return this.relations.some((relation) => (
-      relation.relationKind === "basis"
-      && relation.toRef === inputReference
-      && this.records.get(relation.fromRef)?.family === family
-    ));
+  temporalEvidenceEntries(interactionFacts) {
+    const entries = [];
+    const seenObservationRefs = new Set();
+
+    for (const fact of interactionFacts) {
+      const observation = fact.role === "task_observation"
+        ? fact
+        : fact.role === "state_reference"
+          && fact.payload.purpose === "independent_current_skill_authority"
+          ? this.records.get(fact.payload.stateRef)
+          : undefined;
+      if (
+        observation?.family !== "input_fact"
+        || observation.role !== "task_observation"
+        || seenObservationRefs.has(observation.reference)
+      ) {
+        continue;
+      }
+
+      seenObservationRefs.add(observation.reference);
+      entries.push({
+        observation,
+        referenceFact: fact.role === "state_reference" ? fact : undefined
+      });
+    }
+
+    return entries;
   }
 
-  createTransition(transitionKind, inputReferences, resultReferences) {
+  createTransition(transitionKind, inputReferences, resultReferences, interactionRef) {
     return {
       reference: createReference("transition"),
       family: "sut_transition_evidence",
       origin: "sut",
       transitionKind,
+      interactionRef,
       inputReferences,
       resultReferences,
       createdOrder: this.allocateOrder(),
@@ -309,6 +451,24 @@ export function createReference(family) {
 
 function byCreatedOrder(left, right) {
   return left.createdOrder - right.createdOrder;
+}
+
+function inputOrigin(input) {
+  return input.kind === "simulator_realization" ? "simulator" : "fixture";
+}
+
+function actorReferenceKey(sourceActor, origin) {
+  return `${origin}:${sourceActor}`;
+}
+
+function attachCreatingTransition(records, transition) {
+  for (const record of records) {
+    record.createdByTransitionRef = transition.reference;
+  }
+}
+
+function uniqueReferences(references) {
+  return [...new Set(references)];
 }
 
 function clone(value) {

@@ -2,11 +2,12 @@ import { SutBoundaryValidationError } from "./errors.js";
 
 const inputValidators = {
   communication: (input, path) => {
-    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "content", "context"], path);
+    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "content", "context", "semanticStatusOrigin"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertString(input.content, `${path}.content`);
     assertString(input.context, `${path}.context`);
+    assertOneOf(input.semanticStatusOrigin, ["unclassified", "fixture_initialized"], `${path}.semanticStatusOrigin`);
   },
   task_observation: (input, path) => {
     assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "itemRef", "taskMode", "dimension", "correct", "occurrenceScenarioDay", "sessionId", "sessionOrder"], path);
@@ -71,7 +72,7 @@ const inputValidators = {
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertOpaqueStateReference(input.stateRef, `${path}.stateRef`);
-    assertString(input.purpose, `${path}.purpose`);
+    assertOneOf(input.purpose, ["independent_current_skill_authority"], `${path}.purpose`);
   },
   outcome_fact: (input, path) => {
     assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "observation", "context"], path);

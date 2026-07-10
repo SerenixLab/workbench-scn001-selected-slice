@@ -1,7 +1,7 @@
 const roleDefinitions = {
   communication_event: {
     kind: "communication",
-    keys: ["content", "context"]
+    keys: ["content", "context", "semanticStatusOrigin"]
   },
   task_observation: {
     kind: "task_observation",
