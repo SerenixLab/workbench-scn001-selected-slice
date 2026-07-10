@@ -9,6 +9,7 @@ test("the public boundary exposes only non-answer-selecting lifecycle, ingress, 
   assert.deepEqual(Object.keys(boundary).sort(), [...SUT_PUBLIC_BOUNDARY_METHODS].sort());
   for (const method of SUT_PUBLIC_BOUNDARY_METHODS) {
     assert.doesNotMatch(method, /(decision|expected|transition)/i);
+    assert.doesNotMatch(method, /(proposal|candidate)/i);
   }
 });
 

@@ -118,8 +118,19 @@ function prepareComparison(boundary, runRef, recognitionCorrect = 4, productionC
 
 function replayTrialBasis(boundary, runRef, observations, affordances = [affordanceInput()]) {
   const ingestion = ingest(boundary, runRef, [...observations, ...affordances]);
-  boundary.processCurrentInteraction(runRef);
-  return ingestion;
+  const processingResult = boundary.processCurrentInteraction(runRef);
+  return { ingestion, processingResult };
+}
+
+function deriveCandidateWithoutProposal(run, inputs = [...calibrationInputs(), affordanceInput()]) {
+  run.assertSourceFactConsistency(inputs);
+  run.ingest(inputs);
+  const interaction = run.pendingInteractions.shift();
+  const interactionFacts = interaction.inputReferences.map((reference) => run.records.get(reference));
+  run.deriveDimensionComparisons(interaction, interactionFacts);
+  const candidateTransitionRef = run.deriveTrialCandidateDecisions(interaction, interactionFacts);
+  const candidate = [...run.records.values()].find((record) => record.family === "trial_candidate");
+  return { interaction, candidateTransitionRef, candidate };
 }
 
 test("rejected payload and changed source-identity content have no semantic side effect", () => {
@@ -419,22 +430,238 @@ test("observations from different dimensions do not form a comparison or candida
   assert.equal(recordsOf(boundary, runRef, "non_activation_disposition")[0].reason, "exact_comparison_support_unavailable");
 });
 
-test("candidate forms from current raw observations through exact local comparison relations", () => {
+test("supported candidate creates a distinct immutable candidate-bound proposal intent", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const prepared = prepareComparison(boundary, runRef);
+  const affordance = affordanceInput();
+  const { processingResult } = replayTrialBasis(boundary, runRef, prepared.inputs, [affordance]);
+  const candidate = recordsOf(boundary, runRef, "trial_candidate")[0];
+  const proposal = recordsOf(boundary, runRef, "proposal_intent")[0];
+  const candidateRelations = boundary.enumerateLocalRelations(runRef, candidate.reference);
+  const proposalRelations = boundary.enumerateLocalRelations(runRef, proposal.reference);
+  const proposalTransition = boundary.inspectRecord(runRef, proposal.createdByTransitionRef);
+  const candidateTransition = boundary.inspectRecord(runRef, candidate.createdByTransitionRef);
+  const processingTransition = recordsOf(boundary, runRef, "sut_transition_evidence")
+    .filter((record) => record.transitionKind === "process_interaction_segment")
+    .at(-1);
+
+  assert.equal(candidate.supportComparisonRef, prepared.comparison.reference);
+  assert.equal(candidate.family, "trial_candidate");
+  assert.equal(candidate.lifecycleStatus, "formed_non_active");
+  assert.equal(candidate.lifecycleVersion, 1);
+  assert.equal(proposal.family, "proposal_intent");
+  assert.notEqual(proposal.reference, candidate.reference);
+  assert.equal(proposal.proposalType, "candidate_bound_trial_offer");
+  assert.equal(proposal.candidateRef, candidate.reference);
+  assert.equal(proposal.materialIntent, "offer_scoped_trial_for_user_decision");
+  assert.equal(proposal.candidateMaterialIntent, candidate.materialIntent);
+  assert.deepEqual(proposal.proposedScope, candidate.proposedScope);
+  assert.notEqual(proposal.proposedScope, candidate.proposedScope);
+  assert.deepEqual(proposal.proposedScope, {
+    dimension: "particle_pattern_a",
+    taskMode: "spontaneous_production"
+  });
+  assert.equal(proposal.responseExpectation, "candidate_bound_trial_decision");
+  assert.equal(proposal.origin, "sut");
+  assert.equal(proposal.statusOrigin, "sut_transition");
+  assert.ok(candidateRelations.some((relation) => relation.relationKind === "basis" && relation.targetRole === "selected_trial_direction"));
+  assert.ok(candidateRelations.some((relation) => relation.relationKind === "basis" && relation.targetRole === "comparison_input"));
+  assert.ok(candidateRelations.some((relation) => relation.relationKind === "support" && relation.targetRole === "dimension_comparison"));
+  assert.equal(proposalRelations.filter((relation) => (
+    relation.fromRef === proposal.reference
+    && relation.relationKind === "transition_ancestry"
+    && relation.targetRole === "candidate"
+    && relation.toRef === candidate.reference
+  )).length, 1);
+  assert.equal(proposalRelations.some((relation) => (
+    relation.fromRef === proposal.reference
+    && ["basis", "support"].includes(relation.relationKind)
+  )), false);
+  assert.equal(proposalTransition.transitionKind, "form_candidate_bound_proposal_intent");
+  assert.deepEqual(proposalTransition.inputReferences, [candidate.reference]);
+  assert.deepEqual(proposalTransition.resultReferences, [proposal.reference]);
+  assert.ok(proposalTransition.createdOrder > candidateTransition.createdOrder);
+  assert.equal(boundary.enumerateLocalRelations(runRef, proposalTransition.reference).filter((relation) => (
+    relation.fromRef === proposalTransition.reference
+    && relation.relationKind === "basis"
+    && relation.targetRole === "proposal_candidate"
+    && relation.toRef === candidate.reference
+  )).length, 1);
+  assert.ok(processingTransition.resultReferences.includes(proposalTransition.reference));
+  assert.equal(Object.isFrozen(processingResult), true);
+  assert.deepEqual(processingResult, []);
+  assert.deepEqual(boundary.emitAvailableOutputs(runRef), []);
+  assert.equal(recordsOf(boundary, runRef, "active_trial").length, 0);
+  assert.equal(recordsOf(boundary, runRef, "activation_assessment").length, 0);
+  assert.equal(recordsOf(boundary, runRef, "binding_assessment").length, 0);
+  for (const forbiddenField of [
+    "surfaceStatus",
+    "proposalLifecycle",
+    "proposalVersion",
+    "accepted",
+    "bindingStatus",
+    "activationEligible",
+    "selectedForRealization"
+  ]) {
+    assert.equal(forbiddenField in proposal, false);
+  }
+  assert.equal(boundary.captureInspectionSnapshot(runRef).records.some((record) => [
+    "simulator_realization",
+    "user_response_binding",
+    "activation_check",
+    "formal_evaluation_record",
+    "scoring_artifact",
+    "completion_package"
+  ].includes(record.family)), false);
+  assert.doesNotMatch(JSON.stringify(proposal), /wording|realization|fixture|path|checkpoint|claim|expectedTransition/i);
+});
+
+test("proposal formation leaves the candidate structurally unchanged", () => {
+  const run = new RunState();
+  const { interaction, candidateTransitionRef, candidate } = deriveCandidateWithoutProposal(run);
+  const candidateBefore = structuredClone(candidate);
+
+  run.deriveCandidateBoundProposalIntents(interaction, candidateTransitionRef);
+
+  assert.deepEqual(run.records.get(candidate.reference), candidateBefore);
+  assert.equal([...run.records.values()].filter((record) => record.family === "proposal_intent").length, 1);
+});
+
+test("exact candidate replay creates no duplicate proposal and retained candidates are not scanned", () => {
   const boundary = createSutBoundary();
   const runRef = boundary.startRun();
   const prepared = prepareComparison(boundary, runRef);
   const affordance = affordanceInput();
   replayTrialBasis(boundary, runRef, prepared.inputs, [affordance]);
-  const candidate = recordsOf(boundary, runRef, "trial_candidate")[0];
-  const relations = boundary.enumerateLocalRelations(runRef, candidate.reference);
+  const proposalRef = recordsOf(boundary, runRef, "proposal_intent")[0].reference;
+  const proposalTransitionCount = recordsOf(boundary, runRef, "sut_transition_evidence")
+    .filter((record) => record.transitionKind === "form_candidate_bound_proposal_intent").length;
 
-  assert.equal(candidate.supportComparisonRef, prepared.comparison.reference);
-  assert.equal(candidate.lifecycleStatus, "formed_non_active");
-  assert.ok(relations.some((relation) => relation.relationKind === "basis" && relation.targetRole === "selected_trial_direction"));
-  assert.ok(relations.some((relation) => relation.relationKind === "basis" && relation.targetRole === "comparison_input"));
-  assert.ok(relations.some((relation) => relation.relationKind === "support" && relation.targetRole === "dimension_comparison"));
-  assert.equal(relations.some((relation) => relation.targetRole === "state_reference_carrier"), false);
+  boundary.captureInspectionSnapshot(runRef);
+  boundary.inspectRecord(runRef, proposalRef);
+  boundary.enumerateLocalRelations(runRef, proposalRef);
+  replayTrialBasis(boundary, runRef, prepared.inputs, [affordance]);
+
+  assert.deepEqual(recordsOf(boundary, runRef, "proposal_intent").map((record) => record.reference), [proposalRef]);
+  assert.equal(recordsOf(boundary, runRef, "sut_transition_evidence")
+    .filter((record) => record.transitionKind === "form_candidate_bound_proposal_intent").length, proposalTransitionCount);
+});
+
+test("distinct equal-payload candidates receive distinct proposal identities", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const firstObservations = calibrationInputs();
+  const affordance = affordanceInput();
+  ingest(boundary, runRef, [...firstObservations, affordance]);
+  boundary.processCurrentInteraction(runRef);
+  const secondObservations = calibrationInputs();
+  ingest(boundary, runRef, [...secondObservations, affordance]);
+  boundary.processCurrentInteraction(runRef);
+
+  const candidates = recordsOf(boundary, runRef, "trial_candidate");
+  const proposals = recordsOf(boundary, runRef, "proposal_intent");
+  assert.equal(candidates.length, 2);
+  assert.equal(proposals.length, 2);
+  assert.notEqual(candidates[0].reference, candidates[1].reference);
+  assert.notEqual(proposals[0].reference, proposals[1].reference);
+  assert.deepEqual(candidates[0].proposedScope, candidates[1].proposedScope);
+  assert.deepEqual(proposals.map((proposal) => proposal.candidateRef).sort(), candidates.map((candidate) => candidate.reference).sort());
+});
+
+test("one current transition with two eligible candidates creates two unselected proposals", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  ingest(boundary, runRef, [
+    ...calibrationInputs(4, 1, { dimension: "particle_pattern_a" }),
+    ...calibrationInputs(4, 1, { dimension: "particle_pattern_b" }),
+    affordanceInput()
+  ]);
+  boundary.processCurrentInteraction(runRef);
+
+  const candidates = recordsOf(boundary, runRef, "trial_candidate");
+  const proposals = recordsOf(boundary, runRef, "proposal_intent");
+  assert.equal(candidates.length, 2);
+  assert.equal(proposals.length, 2);
+  assert.deepEqual(new Set(proposals.map((proposal) => proposal.candidateRef)), new Set(candidates.map((candidate) => candidate.reference)));
+  assert.equal(boundary.captureInspectionSnapshot(runRef).records.some((record) => (
+    "selectedForRealization" in record
+    || "preferredProposal" in record
+    || "primaryProposal" in record
+  )), false);
   assert.deepEqual(boundary.emitAvailableOutputs(runRef), []);
+});
+
+test("non-activation and unsupported candidate families create no proposal state", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  ingest(boundary, runRef, [...calibrationInputs(3, 3), affordanceInput()]);
+  boundary.processCurrentInteraction(runRef);
+  assert.equal(recordsOf(boundary, runRef, "non_activation_disposition").length, 1);
+  assert.equal(recordsOf(boundary, runRef, "proposal_intent").length, 0);
+  assert.equal(recordsOf(boundary, runRef, "sut_transition_evidence")
+    .some((record) => record.transitionKind === "form_candidate_bound_proposal_intent"), false);
+
+  const run = new RunState();
+  const derived = deriveCandidateWithoutProposal(run);
+  derived.candidate.candidateType = "delayed_correction_practice";
+  assert.equal(run.deriveCandidateBoundProposalIntents(
+    derived.interaction,
+    derived.candidateTransitionRef
+  ), undefined);
+  assert.equal([...run.records.values()].some((record) => record.family === "proposal_intent"), false);
+});
+
+test("malformed production candidates and conflicting proposal state fail closed", () => {
+  const malformedRun = new RunState();
+  const malformed = deriveCandidateWithoutProposal(malformedRun);
+  malformed.candidate.lifecycleStatus = "active";
+  assert.throws(
+    () => malformedRun.deriveCandidateBoundProposalIntents(
+      malformed.interaction,
+      malformed.candidateTransitionRef
+    ),
+    /violates the required formed non-active state contract/
+  );
+
+  const conflictingRun = new RunState();
+  const conflicting = deriveCandidateWithoutProposal(conflictingRun);
+  conflictingRun.deriveCandidateBoundProposalIntents(
+    conflicting.interaction,
+    conflicting.candidateTransitionRef
+  );
+  const proposal = [...conflictingRun.records.values()]
+    .find((record) => record.family === "proposal_intent");
+  proposal.proposedScope = { ...proposal.proposedScope, taskMode: "all_production" };
+  assert.throws(
+    () => conflictingRun.deriveCandidateBoundProposalIntents(
+      conflicting.interaction,
+      conflicting.candidateTransitionRef
+    ),
+    /conflicts with its exact candidate material state/
+  );
+
+  const ambiguousRun = new RunState();
+  const ambiguous = deriveCandidateWithoutProposal(ambiguousRun);
+  ambiguousRun.deriveCandidateBoundProposalIntents(
+    ambiguous.interaction,
+    ambiguous.candidateTransitionRef
+  );
+  const existing = [...ambiguousRun.records.values()]
+    .find((record) => record.family === "proposal_intent");
+  const duplicate = {
+    ...structuredClone(existing),
+    reference: createReference("state"),
+    materialIntent: "conflicting_offer"
+  };
+  ambiguousRun.records.set(duplicate.reference, duplicate);
+  assert.throws(
+    () => ambiguousRun.deriveCandidateBoundProposalIntents(
+      ambiguous.interaction,
+      ambiguous.candidateTransitionRef
+    ),
+    /Multiple candidate-bound proposal intents/
+  );
 });
 
 test("equal calibration records one exact-basis non-activation disposition across replay", () => {
@@ -655,6 +882,7 @@ test("inspection interleaving does not change exact-basis reuse or candidate for
     return {
       comparisons: recordsOf(boundary, runRef, "dimension_comparison").length,
       candidates: recordsOf(boundary, runRef, "trial_candidate").length,
+      proposals: recordsOf(boundary, runRef, "proposal_intent").length,
       dispositions: recordsOf(boundary, runRef, "non_activation_disposition").length
     };
   }
@@ -703,4 +931,17 @@ test("independent runs cannot resolve prior source identity or retained state", 
   assert.notEqual(second.acceptedInputRefs[0], first.acceptedInputRefs[0]);
   assert.throws(() => boundary.inspectRecord(secondRun, first.acceptedInputRefs[0]), /Unknown or closed/);
   assert.throws(() => boundary.captureInspectionSnapshot(firstRun), /Unknown or closed/);
+});
+
+test("proposal intent does not survive independent run termination", () => {
+  const boundary = createSutBoundary();
+  const firstRun = boundary.startRun();
+  ingest(boundary, firstRun, [...calibrationInputs(), affordanceInput()]);
+  boundary.processCurrentInteraction(firstRun);
+  const proposalRef = recordsOf(boundary, firstRun, "proposal_intent")[0].reference;
+  boundary.endRun(firstRun);
+
+  const secondRun = boundary.startRun();
+  assert.equal(recordsOf(boundary, secondRun, "proposal_intent").length, 0);
+  assert.throws(() => boundary.inspectRecord(secondRun, proposalRef), /Unknown or closed/);
 });
