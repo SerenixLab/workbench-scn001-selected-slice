@@ -1,6 +1,6 @@
 # Zoey Engineering Standard
 
-Document version: `V0.5.0`
+Document version: `V0.6.0`
 
 Status: `Draft`
 
@@ -11,8 +11,8 @@ Release context:
 - `SYSTEM_THESIS.md` `V0.3.1`
 - `CANONICAL_SCENARIOS.md` `V0.2.2`
 - `STATE_AND_CONTROL_MODEL.md` `V0.4.1`
-- `OPEN_QUESTIONS.md` `V0.2.18`
-- accepted ADRs through `decisions/ADR-008-scn001-selected-slice-internal-boundary.md` `R2`
+- `OPEN_QUESTIONS.md` `V0.2.20`
+- accepted ADRs through `decisions/ADR-009-scn001-first-selected-slice-milestone-completion-gate.md` `R4`
 
 Rule-level governing sources are listed on each rule. The release context is not a substitute for rule-level source references.
 
@@ -408,7 +408,7 @@ Rule revision: `R2`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.18`
+- `OPEN_QUESTIONS.md V0.2.20`
 
 Scope: every governed non-throwaway implementation repository or workbench.
 
@@ -1254,11 +1254,12 @@ Review question: did generation introduce hidden ownership, state, boundary, or 
 
 ### ENG-CLAIM-001 - Claim Domain Separation
 
-Rule revision: `R2`
+Rule revision: `R3`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.18`
+- `OPEN_QUESTIONS.md V0.2.20`
+- `ADR-009 R4`
 
 Scope: docs, tests, reports, traces, demos, README text, and review language.
 
@@ -1270,12 +1271,26 @@ Forbidden shapes:
 
 - presenting engineering conformance as evaluated behavioral compatibility;
 - presenting development traces or conformance tests as formal evaluation evidence;
-- claiming milestone acceptance before the applicable acceptance question resolves.
+- treating partial claim-class success, a favorable development run, or a
+  completion evidence package as milestone completion or eligibility;
+- claiming selected-slice milestone eligibility or acceptance without the
+  accepted `ADR-009 R4` `P -> D -> A` dependency and exact bound basis;
+- treating project-owner disposition as able to waive a failed eligibility
+  conjunct;
+- presenting historical owner acceptance as proof that the same bounded claim
+  remains currently supportable after a material adverse-evidence or governing-
+  basis change.
 
 Required checks:
 
 - artifact labels and documentation use claim language that matches their domain;
-- compatibility claims trigger the relevant evaluation-record metadata question.
+- compatibility claims trigger the relevant evaluation-record metadata question;
+- selected-slice completion language distinguishes evidence package `P`,
+  attributable completion-eligibility determination `D`, project-owner
+  disposition `A`, and later current bounded-claim standing;
+- actual selected-slice completion determinations do not proceed until the
+  applicable accepted `EVAL-004` and `EVAL-005` contracts required by
+  `ADR-009 R4` exist.
 
 Eligible protection mechanisms:
 
@@ -1302,28 +1317,43 @@ Review question: which claim domain does this artifact support, and what does it
 
 ### ENG-CLAIM-002 - Formal Evaluation Artifact Reservation
 
-Rule revision: `R2`
+Rule revision: `R3`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.18`
+- `OPEN_QUESTIONS.md V0.2.20`
 - `ADR-004 R3`
 - `ADR-005 R2`
+- `ADR-009 R4`
 
 Scope: evaluation records, reports, comparisons, and scoring language.
 
 Applies when: artifacts use formal evaluation, scoreability, pass evidence, campaign, acceptance, or milestone-complete language.
 
-Rule: formal evaluation artifacts remain inactive/reserved until their governing open questions and record contracts resolve. Development artifacts and engineering conformance results are not promoted, copied, renamed, or described as formal evaluation evidence.
+Rule: formal evaluation and completion artifacts remain inactive/reserved until
+their governing open questions and record contracts resolve. Development
+artifacts and engineering conformance results are not promoted, copied,
+renamed, or described as formal evaluation evidence, and acceptance of a later
+governing contract does not retroactively convert them into formal evidence.
 
 Forbidden shapes:
 
 - `formal_campaign_record`, `pass_evidence`, `accepted_slice`, `milestone_complete`, or equivalent labels before governing decisions allow them;
-- using internal scoring-related evaluation package data to imply final scoreability.
+- using internal scoring-related evaluation package data to imply final scoreability;
+- treating completion evidence package `P` as self-certifying eligibility;
+- preparing or relying on an actual completion-eligibility determination before
+  the applicable accepted `EVAL-004` and `EVAL-005` contracts exist;
+- treating owner disposition `A` as formal evidence, eligibility derivation, or
+  permission to waive a failed eligibility conjunct.
 
 Required checks:
 
-- reports and docs distinguish development artifact, engineering conformance result, and formal evaluation artifact.
+- reports and docs distinguish development artifact, engineering conformance
+  result, formal evaluation artifact, completion evidence package, completion-
+  eligibility determination, and owner disposition;
+- reserved completion artifacts preserve `ADR-009 R4` dependency direction
+  `P -> D -> A` and exact-basis attribution without inventing the record schemas
+  reserved to `EVAL-004` and `EVAL-005`.
 
 Eligible protection mechanisms:
 
@@ -1348,17 +1378,21 @@ Review question: does this artifact imply formal evaluation evidence before the 
 
 ### ENG-CHANGE-001 - Open Question Trigger Discipline
 
-Rule revision: `R2`
+Rule revision: `R3`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.18`
+- `OPEN_QUESTIONS.md V0.2.20`
+- `ADR-009 R4`
 
 Scope: implementation work that crosses unresolved governance frontiers.
 
 Applies when: implementation introduces or claims a capability, state transition, external operation, derived artifact, user-facing exposure, or compatibility claim that depends on unresolved control.
 
-Rule: implementation stops and re-triages the relevant open question before the first non-throwaway use or claim that depends on an unresolved control.
+Rule: implementation stops and re-triages the relevant open question before the
+first non-throwaway use or claim that depends on an unresolved control. A
+resolved question is no longer an unresolved trigger; work governed by its
+accepted resolution must instead comply with that resolution contract.
 
 Forbidden shapes:
 
@@ -1367,7 +1401,11 @@ Forbidden shapes:
 
 Required checks:
 
-- review asks whether the change triggers `SLICE-005`, `EVAL-004`, `EVAL-005`, `DEP-003`, `REPO-001`, `MEM-*`, `TRUST-*`, `PROD-*`, `SURF-*`, `CONT-*`, or `LEG-*`.
+- review asks whether the change triggers `EVAL-004`, `EVAL-005`, `DEP-003`,
+  `REPO-001`, `MEM-*`, `TRUST-*`, `PROD-*`, `SURF-*`, `CONT-*`, or `LEG-*`;
+- selected-slice completion work is reviewed for compliance with the accepted
+  `SLICE-005` resolution in `ADR-009 R4`, including the separate `EVAL-004` and
+  `EVAL-005` triggers, rather than treating `SLICE-005` as unresolved.
 
 Eligible protection mechanisms:
 

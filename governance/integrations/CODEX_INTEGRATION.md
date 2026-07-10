@@ -1,12 +1,12 @@
 # Codex Integration Contract
 
-Integration version: `V0.2.0`
+Integration version: `V0.2.1`
 
 Status: `Draft`
 
 Date: 2026-07-10
 
-Base standard: `ENGINEERING_STANDARD.md` `V0.5.0`
+Base standard: `ENGINEERING_STANDARD.md` `V0.6.0`
 
 Verified external behavior assumptions:
 

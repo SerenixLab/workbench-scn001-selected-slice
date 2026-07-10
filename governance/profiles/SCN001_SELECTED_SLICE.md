@@ -1,16 +1,16 @@
 # SCN-001 Selected-Slice Engineering Profile
 
-Profile version: `V0.3.1`
+Profile version: `V0.4.0`
 
 Status: `Draft`
 
 Date: 2026-07-10
 
-Base standard: `ENGINEERING_STANDARD.md` `V0.5.0`
+Base standard: `ENGINEERING_STANDARD.md` `V0.6.0`
 
 Decision basis:
 
-- `OPEN_QUESTIONS.md` `V0.2.18`
+- `OPEN_QUESTIONS.md` `V0.2.20`
 - `decisions/ADR-002-scn001-system-under-test-boundary.md` `R2`
 - `decisions/ADR-003-scn001-selected-slice-trial-time-contract.md` `R2`
 - `decisions/ADR-004-scn001-first-milestone-evaluation-policy.md` `R3`
@@ -18,6 +18,7 @@ Decision basis:
 - `decisions/ADR-006-scn001-selected-slice-state-contract.md` `R2`
 - `decisions/ADR-007-scn001-selected-slice-dependency-identity.md` `R3`
 - `decisions/ADR-008-scn001-selected-slice-internal-boundary.md` `R2`
+- `decisions/ADR-009-scn001-first-selected-slice-milestone-completion-gate.md` `R4`
 
 ## Purpose
 
@@ -57,7 +58,7 @@ Governing sources:
 
 - `ADR-001 R1`
 - `ADR-008 R2`
-- `OPEN_QUESTIONS.md V0.2.18`
+- `OPEN_QUESTIONS.md V0.2.20`
 - `ENG-BASE-REPO-001 R2`
 
 Scope: first `SCN-001` selected-slice implementation repository or workbench.
@@ -409,7 +410,7 @@ Rule revision: `R2`
 Governing sources:
 
 - `ADR-008 R2`
-- `ENG-CLAIM-001 R2`
+- `ENG-CLAIM-001 R3`
 
 Scope: tests, traces, demos, and reports that claim selected-slice behavior evidence.
 
@@ -1009,33 +1010,53 @@ Review question: does this reference reveal evaluation context by meaning, not j
 
 ### ENG-CONF-CLAIM-001 - Selected-Slice Claim Boundary
 
-Rule revision: `R2`
+Rule revision: `R3`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.18`
+- `OPEN_QUESTIONS.md V0.2.20`
 - `ADR-004 R3`
 - `ADR-005 R2`
-- `ENG-CLAIM-001 R2`
+- `ADR-009 R4`
+- `ENG-CLAIM-001 R3`
 
 Scope: SCN-001 reports, tests, traces, demos, README text, and implementation docs.
 
 Applies when: an artifact describes selected-slice conformance, behavior, evidence, scoreability, acceptance, readiness, or broader scenario support.
 
-Rule: selected-slice engineering conformance does not imply evaluated behavioral compatibility, formal campaign evidence, final scoreability, full SCN-001 pass, production memory, retrieval, real trust-boundary safety, or milestone acceptance.
+Rule: selected-slice engineering conformance does not imply evaluated behavioral
+compatibility, formal campaign evidence, final scoreability, full SCN-001 pass,
+production memory, retrieval, real trust-boundary safety, completion
+eligibility, or milestone acceptance. Milestone completion follows only the
+accepted `ADR-009 R4` exact-basis `P -> D -> A` contract.
 
 Forbidden shapes:
 
 - calling a development trace formal campaign evidence;
 - using `score`, `pass`, `accepted_slice`, or equivalent labels to imply final acceptance before governing questions resolve;
-- claiming full SCN-001 or production readiness from selected-slice conformance tests.
+- claiming full SCN-001 or production readiness from selected-slice conformance tests;
+- treating partial success in any proper subset of the five mandatory claim
+  classes as milestone completion;
+- treating completion evidence package `P` as self-certifying eligibility or
+  project-owner acceptance as able to waive a failed eligibility conjunct;
+- presenting historical acceptance as unchanged current bounded-claim standing
+  after material adverse evidence or governing-source change.
 
 Required checks:
 
 - docs and reports use bounded language;
 - first compatibility/evaluation-record claims trigger `EVAL-004`;
-- final scoreability claims trigger `EVAL-005`;
-- first selected-slice completion/acceptance claims trigger `SLICE-005`.
+- final scoring or scoreability criteria trigger `EVAL-005`;
+- preparation of the first actual completion-eligibility determination triggers
+  `EVAL-005` and requires the applicable accepted `EVAL-004` and `EVAL-005`
+  contracts;
+- completion claims bind an attributable determination `D` to the exact
+  required completion basis, including package `P`, applicable engineering
+  promotion and claim-support gates, and the exact pre-reviewed bounded claim;
+- owner disposition `A` references the eligible `D` and exact pre-reviewed
+  bounded claim without waiving any failed conjunct;
+- later current bounded-claim standing remains distinguishable from historical
+  owner acceptance.
 
 Eligible protection mechanisms:
 

@@ -1,6 +1,6 @@
 # Zoey Open Questions
 
-Document version: `V0.2.18`
+Document version: `V0.2.20`
 
 Thesis baseline: `SYSTEM_THESIS.md` `V0.3.1`
 
@@ -156,43 +156,114 @@ Do not include:
 
 ## Active Decision Frontier
 
-Current milestone: first implementation project creation is unblocked by the accepted selected-slice internal boundary.
+Current milestone: continue governed implementation of the first synthetic
+`SCN-001` selected-slice workbench under the accepted `ADR-009 R4` completion
+contract. The next unimplemented accepted semantic chain begins with candidate-
+bound proposal and activation responsibilities under the accepted SUT,
+trial/time, fixture, state, dependency, and internal-boundary contracts. This
+does not require proposal or activation to be the next repository mutation when
+the existing implementation first needs conformance or semantic stabilization
+against those accepted contracts.
 
 Active questions:
 
-- none
+- None.
 
-Pending trigger checks before the next artifact claims evaluation-record sufficiency, final scoring, acceptance-gate sufficiency, runtime maintenance, production scope, trust boundaries, or broader slice evidence:
+Pending trigger checks before the next artifact claims evaluation-record
+sufficiency, final scoring, actual completion eligibility, runtime maintenance,
+production scope, trust boundaries, or broader slice evidence:
 
-- `SLICE-005`
 - `EVAL-004`
 - `EVAL-005`
 - `REPO-001`
-- selected-slice trigger checks for `MEM`, `GROW`, `AUTH`, `SURF`, `INIT`, `PROD`, `LEG`, `TRUST`, and `CONT`.
+- selected-slice trigger checks for `MEM`, `GROW`, `AUTH`, `SURF`, `INIT`,
+  `PROD`, `LEG`, `TRUST`, and `CONT`.
 
-`EVAL-001` and `EVAL-003` are resolved by accepted `ADR-004 R3`. The first `SCN-001` milestone uses harness-curated fixture context, excludes retrieval/context-assembly claims, and accepts nondeterministic runs only through formal milestone campaigns with hard invariant gates, bounded variance, outcome-independent run selection, claim-class aggregation, and run-validity controls.
+`EVAL-001` and `EVAL-003` are resolved by accepted `ADR-004 R3`. The first
+`SCN-001` milestone uses harness-curated fixture context, excludes
+retrieval/context-assembly claims, and accepts nondeterministic runs only
+through formal milestone campaigns with hard invariant gates, bounded variance,
+outcome-independent run selection, claim-class aggregation, and run-validity
+controls.
 
-`EVAL-002` is resolved by accepted `ADR-005 R2`. The first `SCN-001` milestone has a selected-slice fixture/oracle contract with canonical and counterfactual paths, decision-point bundles, simulator realization facts, oracle-visible fields, formal run validity, claim-class scoring, rule IDs, and bounded claim language.
+`EVAL-002` is resolved by accepted `ADR-005 R2`. The first `SCN-001` milestone
+has a selected-slice fixture/oracle contract with canonical and counterfactual
+paths, decision-point bundles, simulator realization facts, oracle-visible
+fields, formal run validity, claim-class scoring, rule IDs, and bounded claim
+language.
 
-`SLICE-002` is resolved by accepted `ADR-006 R2`. The first `SCN-001` milestone has a minimum selected-slice state contract that distinguishes run-scoped cross-transition SUT state, SUT-owned transition evidence, lineage-preserving projections, derived inspection facts, and fixture/oracle-only facts without deciding a final storage schema or production memory architecture.
+`SLICE-002` is resolved by accepted `ADR-006 R2`. The first `SCN-001` milestone
+has a minimum selected-slice state contract that distinguishes run-scoped
+cross-transition SUT state, SUT-owned transition evidence, lineage-preserving
+projections, derived inspection facts, and fixture/oracle-only facts without
+deciding a final storage schema or production memory architecture.
 
-`DEP-001` is resolved by accepted `ADR-007 R3`. The first `SCN-001` milestone has a minimum dependency identity contract using stable scoped references, effective-state identity for mutable/lifecycle-bearing relation endpoints, contemporaneous dependency-use evidence, and typed local relation semantics without deciding a full dependency graph, workflow engine, production memory schema, retrieval/context-assembly system, or final internal module boundary.
+`DEP-001` is resolved by accepted `ADR-007 R3`. The first `SCN-001` milestone
+has a minimum dependency identity contract using stable scoped references,
+effective-state identity for mutable/lifecycle-bearing relation endpoints,
+contemporaneous dependency-use evidence, and typed local relation semantics
+without deciding a full dependency graph, workflow engine, production memory
+schema, retrieval/context-assembly system, or final internal module boundary.
 
-`GROW-001` and `TIME-002` are resolved by accepted `ADR-003`. `TIME-001` remains deferred for scheduler, reminder, due-state, expiry, background temporal-maintenance, and full longitudinal-clock semantics.
+`GROW-001` and `TIME-002` are resolved by accepted `ADR-003`. `TIME-001`
+remains deferred for scheduler, reminder, due-state, expiry, background
+temporal-maintenance, and full longitudinal-clock semantics.
 
-`SLICE-003` is resolved by accepted `ADR-008 R2`. The first `SCN-001` milestone has a minimum internal boundary: a two-domain SUT core and evaluation split, recommended as two code projects/packages for the first implementation, with one-way evaluation-to-SUT dependency, strict SUT-visible versus oracle-only data separation, role-preserving/state-origin-safe input adaptation, SUT-selected realization outputs, bounded retained-state access, and public passive inspection.
+`SLICE-003` is resolved by accepted `ADR-008 R2`. The first `SCN-001`
+selected-slice milestone has a minimum internal boundary: a two-domain SUT core
+and evaluation split, recommended as two code projects/packages for the first
+implementation, with one-way evaluation-to-SUT dependency, strict SUT-visible
+versus oracle-only data separation, role-preserving/state-origin-safe input
+adaptation, SUT-selected realization outputs, bounded retained-state access,
+and public passive inspection.
 
-`DEP-003` has moved from `Blocked` to `Open` because accepted `ADR-007 R3` satisfies its registered trigger that selected state/dependency types are known. It is not active unless runtime maintenance semantics block implementation under the accepted selected-slice boundary.
+`DEP-003` remains `Open` and non-active. It becomes a blocking frontier only if
+runtime maintenance semantics are required to continue implementation under the
+accepted selected-slice boundary.
 
-`SLICE-005` has moved from `Blocked` to `Open` because accepted `ADR-008 R2` resolves the internal-boundary prerequisite. It is not active unless acceptance-gate drafting becomes the active frontier. `EVAL-004` remains deferred and triggers before the first evaluation record, comparison, or compatibility claim. `EVAL-005` remains deferred and triggers before final scoring or scenario-scoreability criteria are defined.
+`SLICE-005` is resolved by accepted `ADR-009 R4`. The first synthetic
+`SCN-001` selected-slice workbench milestone uses a conjunctive completion gate
+in which all five `ADR-005 R2` claim classes are mandatory and
+non-substitutable. Completion eligibility is an attributable result of an exact
+completion determination over a bound basis, not an intrinsic status of a
+behavior configuration, campaign, evidence package, or report. The accepted
+contract requires package-local positive-obligation map closure, authoritative
+formal-evidence-universe and cutoff closure, run-selection independence,
+campaign/configuration-history closure, applicable engineering promotion and
+claim-support gates, bounded claim closure, and the one-way completion artifact
+dependency `P -> D -> A`: frozen completion evidence package, completion-
+eligibility determination, then project-owner disposition. Historical owner
+acceptance remains distinct from current bounded-claim standing if later
+adverse evidence or governing-source changes require re-triage.
 
-No open question currently blocks first implementation project creation under the accepted selected-slice boundary. Legacy reading, non-committing experiments, document review, fixture sketching, and rough implementation exploration may continue as long as they do not claim selected-slice pass evidence, first evaluation-record sufficiency, final acceptance-gate sufficiency, runtime-maintenance sufficiency, production readiness, or broader `SCN-001` evidence.
+`EVAL-004` remains deferred and triggers before the first evaluation record,
+comparison, or compatibility claim. `EVAL-005` remains deferred and triggers
+before final scoring or scenario-scoreability criteria are defined; under
+accepted `ADR-009 R4`, preparing the first actual completion-eligibility
+determination is itself scoreability-dependent and therefore triggers
+`EVAL-005`. Both questions must resolve before an actual completion
+determination relies on their contracts. If the accepted evaluation-record
+contract cannot establish the formal-evidence record authority or completeness
+basis required by `ADR-009 R4` without materially broadening `EVAL-004`, a
+linked evaluation-governance question must be created or activated before
+completion eligibility can be determined.
 
-`REPO-001` is deferred and does not block governed SCN-001 workbench creation. It triggers before the first durable repository is created under `projects/` or before workbench implementation is proposed for extraction into a durable Zoey system-project boundary.
+No active question currently blocks continued governed selected-slice
+implementation. Legacy reading, non-committing experiments, document review,
+fixture encoding, oracle development, engineering-gate strengthening, and
+non-claiming development runs may continue. No implementation, oracle result,
+development run, engineering-conformance result, partial claim-class result, or
+evidence package may be described as milestone completion outside the accepted
+`ADR-009 R4` completion state model.
+
+`REPO-001` remains deferred and does not block the governed `SCN-001`
+workbench. It triggers before the first durable repository is created under
+`projects/` or before workbench implementation is proposed for extraction into
+a durable Zoey system-project boundary.
 
 ## Active Questions
 
-No active question is currently registered.
+No questions are currently `Active`.
 
 ## Open Question Index
 
@@ -201,7 +272,7 @@ No active question is currently registered.
 | `SLICE-001` | Resolved | Accepted by `ADR-001` | - | S1, S2, SCM | Choose first vertical slice: `SCN-001` or `SCN-002`. |
 | `SLICE-002` | Resolved | Accepted by `ADR-006 R2` | `SLICE-001`, `EVAL-006`, `EVAL-001`, `EVAL-002`, `EVAL-003`, `GROW-001`, `TIME-002` | SCM, S1, S2 | What minimum persistent state is required for the selected slice? |
 | `SLICE-003` | Resolved | Accepted by `ADR-008 R2` | `SLICE-002`, `DEP-001`, `EVAL-002`, `EVAL-006` | SCM | What minimum internal boundary is forced by selected-slice behavior? |
-| `SLICE-005` | Open | After selected-slice internal boundary is accepted and acceptance-gate drafting becomes active | `EVAL-002`, `EVAL-003`, `EVAL-006`, `GROW-001`, `TIME-002`, `SLICE-003` | S1, S2 | What acceptance gate says the first slice is done? |
+| `SLICE-005` | Resolved | Accepted by `ADR-009 R4` | `EVAL-002`, `EVAL-003`, `EVAL-006`, `GROW-001`, `TIME-002`, `SLICE-003` | S1, S2 | What conjunctive acceptance gate says the first synthetic selected-slice workbench milestone is complete? |
 | `MEM-001` | Deferred | Selected slice proposes retaining personal state | `SLICE-001` | T, SCM | What retention bases and transient defaults does the selected slice need? |
 | `MEM-002` | Deferred | Selected slice proposes reusing retained state across purposes | `MEM-001` | T, SCM | What permitted-use rule prevents silent repurposing into personalization, initiative, adaptation, training, or external inference? |
 | `MEM-003` | Deferred | Selected slice proposes retaining personal evidence | `MEM-001` | SCM | What granularity rule chooses raw content, excerpt, structured observation, or summary? |
@@ -319,7 +390,7 @@ Resolved Against / Scope: first `SCN-001` milestone uses a minimum selected-slic
 
 Supersedes / Split From: none.
 
-Future Trigger: material change to selected-slice state/evidence semantics, inability of `DEP-001`, `SLICE-003`, `SLICE-005`, `EVAL-004`, or `EVAL-005` to preserve the accepted state/projection boundary, or a later milestone claiming broader persistence, production memory, durable adaptation, retrieval/context assembly, or full `SCN-001` evidence than `ADR-006` permits.
+Future Trigger: material change to selected-slice state/evidence semantics, inability of `DEP-001`, `SLICE-003`, the `SLICE-005` resolution in `ADR-009 R4`, `EVAL-004`, or `EVAL-005` to preserve the accepted state/projection boundary, or a later milestone claiming broader persistence, production memory, durable adaptation, retrieval/context assembly, or full `SCN-001` evidence than `ADR-006` permits.
 
 Date: 2026-07-09
 
@@ -335,9 +406,52 @@ Resolved Against / Scope: first `SCN-001` selected-slice milestone uses a two-do
 
 Supersedes / Split From: none.
 
-Future Trigger: material change to selected-slice internal-boundary semantics, inability of `SLICE-005`, `EVAL-004`, or `EVAL-005` to preserve the accepted SUT/evaluation separation, implementation needing evaluator semantic promotion into SUT inputs, harness arbitration among competing SUT outputs, general retrieval/context assembly, private-internal inspection as score evidence, production services, production memory, model/runtime trust-boundary architecture, runtime maintenance semantics under `DEP-003`, or broader `SCN-001` evidence than `ADR-008` permits.
+Future Trigger: material change to selected-slice internal-boundary semantics, inability of the `SLICE-005` resolution in `ADR-009 R4`, `EVAL-004`, or `EVAL-005` to preserve the accepted SUT/evaluation separation, implementation needing evaluator semantic promotion into SUT inputs, harness arbitration among competing SUT outputs, general retrieval/context assembly, private-internal inspection as score evidence, production services, production memory, model/runtime trust-boundary architecture, runtime maintenance semantics under `DEP-003`, or broader `SCN-001` evidence than `ADR-008` permits.
 
 Date: 2026-07-09
+
+
+### SLICE-005
+
+Outcome: `Decision`
+
+Decision Authority / Accepted By: project owner by accepting `ADR-009 R4`.
+
+Resolution Artifact:
+`decisions/ADR-009-scn001-first-selected-slice-milestone-completion-gate.md`.
+
+Resolved Against / Scope: the first synthetic `SCN-001` selected-slice
+workbench milestone uses a conjunctive completion contract. All five
+`ADR-005 R2` claim classes are mandatory and non-substitutable. Eligibility is
+an attributable result of an exact completion-eligibility determination over a
+bound completion basis. The contract requires mandatory package-local
+positive-obligation map closure, authoritative formal-evidence-universe and
+evidence-cutoff/completeness closure, run-selection independence,
+campaign/configuration-history closure, applicable engineering promotion and
+claim-support gates, bounded claim closure, and a one-way completion artifact
+dependency from frozen evidence package `P` to eligibility determination `D`
+to project-owner disposition `A`. Historical milestone acceptance requires an
+`ELIGIBLE` determination plus an effective `ACCEPTED` owner disposition bound
+to the exact pre-reviewed claim. Later adverse evidence or governing-basis
+change may alter current claim standing without falsifying historical owner
+acceptance. This decision does not itself accept any implementation, campaign,
+evaluation record, completion determination, or milestone, and does not absorb
+`EVAL-004` or `EVAL-005`.
+
+Supersedes / Split From: none.
+
+Future Trigger: material change to `ADR-004` or `ADR-005` formal run,
+hard-failure, claim-class, path, obligation, aggregation, or invalid-run
+semantics; inability of `EVAL-004`, `EVAL-005`, or a required linked
+evaluation-governance decision to support the accepted completion-basis and
+formal-evidence-universe closure; inability of engineering governance to bind
+the required promotion/claim-support basis; or a later milestone requiring
+partial capability promotion, broader `SCN-001` acceptance, production,
+retrieval, real personal state, durable adaptation, or broader compatibility
+claims.
+
+Date: 2026-07-10
+
 
 ### DEP-001
 
@@ -351,7 +465,7 @@ Resolved Against / Scope: first `SCN-001` milestone uses a minimum selected-slic
 
 Supersedes / Split From: none.
 
-Future Trigger: material change to selected-slice dependency identity semantics, inability of `SLICE-003`, `SLICE-005`, `EVAL-004`, or `EVAL-005` to preserve accepted dependency identity evidence, activation of runtime maintenance semantics under `DEP-003`, or a later milestone claiming broader dependency, retrieval, production memory, durable adaptation, or full `SCN-001` evidence than `ADR-007` permits.
+Future Trigger: material change to selected-slice dependency identity semantics, inability of `SLICE-003`, the `SLICE-005` resolution in `ADR-009 R4`, `EVAL-004`, or `EVAL-005` to preserve accepted dependency identity evidence, activation of runtime maintenance semantics under `DEP-003`, or a later milestone claiming broader dependency, retrieval, production memory, durable adaptation, or full `SCN-001` evidence than `ADR-007` permits.
 
 Date: 2026-07-09
 
@@ -367,7 +481,7 @@ Resolved Against / Scope: first `SCN-001` milestone uses a transition-inside sys
 
 Supersedes / Split From: none.
 
-Future Trigger: material change to the accepted first-slice SUT boundary, inability of `EVAL-001`, `EVAL-002`, `GROW-001`, `TIME-002`, or `SLICE-005` to preserve the accepted boundary, or a later milestone claiming broader `SCN-001` evidence than `ADR-002` permits.
+Future Trigger: material change to the accepted first-slice SUT boundary, inability of `EVAL-001`, `EVAL-002`, `GROW-001`, `TIME-002`, or the `SLICE-005` resolution in `ADR-009 R4` to preserve the accepted boundary, or a later milestone claiming broader `SCN-001` evidence than `ADR-002` permits.
 
 Date: 2026-07-07
 
@@ -383,7 +497,7 @@ Resolved Against / Scope: first `SCN-001` milestone supports scoped, reversible 
 
 Supersedes / Split From: none.
 
-Future Trigger: material change to selected-slice trial semantics, a future milestone claiming durable developmental adaptation, broader trial generalization, user-facing durable adaptation, or inability of `EVAL-002`, `SLICE-002`, or `SLICE-005` to preserve `ADR-003` Decision A.
+Future Trigger: material change to selected-slice trial semantics, a future milestone claiming durable developmental adaptation, broader trial generalization, user-facing durable adaptation, or inability of `EVAL-002`, `SLICE-002`, or the `SLICE-005` resolution in `ADR-009 R4` to preserve `ADR-003` Decision A.
 
 Date: 2026-07-07
 
@@ -399,7 +513,7 @@ Resolved Against / Scope: first `SCN-001` milestone uses a selected-slice chrono
 
 Supersedes / Split From: split from `TIME-001`, whose broader governed-clock scope remains deferred.
 
-Future Trigger: material change to the selected-slice staleness rule, need for active-trial age-based expiry or TTL, need for scheduler/reminder/due/expiry semantics, or inability of `EVAL-002`, `SLICE-002`, or `SLICE-005` to preserve `ADR-003` Decision B.
+Future Trigger: material change to the selected-slice staleness rule, need for active-trial age-based expiry or TTL, need for scheduler/reminder/due/expiry semantics, or inability of `EVAL-002`, `SLICE-002`, or the `SLICE-005` resolution in `ADR-009 R4` to preserve `ADR-003` Decision B.
 
 Date: 2026-07-07
 
@@ -415,7 +529,7 @@ Resolved Against / Scope: first `SCN-001` milestone uses harness-curated fixture
 
 Supersedes / Split From: none.
 
-Future Trigger: a later milestone claims retrieval quality, context discovery, relevance selection, sensitivity-aware context assembly, production memory architecture, or inability of `EVAL-002`, `SLICE-002`, or `SLICE-005` to preserve `ADR-004` Decision A.
+Future Trigger: a later milestone claims retrieval quality, context discovery, relevance selection, sensitivity-aware context assembly, production memory architecture, or inability of `EVAL-002`, `SLICE-002`, or the `SLICE-005` resolution in `ADR-009 R4` to preserve `ADR-004` Decision A.
 
 Date: 2026-07-08
 
@@ -431,7 +545,7 @@ Resolved Against / Scope: first `SCN-001` milestone uses formal milestone evalua
 
 Supersedes / Split From: none.
 
-Future Trigger: a later milestone claims full `SCN-001` pass, longitudinal drift handling, production rollout reliability, statistical acceptance, or inability of `EVAL-002` or `SLICE-005` to preserve `ADR-004` Decision B.
+Future Trigger: a later milestone claims full `SCN-001` pass, longitudinal drift handling, production rollout reliability, statistical acceptance, or inability of `EVAL-002` or the `SLICE-005` resolution in `ADR-009 R4` to preserve `ADR-004` Decision B.
 
 Date: 2026-07-08
 
@@ -447,7 +561,7 @@ Resolved Against / Scope: first `SCN-001` milestone uses selected-slice fixture/
 
 Supersedes / Split From: none.
 
-Future Trigger: material change to selected-slice fixture/oracle semantics, inability of `SLICE-002`, `SLICE-005`, `EVAL-004`, or `EVAL-005` to preserve the accepted fixture/oracle boundary, or a later milestone claiming broader `SCN-001` evidence than `ADR-005` permits.
+Future Trigger: material change to selected-slice fixture/oracle semantics, inability of `SLICE-002`, the `SLICE-005` resolution in `ADR-009 R4`, `EVAL-004`, or `EVAL-005` to preserve the accepted fixture/oracle boundary, or a later milestone claiming broader `SCN-001` evidence than `ADR-005` permits.
 
 Date: 2026-07-08
 
@@ -545,6 +659,31 @@ The register is acceptable only if:
 
 ## Next Decision Step
 
-Create the first implementation projects or packages under accepted `ADR-008 R2`, unless the next artifact instead drafts an acceptance gate, formal evaluation record, final scoring/scoreability criteria, runtime maintenance semantics, production surface, trust boundary, or broader milestone claim.
+Continue governed implementation of the first synthetic `SCN-001`
+selected-slice workbench under accepted `ADR-009 R4`. No active decision
+question currently blocks the implementation frontier. The next unimplemented
+accepted semantic chain begins with the candidate-bound proposal and activation
+responsibilities required by the accepted SUT, trial/time, fixture/oracle,
+state, dependency, and internal-boundary contracts. Conformance or semantic
+stabilization of already implemented behavior may precede that semantic
+extension without creating a new open question or changing the accepted chain.
 
-If the next artifact drafts an acceptance gate, activate `SLICE-005`. If it prepares the first formal evaluation record, comparison, or compatibility claim, activate `EVAL-004`. If it defines final scoring or scenario-scoreability criteria, activate `EVAL-005`. Keep `DEP-003` non-active unless runtime maintenance semantics block implementation.
+Before preparing the first formal evaluation record, comparison, or
+compatibility claim, activate `EVAL-004`. Before defining final scoring,
+scenario-scoreability criteria, or preparing the first actual
+completion-eligibility determination, activate `EVAL-005`. Both must resolve
+before an actual completion determination relies on their contracts. If the
+accepted evaluation-record contract cannot establish the formal-evidence record
+authority or completeness basis required by `ADR-009 R4` without materially
+broadening `EVAL-004`, create or activate a linked evaluation-governance
+question before completion eligibility is determined.
+
+Keep `DEP-003` non-active unless runtime maintenance semantics block
+implementation. Continue checking `REPO-001` and the selected-slice `MEM`,
+`GROW`, `AUTH`, `SURF`, `INIT`, `PROD`, `LEG`, `TRUST`, and `CONT` triggers
+before work or claims cross their registered boundaries.
+
+Engineering conformance, development runs, oracle results, partial claim-class
+eligibility, and evidence-package construction remain distinct from milestone
+completion. The accepted `ADR-009 R4` `P -> D -> A` contract governs any future
+completion claim.
