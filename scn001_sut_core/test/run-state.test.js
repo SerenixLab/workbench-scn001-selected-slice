@@ -46,6 +46,28 @@ function chronologyInput(overrides = {}) {
   };
 }
 
+function affordanceInput(overrides = {}) {
+  return {
+    kind: "affordance_fact",
+    sourceActor: "fixture-driver",
+    occurrenceOrder: 3,
+    direction: "TRIAL-PROD-FOCUS",
+    description: "Production-focused practice for the target particle pattern.",
+    ...overrides
+  };
+}
+
+function candidateSupportInput(stateRef, overrides = {}) {
+  return {
+    kind: "state_reference",
+    sourceActor: "fixture-driver",
+    occurrenceOrder: 4,
+    stateRef,
+    purpose: "candidate_support",
+    ...overrides
+  };
+}
+
 test("rejected payload has no semantic side effect", () => {
   const boundary = createSutBoundary();
   const runRef = boundary.startRun();
@@ -363,6 +385,147 @@ test("equal calibration remains a no-difference comparison and does not create p
   )), false);
 });
 
+test("a retained recognition-production split forms one bounded non-active production candidate", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const comparison = createCalibrationComparison(boundary, runRef, 4, 1);
+  const candidateInputs = boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [
+      candidateSupportInput(comparison.reference),
+      affordanceInput(),
+      affordanceInput({
+        occurrenceOrder: 5,
+        direction: "TRIAL-RECOG-REVIEW",
+        description: "Recognition-focused review."
+      }),
+      affordanceInput({
+        occurrenceOrder: 6,
+        direction: "TRIAL-WHOLE-PATTERN",
+        description: "Whole-pattern practice."
+      })
+    ]
+  });
+
+  boundary.processCurrentInteraction(runRef);
+  const snapshot = boundary.captureInspectionSnapshot(runRef);
+  const candidates = snapshot.records.filter((record) => record.family === "trial_candidate");
+  const candidate = candidates[0];
+  const selectedAffordance = boundary.inspectRecord(runRef, candidateInputs.acceptedInputRefs[1]);
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidate.candidateType, "production_focused_practice");
+  assert.equal(candidate.trialDirectionRef, selectedAffordance.reference);
+  assert.equal(candidate.supportComparisonRef, comparison.reference);
+  assert.deepEqual(candidate.proposedScope, {
+    dimension: "particle_pattern_a",
+    taskMode: "spontaneous_production"
+  });
+  assert.equal(candidate.lifecycleStatus, "formed_non_active");
+  assert.equal(candidate.lifecycleVersion, 1);
+  assert.equal(candidate.purpose, "provisional_evaluative_trial");
+  assert.equal(snapshot.records.some((record) => (
+    ["trial_proposal", "active_trial", "trial_outcome"].includes(record.family)
+  )), false);
+
+  const relations = boundary.enumerateLocalRelations(runRef, candidate.reference);
+  assert.ok(relations.some((relation) => (
+    relation.relationKind === "basis"
+    && relation.toRef === selectedAffordance.reference
+    && relation.targetRole === "selected_trial_direction"
+  )));
+  assert.ok(relations.some((relation) => (
+    relation.relationKind === "basis"
+    && relation.toRef === comparison.reference
+    && relation.targetRole === "comparison_input"
+  )));
+  assert.ok(relations.some((relation) => (
+    relation.relationKind === "support"
+    && relation.toRef === comparison.reference
+    && relation.targetRole === "dimension_comparison"
+  )));
+  assert.equal(relations.some((relation) => (
+    relation.relationKind === "support"
+    && relation.toRef === selectedAffordance.reference
+  )), false);
+  const transition = boundary.inspectRecord(runRef, candidate.createdByTransitionRef);
+  assert.equal(transition.transitionKind, "form_or_withhold_production_focused_candidate");
+  assert.equal(transition.result, "candidate_formed");
+  assert.ok(transition.resultReferences.includes(candidate.reference));
+  assert.deepEqual(boundary.emitAvailableOutputs(runRef), []);
+
+  const immutableCandidate = boundary.inspectRecord(runRef, candidate.reference);
+  boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [communicationInput({ occurrenceOrder: 7 })]
+  });
+  boundary.processCurrentInteraction(runRef);
+  assert.deepEqual(boundary.inspectRecord(runRef, candidate.reference), immutableCandidate);
+});
+
+test("an equal calibration records non-activation without forming a candidate", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const comparison = createCalibrationComparison(boundary, runRef, 3, 3);
+  boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [candidateSupportInput(comparison.reference), affordanceInput()]
+  });
+
+  boundary.processCurrentInteraction(runRef);
+  const snapshot = boundary.captureInspectionSnapshot(runRef);
+  const disposition = snapshot.records.find((record) => (
+    record.family === "non_activation_disposition"
+  ));
+
+  assert.equal(snapshot.records.some((record) => record.family === "trial_candidate"), false);
+  assert.equal(disposition.disposition, "DISP-WITHHOLD");
+  assert.equal(disposition.reason, "no_observed_recognition_production_difference");
+  assert.equal(disposition.supportComparisonRef, comparison.reference);
+  const relations = boundary.enumerateLocalRelations(runRef, disposition.reference);
+  assert.ok(relations.some((relation) => (
+    relation.relationKind === "basis"
+    && relation.toRef === comparison.reference
+    && relation.targetRole === "comparison_evidence"
+  )));
+  assert.equal(boundary.inspectRecord(runRef, disposition.createdByTransitionRef).result, "non_activation_recorded");
+});
+
+test("candidate formation withholds when the required fixed affordance is unavailable", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const comparison = createCalibrationComparison(boundary, runRef, 4, 1);
+  boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [
+      candidateSupportInput(comparison.reference),
+      affordanceInput({ direction: "TRIAL-RECOG-REVIEW" })
+    ]
+  });
+
+  boundary.processCurrentInteraction(runRef);
+  const records = boundary.captureInspectionSnapshot(runRef).records;
+  const disposition = records.find((record) => record.family === "non_activation_disposition");
+  assert.equal(records.some((record) => record.family === "trial_candidate"), false);
+  assert.equal(disposition.disposition, "DISP-WITHHOLD");
+  assert.equal(disposition.reason, "required_trial_direction_unavailable");
+});
+
+test("candidate support must resolve to a SUT-owned dimension comparison", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const observation = boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [taskObservationInput()]
+  });
+  boundary.processCurrentInteraction(runRef);
+  boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [candidateSupportInput(observation.acceptedInputRefs[0]), affordanceInput()]
+  });
+
+  boundary.processCurrentInteraction(runRef);
+  const records = boundary.captureInspectionSnapshot(runRef).records;
+  const disposition = records.find((record) => record.family === "non_activation_disposition");
+  assert.equal(records.some((record) => record.family === "trial_candidate"), false);
+  assert.equal(disposition.disposition, "DISP-REQUEST-MORE-EVIDENCE");
+  assert.equal(disposition.reason, "candidate_support_did_not_resolve_to_dimension_comparison");
+});
+
 test("processing does not compare recognition and production observations across dimensions", () => {
   const boundary = createSutBoundary();
   const runRef = boundary.startRun();
@@ -554,6 +717,56 @@ test("inspection interleaving does not change the scoped dimension comparison", 
   );
 });
 
+test("inspection interleaving does not change candidate formation", () => {
+  const withoutInspection = createSutBoundary();
+  const withoutRun = withoutInspection.startRun();
+  const withoutComparison = createCalibrationComparison(withoutInspection, withoutRun, 4, 1);
+  withoutInspection.ingestSutVisibleInputs(withoutRun, {
+    inputs: [candidateSupportInput(withoutComparison.reference), affordanceInput()]
+  });
+  withoutInspection.processCurrentInteraction(withoutRun);
+
+  const withInspection = createSutBoundary();
+  const withRun = withInspection.startRun();
+  const withComparison = createCalibrationComparison(withInspection, withRun, 4, 1);
+  const ingested = withInspection.ingestSutVisibleInputs(withRun, {
+    inputs: [candidateSupportInput(withComparison.reference), affordanceInput()]
+  });
+  withInspection.captureInspectionSnapshot(withRun);
+  withInspection.inspectRecord(withRun, ingested.acceptedInputRefs[0]);
+  withInspection.enumerateLocalRelations(withRun, withComparison.reference);
+  withInspection.processCurrentInteraction(withRun);
+
+  assert.deepEqual(
+    trialDecisionSummary(withoutInspection.captureInspectionSnapshot(withoutRun)),
+    trialDecisionSummary(withInspection.captureInspectionSnapshot(withRun))
+  );
+});
+
+test("a candidate and its references do not survive run termination", () => {
+  const boundary = createSutBoundary();
+  const firstRun = boundary.startRun();
+  const comparison = createCalibrationComparison(boundary, firstRun, 4, 1);
+  boundary.ingestSutVisibleInputs(firstRun, {
+    inputs: [candidateSupportInput(comparison.reference), affordanceInput()]
+  });
+  boundary.processCurrentInteraction(firstRun);
+  const candidate = boundary.captureInspectionSnapshot(firstRun).records.find((record) => (
+    record.family === "trial_candidate"
+  ));
+
+  boundary.endRun(firstRun);
+  const secondRun = boundary.startRun();
+  assert.deepEqual(boundary.captureInspectionSnapshot(secondRun).records, []);
+  assert.throws(() => boundary.inspectRecord(secondRun, candidate.reference), /Unknown or closed/);
+  assert.throws(
+    () => boundary.ingestSutVisibleInputs(secondRun, {
+      inputs: [candidateSupportInput(comparison.reference), affordanceInput()]
+    }),
+    /does not resolve inside this run/
+  );
+});
+
 test("independent runs do not retain state or references after a run ends", () => {
   const boundary = createSutBoundary();
   const firstRun = boundary.startRun();
@@ -593,5 +806,44 @@ function dimensionComparisonSummary(snapshot) {
       productionPerformance: record.productionPerformance,
       comparisonResult: record.comparisonResult,
       uncertainty: record.uncertainty
+    }));
+}
+
+function createCalibrationComparison(boundary, runRef, recognitionCorrect, productionCorrect) {
+  boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [
+      taskObservationInput({
+        itemRef: "recognition-calibration-items",
+        taskMode: "recognition",
+        performance: { kind: "aggregate", correctCount: recognitionCorrect, totalCount: 4 },
+        occurrenceOrder: 1
+      }),
+      taskObservationInput({
+        itemRef: "production-calibration-items",
+        taskMode: "spontaneous_production",
+        performance: { kind: "aggregate", correctCount: productionCorrect, totalCount: 4 },
+        occurrenceOrder: 2
+      })
+    ]
+  });
+  boundary.processCurrentInteraction(runRef);
+  return boundary.captureInspectionSnapshot(runRef).records.find((record) => (
+    record.family === "dimension_comparison"
+  ));
+}
+
+function trialDecisionSummary(snapshot) {
+  return snapshot.records
+    .filter((record) => ["trial_candidate", "non_activation_disposition"].includes(record.family))
+    .map((record) => ({
+      family: record.family,
+      candidateType: record.candidateType,
+      materialIntent: record.materialIntent,
+      purpose: record.purpose,
+      proposedScope: record.proposedScope,
+      lifecycleStatus: record.lifecycleStatus,
+      disposition: record.disposition,
+      reason: record.reason,
+      targetDimension: record.targetDimension
     }));
 }

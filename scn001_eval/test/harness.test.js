@@ -114,6 +114,55 @@ test("task-observation projection preserves aggregate performance without projec
   );
 });
 
+test("candidate-formation projection forwards only raw affordance and opaque SUT state reference", () => {
+  const reference = "state_00000000-0000-0000-0000-000000000000";
+  const affordance = projectFixtureRecord({
+    fixtureRecordId: "TD-001-PROD",
+    role: "affordance_fact",
+    sourceActor: "fixture-driver",
+    occurrenceOrder: 3,
+    data: {
+      direction: "TRIAL-PROD-FOCUS",
+      description: "Production-focused practice for the target particle pattern."
+    },
+    oracleAnnotations: {
+      expectedCandidate: "production_focused_practice"
+    }
+  });
+  const stateReference = projectFixtureRecord({
+    fixtureRecordId: "REF-COMPARISON",
+    role: "sut_state_reference",
+    sourceActor: "fixture-driver",
+    occurrenceOrder: 4,
+    data: {
+      stateRef: reference,
+      purpose: "candidate_support"
+    },
+    oracleAnnotations: {
+      expectedDisposition: "form_candidate"
+    }
+  });
+
+  assert.deepEqual(affordance, {
+    kind: "affordance_fact",
+    sourceActor: "fixture-driver",
+    occurrenceOrder: 3,
+    direction: "TRIAL-PROD-FOCUS",
+    description: "Production-focused practice for the target particle pattern."
+  });
+  assert.deepEqual(stateReference, {
+    kind: "state_reference",
+    sourceActor: "fixture-driver",
+    occurrenceOrder: 4,
+    stateRef: reference,
+    purpose: "candidate_support"
+  });
+  assert.doesNotMatch(
+    JSON.stringify([affordance, stateReference]),
+    /expectedCandidate|expectedDisposition|form_candidate/
+  );
+});
+
 test("fixture projection preserves explicitly initialized historical semantic origin", () => {
   const boundary = createSutBoundary();
   const harness = createEvaluationHarness(boundary);

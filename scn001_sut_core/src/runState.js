@@ -520,6 +520,7 @@ export class RunState {
             reversibility: "retirable_before_activation",
             correctionPath: "separate_activation_required_before_behavior_effect",
             lifecycleStatus: "formed_non_active",
+            lifecycleVersion: 1,
             uncertainty: decision.comparison.uncertainty,
             statusOrigin: "sut_transition",
             interactionRef: interaction.reference,
@@ -576,6 +577,15 @@ export class RunState {
           fromRef: record.reference,
           toRef: decision.selectedAffordance.reference,
           targetRole: "selected_trial_direction",
+          effectiveOrder: record.createdOrder,
+          createdOrder: transition.createdOrder,
+          assertedByRole: "sut"
+        });
+        this.relations.push({
+          relationKind: "basis",
+          fromRef: record.reference,
+          toRef: decision.comparison.reference,
+          targetRole: "comparison_input",
           effectiveOrder: record.createdOrder,
           createdOrder: transition.createdOrder,
           assertedByRole: "sut"

@@ -30,7 +30,7 @@ scn001_eval -> @zoey/scn001-sut-core public package export
 scn001_sut_core -> no evaluation dependency
 ```
 
-`scn001_sut_core` provides the minimum run lifecycle, closed SUT-visible input ingress, run-scoped fact/transition/relation retention, and passive inspection surfaces. Its implemented semantic segment derives attributed current-user assertions, `>90`-scenario-day temporal eligibility, and dimension-scoped recognition/spontaneous-production score comparisons from raw communications, observations, and chronology. It does not create global or current-skill facts, trial candidates, active trials, or behavior dispositions. `scn001_eval` owns allowlist projection from evaluation records and a harness that calls only that public SUT boundary.
+`scn001_sut_core` provides the minimum run lifecycle, closed SUT-visible input ingress, run-scoped fact/transition/relation retention, and passive inspection surfaces. Its implemented semantic segment derives attributed current-user assertions, `>90`-scenario-day temporal eligibility, and dimension-scoped recognition/spontaneous-production score comparisons from raw communications, observations, and chronology. An explicitly retained comparison plus a declared fixed affordance can now form one immutable, non-active production-focused trial candidate; unsupported, equal, missing, or invalid support records a separate non-activation disposition. It does not create global or current-skill facts, proposals, active trials, behavior outputs, or outcomes. `scn001_eval` owns allowlist projection from evaluation records and a harness that calls only that public SUT boundary.
 
 This is engineering conformance infrastructure. It is not a formal evaluation record, behavioral-compatibility claim, milestone acceptance, or `SCN-001` pass.
 
@@ -81,3 +81,5 @@ Initial sequence:
 4. implement the first concrete transition segment;
 5. add passive inspection for state and evidence actually produced;
 6. extend output and simulator seams only when the next concrete transition requires them.
+
+The next bounded increment should introduce the distinct proposal/activation decision only after defining its current-context, temporal, consequence, and reversibility inputs. Candidate existence must remain insufficient for activation, and the current non-active candidate must remain behaviorally inert.
