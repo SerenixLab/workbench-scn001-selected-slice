@@ -1,7 +1,8 @@
 # SCN-001 Workbench Conformance Ledger
 
-This ledger is the complete applicability router for the 49 rules pinned by `governance/ZOEY_GOVERNANCE.lock`. This governance revalidation resolves the repository state at `HEAD` `9e8197e` plus the canonical projection from `zoey-meta` commit `6726ebef553b38db1d860ab207b4549db0dd57a0` and this local ledger update. 
-The projected lock and snapshot digests identify the exact canonical basis; the verification record below identifies the commands run against the resulting working tree.
+This ledger is the complete applicability router for the 49 rules pinned by `governance/ZOEY_GOVERNANCE.lock`. The ADR-009 governance revalidation and its historical verification basis are preserved below against workbench `HEAD` `9e8197e` plus the canonical projection from `zoey-meta` commit `6726ebef553b38db1d860ab207b4549db0dd57a0`.
+
+Later change-specific addenda and independent-review closures record subsequent selected-slice semantic increments without rewriting that historical verification basis. The projected lock and snapshot digests identify the exact canonical governance basis; each change-specific record identifies its own starting commit, scope, and review disposition.
 
 The workbench contains a two-package boundary spine and a stabilized semantic segment. The SUT derives attributed current-user assertions, selected temporal eligibility, scoped recognition/spontaneous-production comparisons, immutable non-active trial candidates, distinct candidate-bound proposal intents, and separate non-activation dispositions from raw run-local source facts and exact typed local relation closure.
 It does not create current-skill facts, surfaced proposal wording, public realization output, simulator realization, response binding, activation assessment, active trials, behavior outputs, or outcomes.
@@ -70,7 +71,7 @@ Unless a row says otherwise:
 | `ENG-CONF-STATE-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Canonical processing now includes SUT-owned immutable candidate-bound proposal-intent formation after candidate formation, with contemporaneous candidate input, proposal result, ancestry, origin, and order evidence. | `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2` | SUT transition records preserve candidate input refs, proposal result refs, proposal/candidate identities, creation order, material intent/scope, candidate ancestry, and processing-transition result inclusion; malformed/conflicting state fails closed. Contract and negative modes. | `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js` | Default | uncovered | merge-blocking; claim-blocking | Proposal-intent mutation provenance is covered; realization, response binding, activation, retirement/supersession, and outcome mutations do not exist and require their own coverage. |
 | `ENG-HEALTH-ABSTRACTION-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Public boundary, harness, validation, fixture-projection, and run-state abstractions are non-throwaway. | `ADR-001 R1` | Bounded package/module responsibilities; manual justification review. | `README.md`; `scn001_sut_core/src/`; `scn001_eval/src/`; package `AGENTS.md` files | Local-recorded review | review-only | advisory or merge-blocking by condition | Abstraction justification is not captured by an automated check; future generalization could outrun concrete pressure. |
 | `ENG-HEALTH-API-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Both packages expose public exports and the harness consumes the unchanged SUT public surface. | Rule entry | Export map; frozen exact SUT public surface; internal-only source lookup and exact relation resolver; static and contract checks. | `scn001_sut_core/package.json`; `scn001_sut_core/index.js`; `scn001_eval/index.js`; `scn001_sut_core/test/public-boundary.test.js`; `scn001_sut_core/test/run-state.test.js`; `scripts/check-dependency-boundary.mjs` | Default | uncovered | merge-blocking; claim-blocking | Governing consumer/need review for future API additions remains manual. |
-| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | This increment adds distinct SUT-owned candidate-bound proposal-intent formation for newly formed production-focused trial candidates. | Rule entry | Focused-diff inspection against starting `HEAD` `ee97252`; one primary purpose: extend formed candidate to candidate-bound proposal intent without realization, binding, or activation. | Current working-tree diff; changed SUT tests; this affected-row ledger update | Fresh independent ChatGPT review of the pushed proposal-intent diff is pending. | uncovered | advisory or merge-blocking by condition | The implementing task cannot self-attest the manual-review control; prior passing review covers only the earlier exact-basis corrective increment. |
+| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | This increment adds distinct SUT-owned candidate-bound proposal-intent formation for newly formed production-focused trial candidates. | Rule entry | Focused-diff inspection against starting `HEAD` `ee97252`; one primary purpose: extend formed candidate to candidate-bound proposal intent without realization, binding, or activation. | Current working-tree diff; changed SUT tests; this affected-row ledger update | The passing independent ChatGPT review of proposal-intent commit `77250a0789f2bf980b4d4d4cc371e9dacfd2682d` is recorded below. | review-only | advisory or merge-blocking by condition | The bounded proposal-intent diff received qualifying independent review for this change; future non-throwaway semantic changes require a fresh change-specific review. |
 | `ENG-HEALTH-COMMENT-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No JavaScript implementation/test comment is present or used to justify behavior. Future trigger: adding, generating, or relying on a code comment. | Rule entry | Source inventory. | `rg` over `scn001_sut_core`, `scn001_eval`, `tests`, and `scripts` returned no JavaScript comment lines | Not applicable until trigger. | N/A | advisory or merge-blocking by condition | Governance prose is controlled as documentation/claims; code comments require review when introduced. |
 | `ENG-HEALTH-DEAD-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No dead, commented-out, prototype, experiment, or throwaway implementation artifact is present. Future trigger: introducing or promoting one. | Rule entry | Repository and source inventory; manual review. | Current package/source tree; no throwaway directory or commented-out implementation | Not applicable until trigger. | N/A | merge-blocking; promotion-blocking | Static gate does not comprehensively prove reachability; disposition must change if a prototype appears. |
 | `ENG-HEALTH-DEPENDENCY-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Evaluation declares a runtime dependency on the local SUT package and CI installs the workspace lock. | Rule entry | Local file dependency; lockfile; dependency-boundary static check; no external runtime dependency. | `package-lock.json`; `scn001_eval/package.json`; `scn001_sut_core/package.json`; `scripts/check-dependency-boundary.mjs`; `README.md` | Default | uncovered | merge-blocking; promotion-blocking | Dependency rationale/maintenance review is manual; future external dependencies require a new review record. |
@@ -323,7 +324,9 @@ This increment does not claim `DP-PROPOSAL` complete, does not satisfy `SCN001-S
 
 Rows reviewed for this increment were `ENG-BASE-001`, `ENG-CHANGE-001`, `ENG-CLAIM-001`, `ENG-CLAIM-002`, `ENG-CONF-CAPTURE-001`, `ENG-CONF-CLAIM-001`, `ENG-CONF-DEP-001`, `ENG-CONF-DEP-002`, `ENG-CONF-HARNESS-001`, `ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`, `ENG-CONF-PUBLIC-001`, `ENG-CONF-REF-001`, `ENG-CONF-RUN-001`, `ENG-CONF-SIM-001`, `ENG-CONF-STATE-001`, `ENG-CONF-STATE-002`, `ENG-HEALTH-API-001`, `ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-TEST-001`, and `ENG-HEALTH-TEST-002`. Applicability, rule revisions, promotion mappings, and active exceptions did not change. Evidence/mechanism and residual-risk text changed only for proposal-affected rows. `ENG-BASE-001`, `ENG-CHANGE-001`, the claim-boundary rows, `ENG-CONF-PUBLIC-001`, and `ENG-HEALTH-API-001` remain unchanged after explicit review because the increment follows accepted sources, crosses no unresolved trigger, creates no broader claim, and adds no public method.
 
-At completion of the implementing task, `ENG-HEALTH-CHANGE-001` is `uncovered`. Fresh independent ChatGPT review of the pushed proposal-intent diff is pending, and the previous passing exact-basis corrective review is preserved historically rather than cited for this new change. Current status counts are therefore:
+At completion of the implementing task, `ENG-HEALTH-CHANGE-001` was left `uncovered`. The implementing Codex task could not self-attest the rule's manual-review control, the new proposal-intent diff had not yet received a fresh qualifying independent review, and the previous passing exact-basis corrective review was correctly preserved as historical rather than reused for this change.
+
+At that point, status counts were:
 
 * 44 rules `applicable` and 5 `not-applicable`;
 * 9 applicable rules `review-only`;
@@ -331,4 +334,68 @@ At completion of the implementing task, `ENG-HEALTH-CHANGE-001` is `uncovered`. 
 * no applicable rule `revalidation-required`;
 * no rule claimed `enforced`.
 
-New residual risk is limited to the unreviewed proposal-intent diff and the intentionally absent later realization-selection, simulator realization, response-binding, activation, and lifecycle semantics. Existing residual risks remain preserved, including incomplete generic post-hoc-lineage attacks, absent later state families, manual semantic-selector/test-validity review, and unverified protected required-check configuration.
+The subsequent independent review outcome is recorded separately below. It does not rewrite the implementing task's honest pending-review disposition.
+
+At completion of the implementing task, residual risk included the then-unreviewed proposal-intent diff and the intentionally absent later realization-selection, simulator realization, response-binding, activation, and lifecycle semantics. The subsequent review closes only the proposal-intent change-review condition. Existing residual risks remain preserved, including incomplete generic post-hoc-lineage attacks, absent later state families, manual semantic-selector/test-validity review, and unverified protected required-check configuration.
+
+## Candidate-Bound Proposal-Intent Independent Review Closure
+
+On 2026-07-10, an independent ChatGPT review examined the proposal-intent implementation at workbench commit `77250a0789f2bf980b4d4d4cc371e9dacfd2682d` against the accepted proposal/candidate boundary, the previously reviewed retained-state and exact-basis stabilization, and the applicable conformance obligations.
+
+The independent review inspected:
+
+* integration of proposal-intent formation into normal SUT interaction processing;
+* the exact current candidate-formation transition anchor;
+* candidate-transition result-reference resolution;
+* production-candidate eligibility checks;
+* candidate/proposal identity separation;
+* candidate structural invariance;
+* proposal material intent and exact proposed-scope preservation;
+* candidate-identity proposal reuse;
+* equal-payload distinct-candidate behavior;
+* multiple-proposal integrity failure;
+* proposal-to-candidate transition ancestry;
+* proposal-transition candidate basis;
+* absence of copied candidate evidence/support relations on the proposal;
+* multiple-current-candidate behavior;
+* absence of proposal realization selection or order-based preference;
+* passive inspection and replay behavior;
+* independent-run proposal isolation;
+* public SUT boundary stability;
+* output, simulator-realization, response-binding, activation, and formal-evaluation non-scope.
+
+The review confirms that proposal intent is a distinct SUT-owned semantic record rather than a mutation of candidate state. An eligible newly formed `production_focused_practice` candidate remains `formed_non_active` at lifecycle version `1`, retains its identity and material state, and is represented by a separate `proposal_intent` identity.
+
+Proposal-intent formation is anchored to the exact candidate-formation transition created during the current processing pass and resolves that transition's result references directly. It does not scan retained candidates, rank candidates, choose first/latest/best/relevant state, or accept a harness-provided candidate selector.
+
+Each proposal intent:
+
+* references the exact candidate identity;
+* represents offering that scoped trial for later user decision;
+* preserves the candidate's material trial intent;
+* preserves a structurally separate copy of the candidate's exact proposed scope;
+* contains no surfaced proposal wording or simulator realization payload;
+* contains no fixture, path, checkpoint, claim-class, expected-transition, or scoring selector;
+* remains inspectable SUT-owned state before realization.
+
+Each newly formed proposal has contemporaneous `transition_ancestry` to its exact candidate with target role `candidate`. The proposal-intent transition consumes the exact candidate as `basis` with target role `proposal_candidate` and records the newly created proposal as a transition result. Candidate evidence lineage remains on the candidate: proposal records do not copy direct comparison support, observation basis, or selected-affordance basis relations.
+
+Proposal identity is bound to candidate identity. Exact replay does not create a duplicate candidate or proposal. Distinct candidate identities with structurally identical material intent and scope receive distinct proposal identities. Multiple materially distinct proposal intents resolving for one exact candidate fail closed rather than being selected by order, and materially conflicting existing proposal state fails closed.
+
+When one current candidate-formation transition produces multiple eligible production candidates, proposal formation preserves the multiplicity by creating one proposal intent per exact candidate. It does not select a proposal for realization and creates no `selectedForRealization`, preferred, primary, or equivalent arbitration state. The evaluation harness does not participate in proposal-intent construction or candidate selection.
+
+The review confirms that the increment does not create surfaced wording, public realization output, simulator realization, user-response binding, activation assessment, active-trial state, proposal-specific negative state, or proposal lifecycle/surface-status machinery. The SUT public method set remains unchanged, `processCurrentInteraction()` remains an empty-output public operation, and `emitAvailableOutputs()` remains empty.
+
+The review also confirms that this increment does not claim `DP-PROPOSAL` complete, does not satisfy `SCN001-SSFO-V0.2.0-OBL-EVID-002`, and creates no formal evaluation record, scoreability predicate, completion evidence package, completion-eligibility determination, owner disposition, milestone-completion claim, broader `SCN-001` pass claim, or production-readiness claim.
+
+Independent review outcome: **pass for the bounded candidate-bound proposal-intent change under `ENG-HEALTH-CHANGE-001 R2`**.
+
+This passing review closes only the change-specific manual-review condition for proposal-intent commit `77250a0789f2bf980b4d4d4cc371e9dacfd2682d`. It does not establish automated enforcement, does not satisfy `ENG-HEALTH-TEST-002` test-validity review, does not establish proposal realization or actual surfacing, and does not remove unrelated residual risks or unverified required-check/branch-protection integration.
+
+With this recorded review outcome, the current applicability/status counts are:
+
+* 44 rules `applicable` and 5 `not-applicable`;
+* 10 applicable rules `review-only`;
+* 34 applicable rules `uncovered`;
+* no applicable rule `revalidation-required`;
+* no rule claimed `enforced`.
