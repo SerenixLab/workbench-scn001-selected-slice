@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { createSutBoundary } from "@zoey/scn001-sut-core";
 
-import { createEvaluationHarness } from "../index.js";
+import { createEvaluationHarness, createSimulatorProjector, realizeProposalOutput } from "../index.js";
 import { projectFixtureRecord } from "../src/fixtureProjection.js";
 
 function communicationFixtureRecord(overrides = {}) {
@@ -213,4 +213,165 @@ test("evaluation cannot import a private SUT module through the package boundary
     import("@zoey/scn001-sut-core/src/runState.js"),
     (error) => error.code === "ERR_PACKAGE_PATH_NOT_EXPORTED"
   );
+});
+
+function productionProposalRecords() {
+  return [
+    taskObservationFixtureRecord(),
+    taskObservationFixtureRecord({
+      fixtureRecordId: "C-006",
+      occurrenceOrder: 2,
+      data: {
+        ...taskObservationFixtureRecord().data,
+        itemRef: "production-calibration-items",
+        taskMode: "spontaneous_production",
+        performance: { kind: "aggregate", correctCount: 1, totalCount: 4 }
+      }
+    }),
+    {
+      fixtureRecordId: "A-001", role: "affordance_fact", sourceActor: "fixture-driver",
+      occurrenceOrder: 3,
+      data: { direction: "TRIAL-PROD-FOCUS", description: "Production-focused practice." },
+      oracleAnnotations: { expectedTransition: "proposal" }
+    }
+  ];
+}
+
+test("simulator validates the closed request and deterministically preserves material meaning", () => {
+  const request = {
+    kind: "proposal_realization_request",
+    outputRef: "transition_00000000-0000-0000-0000-000000000000",
+    requestedRef: "state_00000000-0000-0000-0000-000000000000",
+    candidateRef: "state_11111111-1111-1111-1111-111111111111",
+    materialIntent: "offer_scoped_trial_for_user_decision",
+    candidateMaterialIntent: "practice_spontaneous_production_for_target_dimension",
+    proposedScope: { dimension: "particle_pattern_a", taskMode: "spontaneous_production" }
+  };
+  const first = realizeProposalOutput(request, 4);
+  const second = realizeProposalOutput(request, 4);
+  assert.equal(first.realizedBehavior, second.realizedBehavior);
+  assert.equal(first.realizedBehavior, "Would you like to try a short practice focused on producing particle pattern a yourself?");
+  assert.equal(first.fidelity, "match");
+  assert.equal(first.requestedOutputRef, request.outputRef);
+  assert.equal(first.requestedRef, request.requestedRef);
+  assert.equal(first.candidateRef, request.candidateRef);
+  assert.throws(() => realizeProposalOutput({ ...request, fixturePath: "canonical" }), /contain exactly/);
+  const missing = structuredClone(request);
+  delete missing.materialIntent;
+  assert.throws(() => realizeProposalOutput(missing), /contain exactly/);
+});
+
+test("dedicated simulator projection strips evaluation-only fields and stabilizes identity per projector", () => {
+  const request = {
+    kind: "proposal_realization_request", outputRef: "transition_x", requestedRef: "state_x",
+    candidateRef: "state_y", materialIntent: "offer_scoped_trial_for_user_decision",
+    candidateMaterialIntent: "practice_spontaneous_production_for_target_dimension",
+    proposedScope: { dimension: "particle_pattern_a", taskMode: "spontaneous_production" }
+  };
+  const record = realizeProposalOutput(request);
+  const projector = createSimulatorProjector();
+  const first = projector.project(record);
+  const second = projector.project(record);
+  const other = projector.project(realizeProposalOutput(request));
+  const independent = createSimulatorProjector().project(record);
+  assert.deepEqual(first, second);
+  assert.notEqual(first.sourceFactRef, record.simulatorRecordId);
+  assert.notEqual(first.sourceFactRef, other.sourceFactRef);
+  assert.notEqual(first.sourceFactRef, independent.sourceFactRef);
+  assert.deepEqual(Object.keys(first).sort(), [
+    "fidelity", "kind", "occurrenceOrder", "realizedBehavior", "requestedRef", "sourceActor", "sourceFactRef"
+  ].sort());
+  assert.doesNotMatch(JSON.stringify(first), /requestedOutputRef|candidateRef|MaterialIntent|Scope|mismatchOrigin|oracle|branch/i);
+});
+
+test("public proposal output routes once and SUT records exact realization without response or activation", () => {
+  const boundary = createSutBoundary();
+  const harness = createEvaluationHarness(boundary);
+  const runRef = harness.startRun();
+  harness.deliverFixtureRecords(runRef, productionProposalRecords());
+  assert.deepEqual(harness.processCurrentInteraction(runRef), []);
+  const output = harness.emitAvailableOutputs(runRef)[0];
+  const first = harness.realizeAvailableOutputs(runRef);
+  const second = harness.realizeAvailableOutputs(runRef);
+  assert.equal(first.length, 1);
+  assert.equal(first[0], second[0]);
+  assert.equal(first[0].requestedOutputRef, output.outputRef);
+  assert.equal(first[0].requestedRef, output.requestedRef);
+  let snapshot = harness.captureInspectionSnapshot(runRef);
+  assert.equal(snapshot.records.filter((record) => record.role === "simulator_realization").length, 1);
+  assert.equal(snapshot.relations.some((relation) => relation.relationKind === "realization"), false);
+  harness.processCurrentInteraction(runRef);
+  snapshot = harness.captureInspectionSnapshot(runRef);
+  const fact = snapshot.records.find((record) => record.role === "simulator_realization");
+  const realizationTransition = snapshot.records.find((record) => record.transitionKind === "record_proposal_realization");
+  assert.deepEqual(realizationTransition.inputReferences, [fact.reference, output.outputRef, output.requestedRef]);
+  assert.equal(snapshot.relations.filter((relation) => (
+    relation.relationKind === "realization" && relation.fromRef === fact.reference
+      && relation.toRef === output.requestedRef && relation.targetRole === "proposal_intent"
+  )).length, 1);
+  assert.deepEqual(harness.emitAvailableOutputs(runRef), []);
+  assert.equal(snapshot.records.some((record) => [
+    "user_response_binding", "binding_assessment", "activation_assessment", "active_trial",
+    "formal_evaluation_record", "scoring_artifact"
+  ].includes(record.family)), false);
+  assert.doesNotMatch(JSON.stringify(snapshot), /P-USER-ACCEPT/);
+});
+
+test("harness fails closed before routing multiple outputs", () => {
+  const real = createSutBoundary();
+  let ingressCalls = 0;
+  const fake = Object.freeze({
+    ...real,
+    emitAvailableOutputs() { return Object.freeze([{ outputRef: "a" }, { outputRef: "b" }]); },
+    ingestSutVisibleInputs(...args) { ingressCalls += 1; return real.ingestSutVisibleInputs(...args); }
+  });
+  const harness = createEvaluationHarness(fake);
+  const runRef = harness.startRun();
+  assert.throws(() => harness.realizeAvailableOutputs(runRef), /at most one/);
+  assert.equal(ingressCalls, 0);
+});
+
+test("routing failures do not commit transport success and remain retryable", () => {
+  for (const failureStage of ["render", "project", "ingress"]) {
+    const real = createSutBoundary();
+    let attempts = 0;
+    let fail = true;
+    const boundary = failureStage === "ingress" ? Object.freeze({
+      ...real,
+      ingestSutVisibleInputs(...args) {
+        if (fail && real.emitAvailableOutputs(args[0]).length === 1) {
+          attempts += 1;
+          throw new Error("injected ingress failure");
+        }
+        return real.ingestSutVisibleInputs(...args);
+      }
+    }) : real;
+    const harness = createEvaluationHarness(boundary, {
+      renderOutput(output, order) {
+        attempts += 1;
+        if (failureStage === "render" && fail) throw new Error("injected render failure");
+        return realizeProposalOutput(output, order);
+      },
+      createProjector() {
+        const projector = createSimulatorProjector();
+        return {
+          project(record) {
+            if (failureStage === "project" && fail) {
+              attempts += 1;
+              throw new Error("injected projection failure");
+            }
+            return projector.project(record);
+          }
+        };
+      }
+    });
+    const runRef = harness.startRun();
+    harness.deliverFixtureRecords(runRef, productionProposalRecords());
+    harness.processCurrentInteraction(runRef);
+    assert.throws(() => harness.realizeAvailableOutputs(runRef), /injected/);
+    const failedAttempts = attempts;
+    fail = false;
+    assert.equal(harness.realizeAvailableOutputs(runRef).length, 1);
+    assert.ok(attempts > failedAttempts);
+  }
 });

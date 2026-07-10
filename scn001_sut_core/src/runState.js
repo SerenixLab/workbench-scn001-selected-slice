@@ -228,12 +228,22 @@ export class RunState {
       interaction,
       candidateFormationTransitionRef
     );
+    const proposalRealizationSelectionTransitionRef = this.deriveProposalRealizationSelection(
+      interaction,
+      proposalIntentTransitionRef
+    );
+    const proposalRealizationTransitionRef = this.recordProposalRealizations(
+      interaction,
+      interactionFacts
+    );
     const semanticTransitionRefs = [
       attributionTransitionRef,
       temporalAssessmentTransitionRef,
       comparisonTransitionRef,
       candidateFormationTransitionRef,
-      proposalIntentTransitionRef
+      proposalIntentTransitionRef,
+      proposalRealizationSelectionTransitionRef,
+      proposalRealizationTransitionRef
     ].filter(Boolean);
     const processingTransition = this.createTransition(
       "process_interaction_segment",
@@ -278,6 +288,34 @@ export class RunState {
       throw new SutReferenceError(reference);
     }
     return clone(this.relations.filter((relation) => relation.fromRef === reference || relation.toRef === reference));
+  }
+
+  emitAvailableOutputs() {
+    const outstanding = [...this.records.values()]
+      .filter((record) => record.transitionKind === "select_proposal_for_realization")
+      .map((selection) => {
+        const proposal = this.validateProposalSelection(selection);
+        const realized = this.relations.some((relation) => (
+          relation.relationKind === "realization"
+          && relation.toRef === proposal.reference
+          && relation.targetRole === "proposal_intent"
+        ));
+        return realized ? undefined : { selection, proposal };
+      })
+      .filter(Boolean);
+    if (outstanding.length !== 1) {
+      return Object.freeze([]);
+    }
+    const { selection, proposal } = outstanding[0];
+    return deepFreeze([{
+      kind: "proposal_realization_request",
+      outputRef: selection.reference,
+      requestedRef: proposal.reference,
+      candidateRef: proposal.candidateRef,
+      materialIntent: proposal.materialIntent,
+      candidateMaterialIntent: proposal.candidateMaterialIntent,
+      proposedScope: structuredClone(proposal.proposedScope)
+    }]);
   }
 
   deriveAttributedAssertions(interaction, interactionFacts) {
@@ -855,6 +893,154 @@ export class RunState {
     return transition.reference;
   }
 
+  deriveProposalRealizationSelection(interaction, proposalIntentTransitionRef) {
+    if (!proposalIntentTransitionRef) return undefined;
+    const formation = this.records.get(proposalIntentTransitionRef);
+    if (
+      formation?.transitionKind !== "form_candidate_bound_proposal_intent"
+      || formation.interactionRef !== interaction.reference
+    ) {
+      throw new SutStateIntegrityError(
+        "Proposal realization selection requires the current exact proposal-intent transition."
+      );
+    }
+    const proposals = formation.resultReferences.map((reference) => {
+      const proposal = this.records.get(reference);
+      if (
+        proposal?.family !== "proposal_intent"
+        || proposal.createdByTransitionRef !== formation.reference
+      ) {
+        throw new SutStateIntegrityError(
+          "Proposal-intent transition contains an invalid proposal result reference."
+        );
+      }
+      return proposal;
+    });
+    if (proposals.length !== 1) return undefined;
+    const proposal = proposals[0];
+    const existing = [...this.records.values()].filter((record) => (
+      record.transitionKind === "select_proposal_for_realization"
+      && record.inputReferences?.includes(proposal.reference)
+    ));
+    if (existing.length > 1) {
+      throw new SutStateIntegrityError("Multiple proposal realization selections exist for one proposal.");
+    }
+    if (existing.length === 1) {
+      this.validateProposalSelection(existing[0], proposal.reference);
+      return existing[0].reference;
+    }
+    const selection = this.createTransition(
+      "select_proposal_for_realization",
+      [proposal.reference],
+      [],
+      interaction.reference
+    );
+    selection.result = "proposal_selected_for_realization";
+    this.records.set(selection.reference, selection);
+    this.relations.push({
+      relationKind: "basis",
+      fromRef: selection.reference,
+      toRef: proposal.reference,
+      targetRole: "selected_proposal_intent",
+      effectiveOrder: selection.createdOrder,
+      createdOrder: selection.createdOrder,
+      assertedByRole: "sut"
+    });
+    return selection.reference;
+  }
+
+  validateProposalSelection(selection, expectedProposalRef) {
+    const proposalRef = selection.inputReferences?.[0];
+    const proposal = this.records.get(proposalRef);
+    const basis = this.relations.filter((relation) => (
+      relation.fromRef === selection.reference
+      && relation.relationKind === "basis"
+      && relation.targetRole === "selected_proposal_intent"
+      && relation.toRef === proposalRef
+    ));
+    if (
+      selection.family !== "sut_transition_evidence"
+      || selection.origin !== "sut"
+      || selection.transitionKind !== "select_proposal_for_realization"
+      || selection.result !== "proposal_selected_for_realization"
+      || selection.inputReferences.length !== 1
+      || selection.resultReferences.length !== 0
+      || proposal?.family !== "proposal_intent"
+      || proposal.origin !== "sut"
+      || (expectedProposalRef && proposalRef !== expectedProposalRef)
+      || selection.interactionRef !== proposal.interactionRef
+      || selection.createdOrder <= proposal.createdOrder
+      || basis.length !== 1
+      || basis[0].createdOrder !== selection.createdOrder
+    ) {
+      throw new SutStateIntegrityError("Proposal realization selection evidence is malformed.");
+    }
+    return proposal;
+  }
+
+  recordProposalRealizations(interaction, interactionFacts) {
+    const facts = interactionFacts.filter((fact) => fact.role === "simulator_realization");
+    if (facts.length === 0) return undefined;
+    if (facts.length > 1) {
+      throw new SutStateIntegrityError("One interaction cannot record multiple proposal realizations.");
+    }
+    const fact = facts[0];
+    const proposal = this.records.get(fact.payload.requestedRef);
+    if (proposal?.family !== "proposal_intent" || proposal.origin !== "sut") {
+      throw new SutStateIntegrityError("Simulator realization must target a SUT proposal intent.");
+    }
+    assertProposalPreservesCandidate(proposal, this.records.get(proposal.candidateRef));
+    const selections = [...this.records.values()].filter((record) => (
+      record.transitionKind === "select_proposal_for_realization"
+      && record.inputReferences?.includes(proposal.reference)
+    ));
+    if (selections.length !== 1) {
+      throw new SutStateIntegrityError("Proposal realization requires exactly one prior SUT selection.");
+    }
+    const selection = selections[0];
+    this.validateProposalSelection(selection, proposal.reference);
+    if (selection.createdOrder >= fact.createdOrder) {
+      throw new SutStateIntegrityError("Proposal selection must precede simulator realization input.");
+    }
+    const existingRelations = this.relations.filter((relation) => (
+      relation.relationKind === "realization" && relation.toRef === proposal.reference
+    ));
+    if (existingRelations.length > 0) {
+      if (existingRelations.length === 1 && existingRelations[0].fromRef === fact.reference) {
+        return undefined;
+      }
+      throw new SutStateIntegrityError("A distinct realization already exists for this proposal.");
+    }
+    const transition = this.createTransition(
+      "record_proposal_realization",
+      [fact.reference, selection.reference, proposal.reference],
+      [],
+      interaction.reference
+    );
+    transition.result = "proposal_realization_recorded";
+    this.records.set(transition.reference, transition);
+    for (const [reference, targetRole] of [
+      [fact.reference, "simulator_realization_fact"],
+      [selection.reference, "proposal_realization_selection"]
+    ]) {
+      this.relations.push({
+        relationKind: "basis", fromRef: transition.reference, toRef: reference, targetRole,
+        effectiveOrder: transition.createdOrder, createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    this.relations.push({
+      relationKind: "realization",
+      fromRef: fact.reference,
+      toRef: proposal.reference,
+      targetRole: "proposal_intent",
+      effectiveOrder: transition.createdOrder,
+      createdOrder: transition.createdOrder,
+      assertedByRole: "sut"
+    });
+    return transition.reference;
+  }
+
   assertExistingCandidateBoundProposal(proposal, candidate) {
     assertProposalPreservesCandidate(proposal, candidate);
     const transition = this.records.get(proposal.createdByTransitionRef);
@@ -1166,4 +1352,12 @@ function assertProposalPreservesCandidate(proposal, candidate) {
 
 function clone(value) {
   return structuredClone(value);
+}
+
+function deepFreeze(value) {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
 }

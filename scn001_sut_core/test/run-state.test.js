@@ -75,6 +75,14 @@ function stateReferenceInput(stateRef, overrides = {}) {
   };
 }
 
+function simulatorInput(requestedRef, overrides = {}) {
+  return {
+    sourceFactRef: sourceRef(), kind: "simulator_realization",
+    sourceActor: "simulated_dependency", occurrenceOrder: 1, requestedRef,
+    realizedBehavior: "Would you like to try it?", fidelity: "match", ...overrides
+  };
+}
+
 function calibrationInputs(recognitionCorrect = 4, productionCorrect = 1, overrides = {}) {
   const dimension = overrides.dimension ?? "particle_pattern_a";
   return [
@@ -491,7 +499,7 @@ test("supported candidate creates a distinct immutable candidate-bound proposal 
   assert.ok(processingTransition.resultReferences.includes(proposalTransition.reference));
   assert.equal(Object.isFrozen(processingResult), true);
   assert.deepEqual(processingResult, []);
-  assert.deepEqual(boundary.emitAvailableOutputs(runRef), []);
+  assert.equal(boundary.emitAvailableOutputs(runRef).length, 1);
   assert.equal(recordsOf(boundary, runRef, "active_trial").length, 0);
   assert.equal(recordsOf(boundary, runRef, "activation_assessment").length, 0);
   assert.equal(recordsOf(boundary, runRef, "binding_assessment").length, 0);
@@ -526,6 +534,126 @@ test("proposal formation leaves the candidate structurally unchanged", () => {
 
   assert.deepEqual(run.records.get(candidate.reference), candidateBefore);
   assert.equal([...run.records.values()].filter((record) => record.family === "proposal_intent").length, 1);
+});
+
+test("one proposal creates exact SUT selection evidence and a passive frozen output", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const inputs = [...calibrationInputs(), affordanceInput()];
+  ingest(boundary, runRef, inputs);
+  boundary.processCurrentInteraction(runRef);
+  const proposal = recordsOf(boundary, runRef, "proposal_intent")[0];
+  const candidate = recordsOf(boundary, runRef, "trial_candidate")[0];
+  const selection = recordsOf(boundary, runRef, "sut_transition_evidence")
+    .find((record) => record.transitionKind === "select_proposal_for_realization");
+  const before = boundary.captureInspectionSnapshot(runRef);
+  const first = boundary.emitAvailableOutputs(runRef);
+  const second = boundary.emitAvailableOutputs(runRef);
+
+  assert.deepEqual(selection.inputReferences, [proposal.reference]);
+  assert.deepEqual(selection.resultReferences, []);
+  assert.equal(selection.result, "proposal_selected_for_realization");
+  assert.ok(selection.createdOrder > proposal.createdOrder);
+  assert.equal(boundary.enumerateLocalRelations(runRef, selection.reference).filter((relation) => (
+    relation.fromRef === selection.reference && relation.relationKind === "basis"
+      && relation.targetRole === "selected_proposal_intent" && relation.toRef === proposal.reference
+  )).length, 1);
+  assert.deepEqual(first, second);
+  assert.deepEqual(Object.keys(first[0]).sort(), [
+    "candidateMaterialIntent", "candidateRef", "kind", "materialIntent", "outputRef",
+    "proposedScope", "requestedRef"
+  ].sort());
+  assert.equal(first[0].outputRef, selection.reference);
+  assert.equal(first[0].requestedRef, proposal.reference);
+  assert.equal(first[0].candidateRef, candidate.reference);
+  assert.equal(Object.isFrozen(first), true);
+  assert.equal(Object.isFrozen(first[0]), true);
+  assert.equal(Object.isFrozen(first[0].proposedScope), true);
+  assert.deepEqual(boundary.captureInspectionSnapshot(runRef), before);
+  assert.doesNotMatch(JSON.stringify(first), /fixture|path|bundle|checkpoint|claim|oracle|branch|score|wording/i);
+});
+
+test("selection and realization integrity attacks fail closed", () => {
+  const run = new RunState();
+  const derived = deriveCandidateWithoutProposal(run);
+  const proposalTransitionRef = run.deriveCandidateBoundProposalIntents(
+    derived.interaction, derived.candidateTransitionRef
+  );
+  const selectionRef = run.deriveProposalRealizationSelection(derived.interaction, proposalTransitionRef);
+  const selection = run.records.get(selectionRef);
+  run.relations.splice(run.relations.findIndex((relation) => (
+    relation.fromRef === selectionRef && relation.targetRole === "selected_proposal_intent"
+  )), 1);
+  assert.throws(() => run.emitAvailableOutputs(), /selection evidence is malformed/);
+
+  const duplicateRun = new RunState();
+  const duplicateDerived = deriveCandidateWithoutProposal(duplicateRun);
+  const transitionRef = duplicateRun.deriveCandidateBoundProposalIntents(
+    duplicateDerived.interaction, duplicateDerived.candidateTransitionRef
+  );
+  const firstSelectionRef = duplicateRun.deriveProposalRealizationSelection(
+    duplicateDerived.interaction, transitionRef
+  );
+  const duplicate = { ...structuredClone(duplicateRun.records.get(firstSelectionRef)), reference: createReference("transition") };
+  duplicateRun.records.set(duplicate.reference, duplicate);
+  assert.throws(() => duplicateRun.deriveProposalRealizationSelection(
+    duplicateDerived.interaction, transitionRef
+  ), /Multiple proposal realization selections/);
+});
+
+test("two current proposals create neither selection nor output in either result order", () => {
+  for (const dimensions of [["particle_pattern_a", "particle_pattern_b"], ["particle_pattern_b", "particle_pattern_a"]]) {
+    const boundary = createSutBoundary();
+    const runRef = boundary.startRun();
+    ingest(boundary, runRef, [
+      ...calibrationInputs(4, 1, { dimension: dimensions[0] }),
+      ...calibrationInputs(4, 1, { dimension: dimensions[1] }),
+      affordanceInput()
+    ]);
+    boundary.processCurrentInteraction(runRef);
+    assert.equal(recordsOf(boundary, runRef, "proposal_intent").length, 2);
+    assert.equal(recordsOf(boundary, runRef, "sut_transition_evidence")
+      .filter((record) => record.transitionKind === "select_proposal_for_realization").length, 0);
+    assert.deepEqual(boundary.emitAvailableOutputs(runRef), []);
+    assert.equal(recordsOf(boundary, runRef, "ambiguity_conflict").length, 0);
+    assert.equal(recordsOf(boundary, runRef, "clarification_request").length, 0);
+  }
+});
+
+test("proposal realization rejects wrong targets, missing selection, and a second distinct fact", () => {
+  for (const targetFamily of ["trial_candidate", "dimension_comparison"]) {
+    const boundary = createSutBoundary();
+    const runRef = boundary.startRun();
+    ingest(boundary, runRef, [...calibrationInputs(), affordanceInput()]);
+    boundary.processCurrentInteraction(runRef);
+    const target = recordsOf(boundary, runRef, targetFamily)[0];
+    ingest(boundary, runRef, [simulatorInput(target.reference)]);
+    assert.throws(() => boundary.processCurrentInteraction(runRef), /must target a SUT proposal intent/);
+  }
+
+  const unselected = new RunState();
+  const derived = deriveCandidateWithoutProposal(unselected);
+  unselected.deriveCandidateBoundProposalIntents(derived.interaction, derived.candidateTransitionRef);
+  const proposal = [...unselected.records.values()].find((record) => record.family === "proposal_intent");
+  const input = simulatorInput(proposal.reference);
+  unselected.assertSourceFactConsistency([input]);
+  unselected.ingest([input]);
+  const interaction = unselected.pendingInteractions.at(-1);
+  const facts = interaction.inputReferences.map((reference) => unselected.records.get(reference));
+  assert.throws(() => unselected.recordProposalRealizations(interaction, facts), /exactly one prior SUT selection/);
+
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  ingest(boundary, runRef, [...calibrationInputs(), affordanceInput()]);
+  boundary.processCurrentInteraction(runRef);
+  const selectedProposal = recordsOf(boundary, runRef, "proposal_intent")[0];
+  const first = simulatorInput(selectedProposal.reference);
+  ingest(boundary, runRef, [first]);
+  boundary.processCurrentInteraction(runRef);
+  ingest(boundary, runRef, [simulatorInput(selectedProposal.reference)]);
+  assert.throws(() => boundary.processCurrentInteraction(runRef), /distinct realization already exists/);
+  assert.equal(recordsOf(boundary, runRef, "sut_transition_evidence")
+    .filter((record) => record.transitionKind === "record_proposal_realization").length, 1);
 });
 
 test("exact candidate replay creates no duplicate proposal and retained candidates are not scanned", () => {

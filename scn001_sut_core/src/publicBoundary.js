@@ -51,8 +51,7 @@ export function createSutBoundary() {
     emitAvailableOutputs(...argumentsReceived) {
       assertArity("emitAvailableOutputs", argumentsReceived, 1);
       const [runRef] = argumentsReceived;
-      getRun(runs, runRef);
-      return Object.freeze([]);
+      return getRun(runs, runRef).emitAvailableOutputs();
     },
 
     captureInspectionSnapshot(...argumentsReceived) {
