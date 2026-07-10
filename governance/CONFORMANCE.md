@@ -1,59 +1,32 @@
 # SCN-001 Workbench Conformance Ledger
 
-This ledger is the complete applicability router for the 49 rules pinned by
-`governance/ZOEY_GOVERNANCE.lock`. This governance revalidation resolves the
-repository state at `HEAD` `9e8197e` plus the canonical projection from
-`zoey-meta` commit `6726ebef553b38db1d860ab207b4549db0dd57a0` and this local
-ledger update. The projected lock and snapshot digests identify the exact
-canonical basis; the verification record below identifies the commands run
-against the resulting working tree.
+This ledger is the complete applicability router for the 49 rules pinned by `governance/ZOEY_GOVERNANCE.lock`. This governance revalidation resolves the repository state at `HEAD` `9e8197e` plus the canonical projection from `zoey-meta` commit `6726ebef553b38db1d860ab207b4549db0dd57a0` and this local ledger update. 
+The projected lock and snapshot digests identify the exact canonical basis; the verification record below identifies the commands run against the resulting working tree.
 
-The workbench contains a two-package boundary spine and a stabilized semantic
-segment. The SUT derives attributed current-user assertions, selected temporal
-eligibility, scoped recognition/spontaneous-production comparisons, immutable
-non-active trial candidates, and separate non-activation dispositions from raw
-run-local source facts and exact typed local relation closure. It does not create current-skill
-facts, proposals, active trials, behavior outputs, or outcomes. There is
-no formal evaluation record, behavioral-compatibility claim, scoreability
-claim, milestone-acceptance claim, replay/restore path, or durable repository
-extraction.
+The workbench contains a two-package boundary spine and a stabilized semantic segment. The SUT derives attributed current-user assertions, selected temporal eligibility, scoped recognition/spontaneous-production comparisons, immutable non-active trial candidates, and separate non-activation dispositions from raw run-local source facts and exact typed local relation closure. 
+It does not create current-skill facts, proposals, active trials, behavior outputs, or outcomes. 
+There is no formal evaluation record, behavioral-compatibility claim, scoreability claim, milestone-acceptance claim, replay/restore path, or durable repository extraction.
 
 ## Ledger Conventions
 
-The table below is the sole authoritative applicability disposition. A rule is
-`not-applicable` only when its canonical trigger is absent from the current
-repository. Adding the named surface or artifact invalidates that disposition
-and requires a ledger update.
+The table below is the sole authoritative applicability disposition. 
+A rule is `not-applicable` only when its canonical trigger is absent from the current repository. Adding the named surface or artifact invalidates that disposition and requires a ledger update.
 
-Repository-owner-authorized human review confirmed the R2/R3 applicability
-remapping on 2026-07-10 for the historical pre-ADR-009 governance basis. That
-review remains a historical fact and is not represented as a new human review
-of this projection. Status follows the canonical status model:
+Repository-owner-authorized human review confirmed the R2/R3 applicability remapping on 2026-07-10 for the historical pre-ADR-009 governance basis. 
+That review remains a historical fact and is not represented as a new human review of this projection. 
+Status follows the canonical status model:
 
-- `review-only`: the applicable rule's canonical minimum is a qualifying
-  recorded review, and that review is recorded below;
-- `uncovered`: an applicable rule lacks a required check or its required
-  promotion integration, including every `CI-required` rule while protected
-  required-check configuration remains unverified;
-- `revalidation-required`: the governing source, rule, profile, or integration
-  basis changed and the required revalidation has not yet been completed;
-- `N/A`: the rule is `not-applicable`; this is not an enforcement claim and
-  must be revisited when its stated future trigger occurs.
+- `review-only`: the applicable rule's canonical minimum is a qualifying recorded review, and that review is recorded below;
+- `uncovered`: an applicable rule lacks a required check or its required promotion integration, including every `CI-required` rule while protected required-check configuration remains unverified;
+- `revalidation-required`: the governing source, rule, profile, or integration basis changed and the required revalidation has not yet been completed;
+- `N/A`: the rule is `not-applicable`; this is not an enforcement claim and must be revisited when its stated future trigger occurs.
 
 Unless a row says otherwise:
 
-- **Reviewer/Owner:** the repository owner supplied the historical review and
-  ADR-009 projection review recorded below. Changed rows identify the applicable
-  owner or independent-agent review closure where revalidation was completed.
+- **Reviewer/Owner:** the repository owner supplied the historical review and ADR-009 projection review recorded below. Changed rows identify the applicable owner or independent-agent review closure where revalidation was completed.
 - **Active exception:** none; `governance/EXCEPTIONS.md` does not exist.
-- **Actual promotion mechanism:** local `npm run check`; GitHub Actions
-  `.github/workflows/ci.yml` runs the same command for pull requests and pushes
-  to `main`; required-check/branch-protection configuration is not verified
-  locally.
-- **Verified at:** evidence resolved against base `HEAD` `9e8197e`, canonical
-  meta commit `6726ebef553b38db1d860ab207b4549db0dd57a0`, the exact projected
-  digests in `governance/ZOEY_GOVERNANCE.lock`, and this ledger working tree;
-  command results are recorded after the table.
+- **Actual promotion mechanism:** local `npm run check`; GitHub Actions `.github/workflows/ci.yml` runs the same command for pull requests and pushes to `main`; required-check/branch-protection configuration is not verified locally.
+- **Verified at:** evidence resolved against base `HEAD` `9e8197e`, canonical meta commit `6726ebef553b38db1d860ab207b4549db0dd57a0`, the exact projected digests in `governance/ZOEY_GOVERNANCE.lock`, and this ledger working tree; command results are recorded after the table.
 
 ## Complete Applicability And Evidence Index
 
@@ -97,7 +70,7 @@ Unless a row says otherwise:
 | `ENG-CONF-STATE-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Canonical ingestion, attribution, temporal assessment, dimension comparison, candidate formation, and non-activation disposition mutate selected-slice state. | `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2` | SUT transition records preserve order, once-per-interaction canonical semantic input refs, repeated cross-interaction ingestion evidence, semantic results, origin, exact comparison support, selected-affordance basis, exact no-comparison observation basis, and exact decision-basis reuse; provenance tests. Contract and negative modes. | `scn001_sut_core/src/runState.js`; `scn001_sut_core/test/run-state.test.js` | Default | uncovered | merge-blocking; claim-blocking | Proposal, activation, retirement/supersession, and outcome mutations do not exist and require their own provenance coverage. |
 | `ENG-HEALTH-ABSTRACTION-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Public boundary, harness, validation, fixture-projection, and run-state abstractions are non-throwaway. | `ADR-001 R1` | Bounded package/module responsibilities; manual justification review. | `README.md`; `scn001_sut_core/src/`; `scn001_eval/src/`; package `AGENTS.md` files | Local-recorded review | review-only | advisory or merge-blocking by condition | Abstraction justification is not captured by an automated check; future generalization could outrun concrete pressure. |
 | `ENG-HEALTH-API-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Both packages expose public exports and the harness consumes the unchanged SUT public surface. | Rule entry | Export map; frozen exact SUT public surface; internal-only source lookup and exact relation resolver; static and contract checks. | `scn001_sut_core/package.json`; `scn001_sut_core/index.js`; `scn001_eval/index.js`; `scn001_sut_core/test/public-boundary.test.js`; `scn001_sut_core/test/run-state.test.js`; `scripts/check-dependency-boundary.mjs` | Default | uncovered | merge-blocking; claim-blocking | Governing consumer/need review for future API additions remains manual. |
-| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | This corrective increment closes same-batch canonical-basis multiplicity and incomplete-evidence no-comparison reuse defects in the source-fact identity stabilization. | Rule entry | Focused-diff inspection against starting `HEAD` `b096885`; one primary purpose: close exact-basis multiplicity and incomplete-evidence reuse defects. | Current working-tree diff; changed SUT tests; this affected-row ledger update | The prior independent ChatGPT review is recorded below as blocking/failed; implementing-agent inspection cannot satisfy the manual-review control for the corrected diff. | uncovered | advisory or merge-blocking by condition | No passing qualifying independent review exists for the corrected implementation diff; fresh independent ChatGPT review is pending after this corrective commit is pushed. |
+| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | This corrective increment closes same-batch canonical-basis multiplicity and incomplete-evidence no-comparison reuse defects in the source-fact identity stabilization. | Rule entry | Focused-diff inspection against starting `HEAD` `b096885`; one primary purpose: close exact-basis multiplicity and incomplete-evidence reuse defects. | Current working-tree diff; changed SUT tests; this affected-row ledger update | The prior blocking review and the subsequent passing independent ChatGPT review of the corrected diff are recorded below. | review-only | advisory or merge-blocking by condition | The corrected implementation diff received qualifying independent review for this change; future non-throwaway semantic changes require a fresh change-specific review. |
 | `ENG-HEALTH-COMMENT-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No JavaScript implementation/test comment is present or used to justify behavior. Future trigger: adding, generating, or relying on a code comment. | Rule entry | Source inventory. | `rg` over `scn001_sut_core`, `scn001_eval`, `tests`, and `scripts` returned no JavaScript comment lines | Not applicable until trigger. | N/A | advisory or merge-blocking by condition | Governance prose is controlled as documentation/claims; code comments require review when introduced. |
 | `ENG-HEALTH-DEAD-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No dead, commented-out, prototype, experiment, or throwaway implementation artifact is present. Future trigger: introducing or promoting one. | Rule entry | Repository and source inventory; manual review. | Current package/source tree; no throwaway directory or commented-out implementation | Not applicable until trigger. | N/A | merge-blocking; promotion-blocking | Static gate does not comprehensively prove reachability; disposition must change if a prototype appears. |
 | `ENG-HEALTH-DEPENDENCY-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Evaluation declares a runtime dependency on the local SUT package and CI installs the workspace lock. | Rule entry | Local file dependency; lockfile; dependency-boundary static check; no external runtime dependency. | `package-lock.json`; `scn001_eval/package.json`; `scn001_sut_core/package.json`; `scripts/check-dependency-boundary.mjs`; `README.md` | Default | uncovered | merge-blocking; promotion-blocking | Dependency rationale/maintenance review is manual; future external dependencies require a new review record. |
@@ -113,53 +86,38 @@ Unless a row says otherwise:
 
 The exact locally affected set was:
 
-- integration-basis refresh: `ENG-AGENT-CODEX-001` through
-  `ENG-AGENT-CODEX-004`;
-- projection, source-authority, rule-revalidation, profile-composition, and
-  ledger-integrity controls: `ENG-BASE-001`, `ENG-BASE-002`,
-  `ENG-BASE-CONFORMANCE-001`, `ENG-BASE-CONFORMANCE-002`,
-  `ENG-BASE-PROFILE-001`, and `ENG-BASE-PUBLISH-001`;
-- changed register/rule closure: `ENG-BASE-REPO-001`, `ENG-CHANGE-001`,
-  `ENG-CLAIM-001`, `ENG-CLAIM-002`, `ENG-CLAIM-WORKBENCH-001`,
-  `ENG-CONF-EVIDENCE-001`, and `ENG-CONF-CLAIM-001`;
-- change-driven review controls: `ENG-HEALTH-CHANGE-001` and
-  `ENG-HEALTH-GEN-001`.
+- integration-basis refresh: `ENG-AGENT-CODEX-001` through `ENG-AGENT-CODEX-004`;
+- projection, source-authority, rule-revalidation, profile-composition, and ledger-integrity controls: `ENG-BASE-001`, `ENG-BASE-002`, `ENG-BASE-CONFORMANCE-001`, `ENG-BASE-CONFORMANCE-002`, `ENG-BASE-PROFILE-001`, and `ENG-BASE-PUBLISH-001`;
+- changed register/rule closure: `ENG-BASE-REPO-001`, `ENG-CHANGE-001`, `ENG-CLAIM-001`, `ENG-CLAIM-002`, `ENG-CLAIM-WORKBENCH-001`, `ENG-CONF-EVIDENCE-001`, and `ENG-CONF-CLAIM-001`;
+- change-driven review controls: `ENG-HEALTH-CHANGE-001` and `ENG-HEALTH-GEN-001`.
 
-Applicability did not change. Source, rule, evidence-path, and promotion mapping
-were reviewed for every rule above. Unchanged integration rules and uncovered
-governance controls retained their statuses only after that explicit review;
-`ENG-CONF-EVIDENCE-001` remains `not-applicable` after its dependency update to
-`ENG-CLAIM-001 R3` was checked against the current artifact inventory.
+Applicability did not change. Source, rule, evidence-path, and promotion mapping were reviewed for every rule above. Unchanged integration rules and uncovered governance controls retained their statuses only after that explicit review; `ENG-CONF-EVIDENCE-001` remains `not-applicable` after its dependency update to `ENG-CLAIM-001 R3` was checked against the current artifact inventory.
 
-The twelve rules made `revalidation-required` by the ADR-009 projection have now received the qualifying owner or independent-agent review outcomes recorded below. No rule remains `revalidation-required`.
+The twelve rules made `revalidation-required` by the ADR-009 projection received the qualifying owner or independent-agent review outcomes recorded below. No rule remained `revalidation-required` at completion of that revalidation.
 
-Current status counts:
+At completion of the ADR-009 projection revalidation, status counts were:
 
-* 44 rules are `applicable` and 5 are `not-applicable`;
-* 9 applicable rules are `review-only`;
-* 35 applicable rules are `uncovered`;
-* no applicable rule is `revalidation-required`;
-* no rule is claimed `enforced`.
+* 44 rules `applicable` and 5 `not-applicable`;
+* 10 applicable rules `review-only`;
+* 34 applicable rules `uncovered`;
+* no applicable rule `revalidation-required`;
+* no rule claimed `enforced`.
+
+Later change-specific review outcomes are recorded separately below and do not rewrite this historical projection-revalidation disposition.
 
 No formal evaluation record, formal campaign record, scoreability predicate, completion evidence package, completion-eligibility determination, owner disposition, milestone-completion claim, or broader `SCN-001` claim was created.
 
 ## Historical Human Review Record
 
-On 2026-07-10, before this ADR-009 projection, the repository owner accepted the
-independently reviewed applicability and then-current status disposition for all
-49 rules in the `OPEN_QUESTIONS V0.2.18` / profile `V0.3.1` basis. That review
-covered the combined working tree based on `HEAD` `4eb2287`, whose implementation
-changes were later committed as `9e8197e`:
+On 2026-07-10, before this ADR-009 projection, the repository owner accepted the independently reviewed applicability and then-current status disposition for all 49 rules in the `OPEN_QUESTIONS V0.2.18` / profile `V0.3.1` basis. 
+That review covered the combined working tree based on `HEAD` `4eb2287`, whose implementation changes were later committed as `9e8197e`:
 
 - 44 rules are `applicable` and 5 are `not-applicable`;
 - 10 applicable rules are `review-only`;
 - 34 applicable rules are `uncovered`;
 - no rule remains `revalidation-required` and no rule is claimed `enforced`.
 
-The historical review confirms only that prior basis and its ten local-recorded
-outcomes. It does not attest this projection, unverified protected-branch
-configuration, missing automated checks, or any stronger engineering, behavior,
-evaluation, scoreability, eligibility, or milestone claim.
+The historical review confirms only that prior basis and its ten local-recorded outcomes. It does not attest this projection, unverified protected-branch configuration, missing automated checks, or any stronger engineering, behavior, evaluation, scoreability, eligibility, or milestone claim.
 
 ## ADR-009 Projection Owner And Independent Review Closure
 
@@ -211,138 +169,137 @@ These review outcomes close source-change revalidation only. They do not establi
 
 ## Verification Record
 
-The verified working tree starts from workbench commit `9e8197e` and adds only
-the canonical governance projection from clean meta commit `6726ebe` plus this
-affected-rule ledger revalidation. It does not alter SUT code, evaluation code,
-tests, package manifests, dependency direction, public methods, or semantic
-implementation behavior.
+The verified working tree starts from workbench commit `9e8197e` and adds only the canonical governance projection from clean meta commit `6726ebe` plus this affected-rule ledger revalidation. It does not alter SUT code, evaluation code, tests, package manifests, dependency direction, public methods, or semantic implementation behavior.
 
 Verification against that exact basis on 2026-07-10:
 
-- `python3 governance/zoey_governance.py check --target . --conformance`:
-  passed; projection and conformance-index coverage checks passed;
-- manual lock-to-ledger rule/revision comparison: passed; 49 exact rule rows,
-  no duplicates, no missing/extra IDs, and every revision matches the lock;
-- `npm run check`: passed; governance, formatting, syntax for 12 JavaScript
-  files, dependency-boundary, and all 37 tests passed;
+- `python3 governance/zoey_governance.py check --target . --conformance`: passed; projection and conformance-index coverage checks passed;
+- manual lock-to-ledger rule/revision comparison: passed; 49 exact rule rows, no duplicates, no missing/extra IDs, and every revision matches the lock;
+- `npm run check`: passed; governance, formatting, syntax for 12 JavaScript files, dependency-boundary, and all 37 tests passed;
 - `git diff --check`: passed;
-- targeted stale-control searches: no active projected rule or ledger mapping
-  treats `SLICE-005` as unresolved, and no active rule/profile metadata retains
-  `OPEN_QUESTIONS V0.2.18`.
+- targeted stale-control searches: no active projected rule or ledger mapping treats `SLICE-005` as unresolved, and no active rule/profile metadata retains `OPEN_QUESTIONS V0.2.18`.
 
 ## Source-Fact Identity Stabilization Addendum
 
-The implementation change based on starting `HEAD` `3c3bcde` has one primary
-purpose: stabilize selected-slice source-fact identity and SUT-owned exact
-retained-state resolution. It does not implement proposal, activation,
-later-use applicability, behavior output, formal evaluation, or milestone
-completion artifacts.
+The implementation change based on starting `HEAD` `3c3bcde` has one primary purpose: stabilize selected-slice source-fact identity and SUT-owned exact retained-state resolution. It does not implement proposal, activation, later-use applicability, behavior output, formal evaluation, or milestone completion artifacts.
 
-The change-specific review covered `ENG-BASE-001`, `ENG-CHANGE-001`,
-`ENG-CONF-DEP-001`, `ENG-CONF-DEP-002`, `ENG-CONF-HARNESS-001`,
-`ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`, `ENG-CONF-PAYLOAD-001`,
-`ENG-CONF-PAYLOAD-002`, `ENG-CONF-PUBLIC-001`, `ENG-CONF-REF-001`,
-`ENG-CONF-ROLE-001`, `ENG-CONF-RUN-001`, `ENG-CONF-STATE-001`,
-`ENG-CONF-STATE-002`, `ENG-HEALTH-API-001`, `ENG-HEALTH-CHANGE-001`, and
-`ENG-HEALTH-TEST-001`. `ENG-CONF-DEP-002` remains unchanged: candidate
-endpoints are still immutable, versioned, and formed-non-active, and this
-stabilization introduces no later lifecycle mutation. `ENG-BASE-001` and
-`ENG-CHANGE-001` remain unchanged because the accepted local sources expressly
-permit conformance or semantic stabilization before proposal/activation and no
-open-question trigger is crossed.
+The change-specific review covered `ENG-BASE-001`, `ENG-CHANGE-001`, `ENG-CONF-DEP-001`, `ENG-CONF-DEP-002`, `ENG-CONF-HARNESS-001`, `ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`, `ENG-CONF-PAYLOAD-001`, `ENG-CONF-PAYLOAD-002`, `ENG-CONF-PUBLIC-001`, `ENG-CONF-REF-001`, `ENG-CONF-ROLE-001`, `ENG-CONF-RUN-001`, `ENG-CONF-STATE-001`, `ENG-CONF-STATE-002`, `ENG-HEALTH-API-001`, `ENG-HEALTH-CHANGE-001`, and `ENG-HEALTH-TEST-001`. `ENG-CONF-DEP-002` remains unchanged: candidate endpoints are still immutable, versioned, and formed-non-active, and this stabilization introduces no later lifecycle mutation. `ENG-BASE-001` and `ENG-CHANGE-001` remain unchanged because the accepted local sources expressly permit conformance or semantic stabilization before proposal/activation and no open-question trigger is crossed.
 
 Mechanism changes are limited to:
 
 - evaluation-owned per-run fixture-record-to-opaque-source mapping;
-- SUT-owned run-local source-to-canonical-input binding with complete
-  structural meaning collision rejection before mutation;
+- SUT-owned run-local source-to-canonical-input binding with complete structural meaning collision rejection before mutation;
 - canonical redelivery with new interaction and ingestion/processing evidence;
-- exact-basis reuse for initialized/current attribution, temporal assessment,
-  dimension comparison, production candidate, and comparison-backed
-  non-activation disposition;
-- exact role-qualified incoming comparison-basis relation intersection from
-  current observation refs, with complete-basis verification and ambiguity
-  failure;
-- removal of evaluation-authored `state_reference.purpose` selectors while
-  retaining SUT-owned temporal `useTarget` evidence.
+- exact-basis reuse for initialized/current attribution, temporal assessment, dimension comparison, production candidate, and comparison-backed non-activation disposition;
+- exact role-qualified incoming comparison-basis relation intersection from current observation refs, with complete-basis verification and ambiguity failure;
+- removal of evaluation-authored `state_reference.purpose` selectors while retaining SUT-owned temporal `useTarget` evidence.
 
-The stabilization did not change applicability, rule revision, promotion
-mapping, or active exceptions. Its completion report retained
-`ENG-HEALTH-CHANGE-001` as `review-only` while stating that no independent
-review of the implementation diff was recorded. The corrective record below
-supersedes that current status and records the subsequent independent result.
-The prior residual risks for lost fixture identity, evaluation-authored
-retained-state use selection, and `state_reference.purpose` leakage remain
-resolved. Other residual risks remain in the affected table rows.
+The stabilization did not change applicability, rule revision, promotion mapping, or active exceptions. Its completion report retained `ENG-HEALTH-CHANGE-001` as `review-only` while stating that no independent review of the implementation diff was recorded. 
+The corrective record below supersedes that current status and records the subsequent independent result.
+The prior residual risks for lost fixture identity, evaluation-authored retained-state use selection, and `state_reference.purpose` leakage remain resolved. Other residual risks remain in the affected table rows.
 
-Change-specific command results are recorded in the implementation completion
-report and must not be inferred from the historical verification record above.
+Change-specific command results are recorded in the implementation completion report and must not be inferred from the historical verification record above.
 
 External controls not verifiable from this checkout:
 
 - GitHub required-check and protected-branch configuration;
 - future change-specific qualifying reviews that have not yet occurred.
 
-No new semantic-contract exception is introduced. The `uncovered` rules
-and residual risks above block stronger enforcement or claim assertions; they
-do not waive accepted selected-slice obligations.
+No new semantic-contract exception is introduced. The `uncovered` rules and residual risks above block stronger enforcement or claim assertions; they do not waive accepted selected-slice obligations.
 
 ## Exact-Basis Corrective Increment And Blocking Review Record
 
-An independent ChatGPT review of the pushed source-fact identity stabilization
-found two blocking defects:
+An independent ChatGPT review of the pushed source-fact identity stabilization found two blocking defects:
 
-1. `RunState.ingest()` resolved canonical input-fact identity but appended the
-   same canonical fact once per submitted occurrence, allowing duplicate
-   interaction and transition basis participation, repeated attribution or
-   temporal work, and distorted observation aggregation in one processing pass.
-2. `deriveTrialCandidateDecisions()` and `findExistingTrialDecision()` matched a
-   no-comparison non-activation disposition by affordances, reason,
-   disposition, optional comparison, and optional dimension without preserving
-   the exact current observation basis, allowing materially different
-   incomplete evidence to reuse an older disposition.
+1. `RunState.ingest()` resolved canonical input-fact identity but appended the same canonical fact once per submitted occurrence, allowing duplicate interaction and transition basis participation, repeated attribution or temporal work, and distorted observation aggregation in one processing pass.
+2. `deriveTrialCandidateDecisions()` and `findExistingTrialDecision()` matched a no-comparison non-activation disposition by affordances, reason, disposition, optional comparison, and optional dimension without preserving the exact current observation basis, allowing materially different incomplete evidence to reuse an older disposition.
 
-That independent review outcome is **blocking/failed** for the reviewed
-stabilization diff. It is not a passing review and does not attest that this
-corrective implementation fixes the findings.
+That independent review outcome is **blocking/failed** for the reviewed stabilization diff. It is not a passing review and does not attest that this corrective implementation fixes the findings.
 
-The corrective increment based on starting `HEAD` `b096885` has one primary
-purpose: close exact-basis multiplicity and incomplete-evidence reuse defects in
-the source-fact identity stabilization. It preserves positional
-`acceptedInputRefs` for submitted-input correlation while unique-normalizing the
-semantic interaction and transition basis by canonical fact identity in
-first-occurrence order. Redelivery in later interactions remains separately
-inspectable, and distinct source identities with equal payload remain distinct.
+The corrective increment based on starting `HEAD` `b096885` has one primary purpose: close exact-basis multiplicity and incomplete-evidence reuse defects in the source-fact identity stabilization. It preserves positional `acceptedInputRefs` for submitted-input correlation while unique-normalizing the semantic interaction and transition basis by canonical fact identity in first-occurrence order. Redelivery in later interactions remains separately inspectable, and distinct source identities with equal payload remain distinct.
 
-No-comparison non-activation dispositions now preserve their exact current
-calibration observation refs alongside the existing exact affordance basis.
-Reuse requires exact observation and affordance reference sets. Newly created
-dispositions receive contemporaneous typed `basis` relations with target role
-`candidate_formation_observation`, and their creating transition includes those
-observation refs. Exact replay creates neither a second disposition nor new
-basis relations; materially changed incomplete evidence creates a distinct
-disposition. The same rule covers the complete-group/zero-comparison branch.
+No-comparison non-activation dispositions now preserve their exact current calibration observation refs alongside the existing exact affordance basis. Reuse requires exact observation and affordance reference sets. 
+Newly created dispositions receive contemporaneous typed `basis` relations with target role `candidate_formation_observation`, and their creating transition includes those observation refs. Exact replay creates neither a second disposition nor new basis relations; materially changed incomplete evidence creates a distinct disposition. The same rule covers the complete-group/zero-comparison branch.
 
-The directly affected rules are `ENG-CONF-DEP-001`,
-`ENG-CONF-INSPECT-002`, `ENG-CONF-REF-001`, `ENG-CONF-STATE-001`,
-`ENG-CONF-STATE-002`, `ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-TEST-001`, and
-`ENG-HEALTH-TEST-002`. Applicable rules reviewed without changed ledger
-mechanisms include `ENG-CONF-ROLE-001`, `ENG-HEALTH-API-001`,
-`ENG-BASE-001`, and `ENG-CLAIM-001`.
+The directly affected rules are `ENG-CONF-DEP-001`, `ENG-CONF-INSPECT-002`, `ENG-CONF-REF-001`, `ENG-CONF-STATE-001`, `ENG-CONF-STATE-002`, `ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-TEST-001`, and `ENG-HEALTH-TEST-002`. 
+Applicable rules reviewed without changed ledger mechanisms include `ENG-CONF-ROLE-001`, `ENG-HEALTH-API-001`, `ENG-BASE-001`, and `ENG-CLAIM-001`.
 
-`ENG-HEALTH-CHANGE-001` is now `uncovered`: the implementing Codex agent cannot
-self-attest the rule's manual-review control, and no passing qualifying review
-exists for the corrected diff. Fresh independent ChatGPT review is pending
-after this corrective commit is pushed. Current status counts are therefore 44
-applicable and 5 not applicable; 9 applicable rules are `review-only`, 35 are
-`uncovered`, none is `revalidation-required`, and no rule is claimed
-`enforced`.
+At completion of the corrective implementation task, `ENG-HEALTH-CHANGE-001` was left `uncovered`: the implementing Codex agent could not self-attest the rule's manual-review control, and the corrected diff had not yet received a fresh qualifying independent review.
 
-The two blocking residual risks identified by the independent review are closed
-by the narrow implementation and regression mechanisms above, subject to the
-pending independent review of the corrected diff. Remaining risks include the
-absent later semantic families, incomplete generic post-hoc-lineage attacks,
-manual semantic-selector and test-validity review, and unverified protected
-required-check configuration. No proposal, activation, later-use, behavior
-output, outcome, explanation, formal evaluation, scoring, or milestone artifact
-is added.
+At that point, status counts were 44 applicable and 5 not applicable; 9 applicable rules were `review-only`, 35 were `uncovered`, none was `revalidation-required`, and no rule was claimed `enforced`.
+
+The subsequent independent review outcome is recorded separately below. It does not rewrite the prior blocking review or the implementing task's honest pending-review disposition.
+
+
+The narrow implementation and regression mechanisms address the two blocking residual risks identified by the prior independent review. The subsequent independent review of the corrected diff is recorded below. 
+Remaining risks include the absent later semantic families, incomplete generic post-hoc-lineage attacks, manual semantic-selector and test-validity review, and unverified protected required-check configuration. No proposal, activation, later-use, behavior output, outcome, explanation, formal evaluation, scoring, or milestone artifact is added.
+
+## Exact-Basis Corrective Increment Independent Review Closure
+
+On 2026-07-10, an independent ChatGPT review examined the corrected implementation at workbench commit `dffafa3ddd4cbc9f158669e67a8c9e1f27ff5fb8` against the two blocking findings recorded in `Exact-Basis Corrective Increment And Blocking Review Record`, the existing source-fact identity stabilization boundary, and the applicable conformance obligations.
+
+The independent review inspected the current pushed implementation and tests for:
+
+* canonical source-fact ingestion and same-batch semantic-basis multiplicity;
+* interaction and ingestion-transition input references;
+* processing-transition basis use;
+* attributed-assertion derivation;
+* temporal-assessment exact-basis reuse;
+* recognition/spontaneous-production aggregation and comparison basis;
+* incomplete-evidence no-comparison disposition identity;
+* complete-group zero-comparison disposition identity;
+* contemporaneous observation-basis lineage;
+* exact replay and changed-basis behavior;
+* retained selector-removal protections;
+* run-local evaluation source-identity mapping;
+* state-reference input shape;
+* public SUT boundary stability;
+* output and proposal/activation non-scope.
+
+The review confirms that the first blocking defect is closed:
+
+* positional `acceptedInputRefs` may preserve one result per submitted input occurrence;
+* semantic interaction input references are unique by canonical retained fact identity in first-occurrence order;
+* ingestion-transition semantic input references and `ingested_input` basis relations use that unique canonical basis;
+* processing consumes the interaction's unique canonical input references;
+* one canonical source fact therefore participates at most once in one semantic interaction basis;
+* duplicate same-source communication cannot create two attributed assertions in one processing pass;
+* duplicate same-source task observations cannot be double-counted in recognition/spontaneous-production performance or comparison basis;
+* duplicate same-source historical observations cannot create duplicate same-basis temporal assessments in one processing pass;
+* distinct source identities with structurally equal payload remain distinct semantic facts and basis participants.
+
+The review confirms that the second blocking defect is closed:
+
+* no-comparison non-activation dispositions preserve exact current calibration `observationBasisRefs`;
+* exact-result reuse requires exact observation-reference-set equality together with the existing affordance, reason, disposition, optional comparison, and dimension basis;
+* exact incomplete-evidence replay reuses the same disposition;
+* materially changed incomplete evidence creates a distinct disposition;
+* distinct equal-payload observation sources remain distinct material decision bases;
+* complete-group zero-comparison decisions preserve and distinguish their exact observation bases;
+* newly created no-comparison dispositions receive contemporaneous typed `basis` relations with target role `candidate_formation_observation`;
+* exact replay does not create a second disposition or new relations that imply stronger independent support.
+
+The review also confirms that the corrective increment did not reintroduce the previously rejected retained-state selector pattern:
+
+* evaluation cannot select the retained comparison used for candidate formation;
+* `candidate_support` is not an accepted SUT-visible state-reference purpose;
+* evaluation-origin `independent_current_skill_authority` state-reference selection is absent;
+* state-reference projection carries no semantic purpose, applicability, relevance, or trial-choice selector;
+* candidate support continues to use exact SUT-owned typed local relation traversal from current canonical observation facts;
+* no first/latest/best/relevance selection policy, generic retrieval mechanism, graph-query API, or context-assembly mechanism was introduced;
+* no new SUT public method was added;
+* `emitAvailableOutputs()` remains empty;
+* proposal and activation remain unimplemented;
+* no formal evaluation, scoreability, completion-eligibility, milestone-completion, or broader `SCN-001` claim was created.
+
+Independent review outcome: **pass for the bounded corrective change under `ENG-HEALTH-CHANGE-001 R2`**.
+
+This passing review supersedes only the pending manual-review status of the corrected implementation diff. It does not rewrite the earlier blocking review as passing, does not establish automated enforcement, does not satisfy `ENG-HEALTH-TEST-002` test-validity review, and does not remove unrelated residual risks or unverified required-check/branch-protection integration.
+
+With this recorded review outcome, the current applicability/status counts are:
+
+* 44 rules `applicable` and 5 `not-applicable`;
+* 10 applicable rules `review-only`;
+* 34 applicable rules `uncovered`;
+* no applicable rule `revalidation-required`;
+* no rule claimed `enforced`.
