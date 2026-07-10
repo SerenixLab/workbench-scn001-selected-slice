@@ -3,7 +3,10 @@ import test from "node:test";
 
 import { createSutBoundary } from "@zoey/scn001-sut-core";
 
-import { createEvaluationHarness, createSimulatorProjector, realizeProposalOutput } from "../index.js";
+import { createEvaluationHarness } from "../index.js";
+import { createHarnessForMechanismTests } from "../src/harness.js";
+import { realizeProposalOutput } from "../src/simulator.js";
+import { createSimulatorProjector } from "../src/simulatorProjection.js";
 import { projectFixtureRecord } from "../src/fixtureProjection.js";
 
 function communicationFixtureRecord(overrides = {}) {
@@ -263,8 +266,11 @@ test("simulator validates the closed request and deterministically preserves mat
 
 test("dedicated simulator projection strips evaluation-only fields and stabilizes identity per projector", () => {
   const request = {
-    kind: "proposal_realization_request", outputRef: "transition_x", requestedRef: "state_x",
-    candidateRef: "state_y", materialIntent: "offer_scoped_trial_for_user_decision",
+    kind: "proposal_realization_request",
+    outputRef: "transition_00000000-0000-0000-0000-000000000000",
+    requestedRef: "state_00000000-0000-0000-0000-000000000000",
+    candidateRef: "state_11111111-1111-1111-1111-111111111111",
+    materialIntent: "offer_scoped_trial_for_user_decision",
     candidateMaterialIntent: "practice_spontaneous_production_for_target_dimension",
     proposedScope: { dimension: "particle_pattern_a", taskMode: "spontaneous_production" }
   };
@@ -346,7 +352,7 @@ test("routing failures do not commit transport success and remain retryable", ()
         return real.ingestSutVisibleInputs(...args);
       }
     }) : real;
-    const harness = createEvaluationHarness(boundary, {
+    const harness = createHarnessForMechanismTests(boundary, {
       renderOutput(output, order) {
         attempts += 1;
         if (failureStage === "render" && fail) throw new Error("injected render failure");
@@ -374,4 +380,48 @@ test("routing failures do not commit transport success and remain retryable", ()
     assert.equal(harness.realizeAvailableOutputs(runRef).length, 1);
     assert.ok(attempts > failedAttempts);
   }
+});
+
+test("formal harness rejects dependency overrides and package root exposes no simulator plugin seam", async () => {
+  const boundary = createSutBoundary();
+  assert.throws(
+    () => createEvaluationHarness(boundary, { renderOutput() {} }),
+    /accepts only the SUT public boundary/
+  );
+  const packageRoot = await import("../index.js");
+  assert.deepEqual(Object.keys(packageRoot), ["createEvaluationHarness"]);
+});
+
+test("simulator projector validates the complete closed full-record contract", () => {
+  const request = {
+    kind: "proposal_realization_request",
+    outputRef: "transition_00000000-0000-0000-0000-000000000000",
+    requestedRef: "state_00000000-0000-0000-0000-000000000000",
+    candidateRef: "state_11111111-1111-1111-1111-111111111111",
+    materialIntent: "offer_scoped_trial_for_user_decision",
+    candidateMaterialIntent: "practice_spontaneous_production_for_target_dimension",
+    proposedScope: { dimension: "particle_pattern_a", taskMode: "spontaneous_production" }
+  };
+  const valid = realizeProposalOutput(request);
+  const projector = createSimulatorProjector();
+  for (const key of Object.keys(valid)) {
+    const malformed = structuredClone(valid);
+    delete malformed[key];
+    assert.throws(() => projector.project(malformed));
+  }
+  assert.throws(() => projector.project({ ...valid, oracle: "canonical" }), /contain exactly/);
+  for (const field of ["requestedOutputRef", "requestedRef", "candidateRef"]) {
+    assert.throws(() => projector.project({ ...valid, [field]: "malformed" }), new RegExp(field));
+  }
+  assert.throws(() => projector.project({
+    ...valid, requestedScope: { dimension: "particle_pattern_a", taskMode: "recognition" }
+  }), /Invalid evaluation-side/);
+  assert.throws(() => projector.project({
+    ...valid,
+    realizedMaterialIntent: {
+      ...valid.realizedMaterialIntent,
+      proposedScope: { dimension: "different", taskMode: "spontaneous_production" }
+    }
+  }), /Invalid evaluation-side/);
+  assert.equal(projector.project(valid).fidelity, "match");
 });

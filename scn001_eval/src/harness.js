@@ -4,7 +4,14 @@ import { createSourceFactReference, projectFixtureRecords } from "./fixtureProje
 import { realizeProposalOutput } from "./simulator.js";
 import { createSimulatorProjector } from "./simulatorProjection.js";
 
-export function createEvaluationHarness(sutBoundary, dependencies = {}) {
+export function createEvaluationHarness(sutBoundary, ...extraArguments) {
+  if (extraArguments.length !== 0) {
+    throw new Error("The formal evaluation harness accepts only the SUT public boundary.");
+  }
+  return createHarnessForMechanismTests(sutBoundary);
+}
+
+export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
   assertPublicBoundary(sutBoundary);
   const renderOutput = dependencies.renderOutput ?? realizeProposalOutput;
   const createProjector = dependencies.createProjector ?? createSimulatorProjector;

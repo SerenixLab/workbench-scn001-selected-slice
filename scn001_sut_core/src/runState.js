@@ -295,12 +295,8 @@ export class RunState {
       .filter((record) => record.transitionKind === "select_proposal_for_realization")
       .map((selection) => {
         const proposal = this.validateProposalSelection(selection);
-        const realized = this.relations.some((relation) => (
-          relation.relationKind === "realization"
-          && relation.toRef === proposal.reference
-          && relation.targetRole === "proposal_intent"
-        ));
-        return realized ? undefined : { selection, proposal };
+        const realization = this.resolveProposalRealizationClosure(proposal.reference);
+        return realization ? undefined : { selection, proposal };
       })
       .filter(Boolean);
     if (outstanding.length !== 1) {
@@ -917,7 +913,7 @@ export class RunState {
       return proposal;
     });
     if (proposals.length !== 1) return undefined;
-    const proposal = proposals[0];
+    const proposal = this.validateCandidateBoundProposal(proposals[0].reference);
     const existing = [...this.records.values()].filter((record) => (
       record.transitionKind === "select_proposal_for_realization"
       && record.inputReferences?.includes(proposal.reference)
@@ -951,7 +947,7 @@ export class RunState {
 
   validateProposalSelection(selection, expectedProposalRef) {
     const proposalRef = selection.inputReferences?.[0];
-    const proposal = this.records.get(proposalRef);
+    const proposal = this.validateCandidateBoundProposal(proposalRef);
     const basis = this.relations.filter((relation) => (
       relation.fromRef === selection.reference
       && relation.relationKind === "basis"
@@ -965,12 +961,12 @@ export class RunState {
       || selection.result !== "proposal_selected_for_realization"
       || selection.inputReferences.length !== 1
       || selection.resultReferences.length !== 0
-      || proposal?.family !== "proposal_intent"
-      || proposal.origin !== "sut"
       || (expectedProposalRef && proposalRef !== expectedProposalRef)
       || selection.interactionRef !== proposal.interactionRef
       || selection.createdOrder <= proposal.createdOrder
       || basis.length !== 1
+      || basis[0].assertedByRole !== "sut"
+      || basis[0].effectiveOrder !== selection.createdOrder
       || basis[0].createdOrder !== selection.createdOrder
     ) {
       throw new SutStateIntegrityError("Proposal realization selection evidence is malformed.");
@@ -989,7 +985,7 @@ export class RunState {
     if (proposal?.family !== "proposal_intent" || proposal.origin !== "sut") {
       throw new SutStateIntegrityError("Simulator realization must target a SUT proposal intent.");
     }
-    assertProposalPreservesCandidate(proposal, this.records.get(proposal.candidateRef));
+    this.validateCandidateBoundProposal(proposal.reference);
     const selections = [...this.records.values()].filter((record) => (
       record.transitionKind === "select_proposal_for_realization"
       && record.inputReferences?.includes(proposal.reference)
@@ -1002,11 +998,9 @@ export class RunState {
     if (selection.createdOrder >= fact.createdOrder) {
       throw new SutStateIntegrityError("Proposal selection must precede simulator realization input.");
     }
-    const existingRelations = this.relations.filter((relation) => (
-      relation.relationKind === "realization" && relation.toRef === proposal.reference
-    ));
-    if (existingRelations.length > 0) {
-      if (existingRelations.length === 1 && existingRelations[0].fromRef === fact.reference) {
+    const existing = this.resolveProposalRealizationClosure(proposal.reference);
+    if (existing) {
+      if (existing.fact.reference === fact.reference) {
         return undefined;
       }
       throw new SutStateIntegrityError("A distinct realization already exists for this proposal.");
@@ -1041,32 +1035,145 @@ export class RunState {
     return transition.reference;
   }
 
-  assertExistingCandidateBoundProposal(proposal, candidate) {
+  validateCandidateBoundProposal(proposalRef) {
+    const proposal = this.records.get(proposalRef);
+    const candidate = this.records.get(proposal?.candidateRef);
+    if (proposal?.family !== "proposal_intent" || !candidate) {
+      throw new SutStateIntegrityError("Candidate-bound proposal identity is unresolved.");
+    }
+    assertEligibleProductionCandidate(candidate, candidate.createdByTransitionRef);
     assertProposalPreservesCandidate(proposal, candidate);
-    const transition = this.records.get(proposal.createdByTransitionRef);
-    const ancestryRelations = this.relations.filter((relation) => (
+
+    const candidateTransition = this.records.get(candidate.createdByTransitionRef);
+    const proposalTransition = this.records.get(proposal.createdByTransitionRef);
+    const interaction = this.records.get(proposal.interactionRef);
+    const ancestry = this.relations.filter((relation) => (
       relation.fromRef === proposal.reference
       && relation.relationKind === "transition_ancestry"
       && relation.targetRole === "candidate"
-      && relation.toRef === candidate.reference
     ));
-    const copiedEvidenceRelations = this.relations.filter((relation) => (
+    const copiedEvidence = this.relations.filter((relation) => (
       relation.fromRef === proposal.reference
       && ["basis", "support"].includes(relation.relationKind)
     ));
     if (
-      proposal.interactionRef !== candidate.interactionRef
-      || transition?.transitionKind !== "form_candidate_bound_proposal_intent"
-      || !transition.inputReferences.includes(candidate.reference)
-      || !transition.resultReferences.includes(proposal.reference)
-      || ancestryRelations.length !== 1
-      || ancestryRelations[0].createdOrder !== transition.createdOrder
-      || copiedEvidenceRelations.length !== 0
+      candidate.family !== "trial_candidate"
+      || candidate.candidateType !== "production_focused_practice"
+      || candidateTransition?.family !== "sut_transition_evidence"
+      || candidateTransition.origin !== "sut"
+      || candidateTransition.transitionKind !== "form_or_withhold_production_focused_candidate"
+      || candidateTransition.interactionRef !== candidate.interactionRef
+      || !candidateTransition.resultReferences?.includes(candidate.reference)
+      || candidate.createdOrder >= candidateTransition.createdOrder
+      || proposalTransition?.family !== "sut_transition_evidence"
+      || proposalTransition.origin !== "sut"
+      || proposalTransition.transitionKind !== "form_candidate_bound_proposal_intent"
+      || proposalTransition.result !== "proposal_intent_formed"
+      || interaction?.family !== "interaction_segment"
+      || interaction.origin !== "sut"
+      || proposalTransition.interactionRef !== proposal.interactionRef
+      || proposal.interactionRef !== candidate.interactionRef
+      || proposalTransition.inputReferences?.length !== 1
+      || proposalTransition.inputReferences[0] !== candidate.reference
+      || proposalTransition.resultReferences?.length !== 1
+      || proposalTransition.resultReferences[0] !== proposal.reference
+      || proposalTransition.createdOrder <= candidateTransition.createdOrder
+      || proposalTransition.createdOrder <= candidate.createdOrder
+      || proposal.createdOrder >= proposalTransition.createdOrder
+      || ancestry.length !== 1
+      || ancestry[0].toRef !== candidate.reference
+      || ancestry[0].assertedByRole !== "sut"
+      || ancestry[0].effectiveOrder !== proposal.createdOrder
+      || ancestry[0].createdOrder !== proposalTransition.createdOrder
+      || copiedEvidence.length !== 0
     ) {
       throw new SutStateIntegrityError(
-        "Existing candidate-bound proposal intent has malformed transition or ancestry evidence."
+        "Candidate-bound proposal intent has malformed material, creation, or ancestry closure."
       );
     }
+    return proposal;
+  }
+
+  resolveProposalRealizationClosure(proposalRef) {
+    const proposal = this.validateCandidateBoundProposal(proposalRef);
+    const selections = [...this.records.values()].filter((record) => (
+      record.transitionKind === "select_proposal_for_realization"
+      && record.inputReferences?.includes(proposal.reference)
+    ));
+    if (selections.length !== 1) {
+      throw new SutStateIntegrityError("Proposal realization closure requires exactly one selection.");
+    }
+    const selection = selections[0];
+    this.validateProposalSelection(selection, proposal.reference);
+    const relations = this.relations.filter((relation) => (
+      relation.relationKind === "realization" && relation.toRef === proposal.reference
+    ));
+    const transitions = [...this.records.values()].filter((record) => (
+      record.transitionKind === "record_proposal_realization"
+      && record.inputReferences?.includes(proposal.reference)
+    ));
+    if (relations.length === 0 && transitions.length === 0) return undefined;
+    if (relations.length !== 1 || transitions.length !== 1) {
+      throw new SutStateIntegrityError("Proposal realization evidence is malformed or ambiguous.");
+    }
+    const relation = relations[0];
+    const transition = transitions[0];
+    const fact = this.records.get(relation.fromRef);
+    const interaction = this.records.get(transition.interactionRef);
+    const factBasis = this.relations.filter((candidate) => (
+      candidate.fromRef === transition.reference
+      && candidate.relationKind === "basis"
+      && candidate.targetRole === "simulator_realization_fact"
+    ));
+    const selectionBasis = this.relations.filter((candidate) => (
+      candidate.fromRef === transition.reference
+      && candidate.relationKind === "basis"
+      && candidate.targetRole === "proposal_realization_selection"
+    ));
+    if (
+      fact?.family !== "input_fact"
+      || fact.origin !== "simulator"
+      || fact.role !== "simulator_realization"
+      || fact.payload?.requestedRef !== proposal.reference
+      || fact.createdOrder <= selection.createdOrder
+      || interaction?.family !== "interaction_segment"
+      || !interaction.inputReferences?.includes(fact.reference)
+      || transition.family !== "sut_transition_evidence"
+      || transition.origin !== "sut"
+      || transition.result !== "proposal_realization_recorded"
+      || transition.inputReferences?.length !== 3
+      || transition.inputReferences[0] !== fact.reference
+      || transition.inputReferences[1] !== selection.reference
+      || transition.inputReferences[2] !== proposal.reference
+      || transition.resultReferences?.length !== 0
+      || transition.createdOrder <= fact.createdOrder
+      || transition.createdOrder <= selection.createdOrder
+      || factBasis.length !== 1
+      || factBasis[0].toRef !== fact.reference
+      || factBasis[0].assertedByRole !== "sut"
+      || factBasis[0].effectiveOrder !== transition.createdOrder
+      || factBasis[0].createdOrder !== transition.createdOrder
+      || selectionBasis.length !== 1
+      || selectionBasis[0].toRef !== selection.reference
+      || selectionBasis[0].assertedByRole !== "sut"
+      || selectionBasis[0].effectiveOrder !== transition.createdOrder
+      || selectionBasis[0].createdOrder !== transition.createdOrder
+      || relation.targetRole !== "proposal_intent"
+      || relation.assertedByRole !== "sut"
+      || relation.fromRef === relation.toRef
+      || relation.effectiveOrder !== transition.createdOrder
+      || relation.createdOrder !== transition.createdOrder
+    ) {
+      throw new SutStateIntegrityError("Proposal realization evidence does not form an exact P/S/F/R/E closure.");
+    }
+    return { proposal, selection, fact, transition, relation };
+  }
+
+  assertExistingCandidateBoundProposal(proposal, candidate) {
+    if (proposal.candidateRef !== candidate.reference) {
+      throw new SutStateIntegrityError("Existing proposal resolves a different exact candidate identity.");
+    }
+    this.validateCandidateBoundProposal(proposal.reference);
   }
 
   resolveExactDimensionComparison(dimension, recognitionRefs, productionRefs) {
@@ -1322,6 +1429,7 @@ function assertEligibleProductionCandidate(candidate, candidateFormationTransiti
     || candidate.lifecycleVersion !== 1
     || candidate.purpose !== "provisional_evaluative_trial"
     || candidate.materialIntent !== "practice_spontaneous_production_for_target_dimension"
+    || !hasExactKeys(candidate.proposedScope, ["dimension", "taskMode"])
     || candidate.proposedScope?.taskMode !== "spontaneous_production"
     || typeof candidate.proposedScope?.dimension !== "string"
     || candidate.proposedScope.dimension.length === 0
@@ -1339,6 +1447,7 @@ function assertProposalPreservesCandidate(proposal, candidate) {
     || proposal.proposalType !== "candidate_bound_trial_offer"
     || proposal.candidateRef !== candidate.reference
     || proposal.materialIntent !== "offer_scoped_trial_for_user_decision"
+    || !hasExactKeys(proposal.proposedScope, ["dimension", "taskMode"])
     || proposal.candidateMaterialIntent !== candidate.materialIntent
     || !isDeepStrictEqual(proposal.proposedScope, candidate.proposedScope)
     || proposal.responseExpectation !== "candidate_bound_trial_decision"
@@ -1348,6 +1457,11 @@ function assertProposalPreservesCandidate(proposal, candidate) {
       "Existing candidate-bound proposal intent conflicts with its exact candidate material state."
     );
   }
+}
+
+function hasExactKeys(value, keys) {
+  return value && Object.getPrototypeOf(value) === Object.prototype
+    && Object.keys(value).sort().join("|") === [...keys].sort().join("|");
 }
 
 function clone(value) {

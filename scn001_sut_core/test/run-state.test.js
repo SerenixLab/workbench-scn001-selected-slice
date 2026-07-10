@@ -141,6 +141,33 @@ function deriveCandidateWithoutProposal(run, inputs = [...calibrationInputs(), a
   return { interaction, candidateTransitionRef, candidate };
 }
 
+function selectedProposalRun() {
+  const run = new RunState();
+  const derived = deriveCandidateWithoutProposal(run);
+  const proposalTransitionRef = run.deriveCandidateBoundProposalIntents(
+    derived.interaction, derived.candidateTransitionRef
+  );
+  const selectionRef = run.deriveProposalRealizationSelection(derived.interaction, proposalTransitionRef);
+  const proposal = [...run.records.values()].find((record) => record.family === "proposal_intent");
+  return { run, ...derived, proposalTransitionRef, selectionRef, proposal };
+}
+
+function realizedProposalRun() {
+  const selected = selectedProposalRun();
+  const input = simulatorInput(selected.proposal.reference);
+  selected.run.assertSourceFactConsistency([input]);
+  selected.run.ingest([input]);
+  const interaction = selected.run.pendingInteractions.at(-1);
+  const facts = interaction.inputReferences.map((reference) => selected.run.records.get(reference));
+  selected.run.recordProposalRealizations(interaction, facts);
+  const transition = [...selected.run.records.values()].find(
+    (record) => record.transitionKind === "record_proposal_realization"
+  );
+  const fact = facts[0];
+  const relation = selected.run.relations.find((candidate) => candidate.relationKind === "realization");
+  return { ...selected, input, interaction, fact, transition, relation };
+}
+
 test("rejected payload and changed source-identity content have no semantic side effect", () => {
   const boundary = createSutBoundary();
   const runRef = boundary.startRun();
@@ -599,6 +626,108 @@ test("selection and realization integrity attacks fail closed", () => {
   assert.throws(() => duplicateRun.deriveProposalRealizationSelection(
     duplicateDerived.interaction, transitionRef
   ), /Multiple proposal realization selections/);
+});
+
+test("candidate-bound proposal integrity is revalidated before emission and realization", () => {
+  const attacks = [
+    ({ proposal }) => { proposal.proposedScope.dimension = "corrupted"; },
+    ({ proposal }) => { proposal.materialIntent = "corrupted"; },
+    ({ proposal }) => { proposal.candidateMaterialIntent = "corrupted"; },
+    ({ run, proposal, candidate }) => {
+      const equalCandidate = { ...structuredClone(candidate), reference: createReference("state") };
+      run.records.set(equalCandidate.reference, equalCandidate);
+      proposal.candidateRef = equalCandidate.reference;
+    },
+    ({ run, proposal }) => {
+      run.relations.splice(run.relations.findIndex((relation) => (
+        relation.fromRef === proposal.reference && relation.relationKind === "transition_ancestry"
+      )), 1);
+    },
+    ({ run, proposal, candidate }) => {
+      run.relations.push({
+        ...structuredClone(run.relations.find((relation) => (
+          relation.fromRef === proposal.reference && relation.relationKind === "transition_ancestry"
+        ))),
+        toRef: createReference("state")
+      });
+    },
+    ({ run, proposalTransitionRef }) => {
+      run.records.get(proposalTransitionRef).inputReferences[0] = createReference("state");
+    },
+    ({ candidate }) => { candidate.lifecycleStatus = "active"; }
+  ];
+  for (const attack of attacks) {
+    const selected = selectedProposalRun();
+    attack(selected);
+    assert.throws(() => selected.run.emitAvailableOutputs(), /proposal|Proposal|candidate/);
+  }
+
+  const selected = selectedProposalRun();
+  const input = simulatorInput(selected.proposal.reference);
+  selected.run.assertSourceFactConsistency([input]);
+  selected.run.ingest([input]);
+  const interaction = selected.run.pendingInteractions.at(-1);
+  const facts = interaction.inputReferences.map((reference) => selected.run.records.get(reference));
+  selected.proposal.proposedScope.dimension = "corrupted";
+  assert.throws(
+    () => selected.run.recordProposalRealizations(interaction, facts),
+    /candidate material state/
+  );
+});
+
+test("exact proposal realization closure rejects malformed and ambiguous evidence", () => {
+  const attacks = [
+    ({ relation }) => { relation.targetRole = "candidate"; },
+    ({ relation }) => { relation.assertedByRole = "fixture"; },
+    ({ relation }) => { relation.fromRef = createReference("state"); },
+    ({ relation }) => { relation.createdOrder -= 1; },
+    ({ run, transition }) => { run.records.delete(transition.reference); },
+    ({ run, transition }) => {
+      run.relations.splice(run.relations.findIndex((relation) => (
+        relation.fromRef === transition.reference && relation.targetRole === "simulator_realization_fact"
+      )), 1);
+    },
+    ({ run, transition }) => {
+      run.relations.splice(run.relations.findIndex((relation) => (
+        relation.fromRef === transition.reference && relation.targetRole === "proposal_realization_selection"
+      )), 1);
+    },
+    ({ transition }) => { transition.inputReferences[1] = createReference("transition"); },
+    ({ transition }) => { transition.inputReferences[2] = createReference("state"); },
+    ({ run, transition }) => {
+      const duplicate = { ...structuredClone(transition), reference: createReference("transition") };
+      run.records.set(duplicate.reference, duplicate);
+    },
+    ({ run, relation }) => { run.relations.push(structuredClone(relation)); }
+  ];
+  for (const attack of attacks) {
+    const realized = realizedProposalRun();
+    attack(realized);
+    assert.throws(
+      () => realized.run.emitAvailableOutputs(),
+      /realization evidence|P\/S\/F\/R\/E/
+    );
+  }
+});
+
+test("exact realization replay reuses only a complete valid closure", () => {
+  const realized = realizedProposalRun();
+  assert.deepEqual(realized.run.emitAvailableOutputs(), []);
+  realized.run.assertSourceFactConsistency([structuredClone(realized.input)]);
+  realized.run.ingest([structuredClone(realized.input)]);
+  const replayInteraction = realized.run.pendingInteractions.at(-1);
+  const replayFacts = replayInteraction.inputReferences.map((reference) => realized.run.records.get(reference));
+  assert.equal(realized.run.recordProposalRealizations(replayInteraction, replayFacts), undefined);
+  assert.equal([...realized.run.records.values()].filter(
+    (record) => record.transitionKind === "record_proposal_realization"
+  ).length, 1);
+  assert.equal(realized.run.relations.filter((relation) => relation.relationKind === "realization").length, 1);
+
+  realized.relation.targetRole = "candidate";
+  assert.throws(
+    () => realized.run.recordProposalRealizations(replayInteraction, replayFacts),
+    /P\/S\/F\/R\/E/
+  );
 });
 
 test("two current proposals create neither selection nor output in either result order", () => {
