@@ -72,7 +72,11 @@ const inputValidators = {
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertOpaqueStateReference(input.stateRef, `${path}.stateRef`);
-    assertOneOf(input.purpose, ["independent_current_skill_authority"], `${path}.purpose`);
+    assertOneOf(
+      input.purpose,
+      ["independent_current_skill_authority", "candidate_support"],
+      `${path}.purpose`
+    );
   },
   outcome_fact: (input, path) => {
     assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "observation", "context"], path);

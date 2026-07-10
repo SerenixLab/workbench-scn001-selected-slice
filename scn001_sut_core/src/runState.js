@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { SutBoundaryValidationError, SutReferenceError } from "./errors.js";
 
+const PRODUCTION_FOCUSED_TRIAL_DIRECTION = "TRIAL-PROD-FOCUS";
+
 export class RunState {
   constructor() {
     this.runRef = createReference("run");
@@ -166,7 +168,8 @@ export class RunState {
     const semanticTransitionRefs = [
       this.deriveAttributedAssertions(interaction, interactionFacts),
       this.deriveTemporalEligibilityAssessments(interaction, interactionFacts),
-      this.deriveDimensionComparisons(interaction, interactionFacts)
+      this.deriveDimensionComparisons(interaction, interactionFacts),
+      this.deriveTrialCandidateDecisions(interaction, interactionFacts)
     ].filter(Boolean);
     const processingTransition = this.createTransition(
       "process_interaction_segment",
@@ -437,6 +440,181 @@ export class RunState {
         ));
       }
     }
+    return transition.reference;
+  }
+
+  deriveTrialCandidateDecisions(interaction, interactionFacts) {
+    const supportReferences = interactionFacts.filter((fact) => (
+      fact.role === "state_reference"
+      && fact.payload.purpose === "candidate_support"
+    ));
+    if (supportReferences.length === 0) {
+      return undefined;
+    }
+
+    const affordances = interactionFacts.filter((fact) => fact.role === "affordance_fact");
+    const productionAffordances = affordances.filter((fact) => (
+      fact.payload.direction === PRODUCTION_FOCUSED_TRIAL_DIRECTION
+    ));
+    const decisions = supportReferences.map((supportReference) => {
+      const comparison = this.records.get(supportReference.payload.stateRef);
+
+      if (comparison?.family !== "dimension_comparison") {
+        return {
+          kind: "non_activation",
+          supportReference,
+          disposition: "DISP-REQUEST-MORE-EVIDENCE",
+          reason: "candidate_support_did_not_resolve_to_dimension_comparison"
+        };
+      }
+      if (productionAffordances.length !== 1) {
+        return {
+          kind: "non_activation",
+          supportReference,
+          comparison,
+          disposition: "DISP-WITHHOLD",
+          reason: productionAffordances.length === 0
+            ? "required_trial_direction_unavailable"
+            : "required_trial_direction_ambiguous"
+        };
+      }
+
+      const selectedAffordance = productionAffordances[0];
+      if (comparison.comparisonResult !== "recognition_score_higher") {
+        return {
+          kind: "non_activation",
+          supportReference,
+          comparison,
+          selectedAffordance,
+          disposition: "DISP-WITHHOLD",
+          reason: comparison.comparisonResult === "no_observed_score_difference"
+            ? "no_observed_recognition_production_difference"
+            : "production_focused_direction_not_supported"
+        };
+      }
+
+      return {
+        kind: "candidate",
+        supportReference,
+        comparison,
+        selectedAffordance
+      };
+    });
+
+    const decisionRecords = decisions.map((decision) => (
+      decision.kind === "candidate"
+        ? {
+            reference: createReference("state"),
+            family: "trial_candidate",
+            origin: "sut",
+            candidateType: "production_focused_practice",
+            materialIntent: "practice_spontaneous_production_for_target_dimension",
+            candidateSource: "sut_transition",
+            purpose: "provisional_evaluative_trial",
+            trialDirectionRef: decision.selectedAffordance.reference,
+            supportComparisonRef: decision.comparison.reference,
+            proposedScope: {
+              dimension: decision.comparison.targetDimension,
+              taskMode: "spontaneous_production"
+            },
+            reversibility: "retirable_before_activation",
+            correctionPath: "separate_activation_required_before_behavior_effect",
+            lifecycleStatus: "formed_non_active",
+            uncertainty: decision.comparison.uncertainty,
+            statusOrigin: "sut_transition",
+            interactionRef: interaction.reference,
+            createdOrder: this.allocateOrder()
+          }
+        : {
+            reference: createReference("state"),
+            family: "non_activation_disposition",
+            origin: "sut",
+            disposition: decision.disposition,
+            reason: decision.reason,
+            appliesTo: "trial_candidate_formation",
+            consideredTrialDirectionRef: decision.selectedAffordance?.reference,
+            supportComparisonRef: decision.comparison?.reference,
+            targetDimension: decision.comparison?.targetDimension,
+            statusOrigin: "sut_transition",
+            interactionRef: interaction.reference,
+            createdOrder: this.allocateOrder()
+          }
+    ));
+    const transition = this.createTransition(
+      "form_or_withhold_production_focused_candidate",
+      uniqueReferences([
+        ...supportReferences.map((fact) => fact.reference),
+        ...supportReferences.map((fact) => fact.payload.stateRef),
+        ...affordances.map((fact) => fact.reference)
+      ]),
+      decisionRecords.map((record) => record.reference),
+      interaction.reference
+    );
+    const candidateCount = decisions.filter((decision) => decision.kind === "candidate").length;
+    transition.result = candidateCount === decisions.length
+      ? "candidate_formed"
+      : candidateCount === 0
+        ? "non_activation_recorded"
+        : "candidate_and_non_activation_recorded";
+    attachCreatingTransition(decisionRecords, transition);
+    this.commitDerivedRecords(decisionRecords, transition);
+
+    decisions.forEach((decision, index) => {
+      const record = decisionRecords[index];
+      this.relations.push({
+        relationKind: "basis",
+        fromRef: record.reference,
+        toRef: decision.supportReference.reference,
+        targetRole: "state_reference_carrier",
+        effectiveOrder: record.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+      if (decision.kind === "candidate") {
+        this.relations.push({
+          relationKind: "basis",
+          fromRef: record.reference,
+          toRef: decision.selectedAffordance.reference,
+          targetRole: "selected_trial_direction",
+          effectiveOrder: record.createdOrder,
+          createdOrder: transition.createdOrder,
+          assertedByRole: "sut"
+        });
+        this.relations.push({
+          relationKind: "support",
+          fromRef: record.reference,
+          toRef: decision.comparison.reference,
+          targetRole: "dimension_comparison",
+          effectiveOrder: record.createdOrder,
+          createdOrder: transition.createdOrder,
+          assertedByRole: "sut"
+        });
+        return;
+      }
+      if (decision.comparison) {
+        this.relations.push({
+          relationKind: "basis",
+          fromRef: record.reference,
+          toRef: decision.comparison.reference,
+          targetRole: "comparison_evidence",
+          effectiveOrder: record.createdOrder,
+          createdOrder: transition.createdOrder,
+          assertedByRole: "sut"
+        });
+      }
+      if (decision.selectedAffordance) {
+        this.relations.push({
+          relationKind: "basis",
+          fromRef: record.reference,
+          toRef: decision.selectedAffordance.reference,
+          targetRole: "considered_trial_direction",
+          effectiveOrder: record.createdOrder,
+          createdOrder: transition.createdOrder,
+          assertedByRole: "sut"
+        });
+      }
+    });
+
     return transition.reference;
   }
 
