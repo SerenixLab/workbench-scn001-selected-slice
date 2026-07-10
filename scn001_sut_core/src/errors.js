@@ -11,3 +11,10 @@ export class SutReferenceError extends Error {
     this.name = "SutReferenceError";
   }
 }
+
+export class SutStateIntegrityError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "SutStateIntegrityError";
+  }
+}

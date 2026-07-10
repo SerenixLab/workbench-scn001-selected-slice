@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 import { createSutBoundary } from "../index.js";
+import { RunState, createReference } from "../src/runState.js";
+
+function sourceRef() {
+  return `source_${randomUUID()}`;
+}
 
 function communicationInput(overrides = {}) {
   return {
+    sourceFactRef: sourceRef(),
     kind: "communication",
     sourceActor: "synthetic-user-a",
     occurrenceOrder: 1,
@@ -17,16 +24,14 @@ function communicationInput(overrides = {}) {
 
 function taskObservationInput(overrides = {}) {
   return {
+    sourceFactRef: sourceRef(),
     kind: "task_observation",
     sourceActor: "fixture-scorer",
     occurrenceOrder: 1,
     itemRef: "particle-item-1",
     taskMode: "spontaneous_production",
     dimension: "particle_pattern_a",
-    performance: {
-      kind: "binary",
-      correct: false
-    },
+    performance: { kind: "binary", correct: false },
     occurrenceScenarioDay: 0,
     sessionId: "session-current",
     sessionOrder: 2,
@@ -36,6 +41,7 @@ function taskObservationInput(overrides = {}) {
 
 function chronologyInput(overrides = {}) {
   return {
+    sourceFactRef: sourceRef(),
     kind: "chronology_fact",
     sourceActor: "fixture-driver",
     occurrenceOrder: 2,
@@ -48,6 +54,7 @@ function chronologyInput(overrides = {}) {
 
 function affordanceInput(overrides = {}) {
   return {
+    sourceFactRef: sourceRef(),
     kind: "affordance_fact",
     sourceActor: "fixture-driver",
     occurrenceOrder: 3,
@@ -57,793 +64,410 @@ function affordanceInput(overrides = {}) {
   };
 }
 
-function candidateSupportInput(stateRef, overrides = {}) {
+function stateReferenceInput(stateRef, overrides = {}) {
   return {
+    sourceFactRef: sourceRef(),
     kind: "state_reference",
     sourceActor: "fixture-driver",
     occurrenceOrder: 4,
     stateRef,
-    purpose: "candidate_support",
     ...overrides
   };
 }
 
-test("rejected payload has no semantic side effect", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const before = boundary.captureInspectionSnapshot(runRef);
-
-  assert.throws(
-    () => boundary.ingestSutVisibleInputs(runRef, {
-      inputs: [communicationInput({ oracleRule: "INV-001" })]
-    }),
-    /must contain exactly/
-  );
-
-  assert.deepEqual(boundary.captureInspectionSnapshot(runRef), before);
-});
-
-test("closed ingress retains role-preserving fixture facts with contemporaneous source and basis relations", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const result = boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [communicationInput()]
-  });
-  const snapshot = boundary.captureInspectionSnapshot(runRef);
-  const fact = boundary.inspectRecord(runRef, result.acceptedInputRefs[0]);
-  const interaction = snapshot.records.find((record) => record.family === "interaction_segment");
-  const relations = boundary.enumerateLocalRelations(runRef, result.acceptedInputRefs[0]);
-
-  assert.equal(fact.family, "input_fact");
-  assert.equal(fact.origin, "fixture");
-  assert.equal(fact.role, "communication");
-  assert.equal(snapshot.records.filter((record) => record.family === "sut_transition_evidence").length, 1);
-  assert.equal(relations.filter((relation) => relation.relationKind === "source").length, 1);
-  assert.equal(relations.filter((relation) => relation.relationKind === "basis").length, 1);
-  assert.ok(fact.createdOrder < boundary.inspectRecord(runRef, result.transitionRef).createdOrder);
-  assert.deepEqual(interaction.inputReferences, result.acceptedInputRefs);
-  assert.equal(interaction.createdByTransitionRef, result.transitionRef);
-});
-
-test("fixture-initialized historical assertions retain fixture origin without SUT re-attribution", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const result = boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [communicationInput({
-      content: "I always freeze on particles.",
-      semanticStatusOrigin: "fixture_initialized"
-    })]
-  });
-
-  const beforeProcessing = boundary.captureInspectionSnapshot(runRef);
-  const initializedAssertion = beforeProcessing.records.find((record) => record.family === "attributed_assertion");
-
-  assert.equal(initializedAssertion.origin, "fixture");
-  assert.equal(initializedAssertion.statusOrigin, "fixture_initialized");
-  assert.equal(initializedAssertion.createdByTransitionRef, result.transitionRef);
-  assert.ok(boundary.inspectRecord(runRef, result.transitionRef).resultReferences.includes(initializedAssertion.reference));
-
-  boundary.processCurrentInteraction(runRef);
-  const assertions = boundary.captureInspectionSnapshot(runRef).records.filter((record) => (
-    record.family === "attributed_assertion"
-  ));
-  assert.equal(assertions.length, 1);
-  assert.equal(assertions[0].statusOrigin, "fixture_initialized");
-});
-
-test("simulator realization inputs retain simulator record and source origin", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const requested = boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [communicationInput()]
-  });
-  const realization = boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [{
-      kind: "simulator_realization",
-      sourceActor: "simulated-dependency",
-      occurrenceOrder: 2,
-      requestedRef: requested.acceptedInputRefs[0],
-      realizedBehavior: "Please continue.",
-      fidelity: "match"
-    }]
-  });
-
-  const realizationFact = boundary.inspectRecord(runRef, realization.acceptedInputRefs[0]);
-  const source = boundary.inspectRecord(runRef, realizationFact.sourceActorRef);
-
-  assert.equal(realizationFact.origin, "simulator");
-  assert.equal(source.origin, "simulator");
-});
-
-test("inspection is passive before a later processing transition", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const result = boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [communicationInput()]
-  });
-  const before = boundary.captureInspectionSnapshot(runRef);
-
-  boundary.inspectRecord(runRef, result.acceptedInputRefs[0]);
-  boundary.enumerateLocalRelations(runRef, result.transitionRef);
-
-  assert.deepEqual(boundary.captureInspectionSnapshot(runRef), before);
-});
-
-test("captured inspection cannot be re-ingested as behavior-driving input", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const capture = boundary.captureInspectionSnapshot(runRef);
-
-  assert.throws(
-    () => boundary.ingestSutVisibleInputs(runRef, { inputs: [capture] }),
-    /must identify a supported SUT-visible input role/
-  );
-  assert.deepEqual(boundary.captureInspectionSnapshot(runRef), capture);
-});
-
-test("state-reference handles reject evaluation-bearing or unknown identifiers before semantic ingestion", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const before = boundary.captureInspectionSnapshot(runRef);
-
-  assert.throws(
-    () => boundary.ingestSutVisibleInputs(runRef, {
-      inputs: [{
-        kind: "state_reference",
-        sourceActor: "fixture-driver",
-        occurrenceOrder: 1,
-        stateRef: "SCN001-SSFO-V0.2.0-CF-DRILL-OPT-IN",
-        purpose: "independent_current_skill_authority"
-      }]
-    }),
-    /opaque SUT state reference/
-  );
-
-  assert.deepEqual(boundary.captureInspectionSnapshot(runRef), before);
-
-  assert.throws(
-    () => boundary.ingestSutVisibleInputs(runRef, {
-      inputs: [{
-        kind: "state_reference",
-        sourceActor: "fixture-driver",
-        occurrenceOrder: 1,
-        stateRef: "state_00000000-0000-0000-0000-000000000000",
-        purpose: "independent_current_skill_authority"
-      }]
-    }),
-    /does not resolve inside this run/
-  );
-
-  assert.deepEqual(boundary.captureInspectionSnapshot(runRef), before);
-});
-
-test("state-reference handles resolve only to state already owned by the same run", () => {
-  const boundary = createSutBoundary();
-  const firstRun = boundary.startRun();
-  const firstResult = boundary.ingestSutVisibleInputs(firstRun, {
-    inputs: [communicationInput()]
-  });
-  const secondRun = boundary.startRun();
-  const secondBefore = boundary.captureInspectionSnapshot(secondRun);
-
-  assert.throws(
-    () => boundary.ingestSutVisibleInputs(secondRun, {
-      inputs: [{
-        kind: "state_reference",
-        sourceActor: "fixture-driver",
-        occurrenceOrder: 1,
-        stateRef: firstResult.acceptedInputRefs[0],
-        purpose: "independent_current_skill_authority"
-      }]
-    }),
-    /does not resolve inside this run/
-  );
-  assert.deepEqual(boundary.captureInspectionSnapshot(secondRun), secondBefore);
-
-  const accepted = boundary.ingestSutVisibleInputs(firstRun, {
-    inputs: [{
-      kind: "state_reference",
-      sourceActor: "fixture-driver",
-      occurrenceOrder: 2,
-      stateRef: firstResult.acceptedInputRefs[0],
-      purpose: "independent_current_skill_authority"
-    }]
-  });
-  assert.equal(boundary.inspectRecord(firstRun, accepted.acceptedInputRefs[0]).role, "state_reference");
-});
-
-test("processing attributes current communications without creating current-skill facts", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const ingested = boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [
-      communicationInput({ content: "I have forgotten everything.", occurrenceOrder: 1 }),
-      communicationInput({ content: "I passed a beginner milestone recently.", occurrenceOrder: 2 })
-    ]
-  });
-
-  boundary.processCurrentInteraction(runRef);
-  const snapshot = boundary.captureInspectionSnapshot(runRef);
-  const assertions = snapshot.records.filter((record) => record.family === "attributed_assertion");
-
-  assert.equal(assertions.length, 2);
-  assert.ok(assertions.every((record) => record.epistemicStatus === "attributed_user_assertion"));
-  assert.ok(assertions.every((record) => record.statusOrigin === "sut_transition"));
-  assert.equal(snapshot.records.filter((record) => record.family === "current_skill_state").length, 0);
-  for (const assertion of assertions) {
-    const relations = boundary.enumerateLocalRelations(runRef, assertion.reference);
-    assert.equal(relations.filter((relation) => relation.relationKind === "source").length, 1);
-    assert.equal(relations.filter((relation) => relation.relationKind === "basis").length, 1);
-    const transition = boundary.inspectRecord(runRef, assertion.createdByTransitionRef);
-    assert.equal(transition.transitionKind, "attribute_current_communications");
-    assert.ok(transition.resultReferences.includes(assertion.reference));
-  }
-  assert.equal(ingested.acceptedInputRefs.length, 2);
-});
-
-test("processing preserves current practice as independently eligible for its supported skill dimension", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const ingested = boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [
-      taskObservationInput({ occurrenceScenarioDay: 0, sessionId: "session-old", sessionOrder: 1 }),
-      chronologyInput()
-    ]
-  });
-
-  boundary.processCurrentInteraction(runRef);
-  const snapshot = boundary.captureInspectionSnapshot(runRef);
-  const observation = boundary.inspectRecord(runRef, ingested.acceptedInputRefs[0]);
-
-  assert.equal(snapshot.records.filter((record) => record.family === "temporal_eligibility_assessment").length, 0);
-  assert.equal(observation.payload.occurrenceScenarioDay, 0);
-});
-
-test("processing derives a scoped recognition-production comparison from separate aggregate observations", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const ingested = boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [
-      taskObservationInput({
-        itemRef: "recognition-calibration-items",
-        taskMode: "recognition",
-        performance: { kind: "aggregate", correctCount: 4, totalCount: 4 },
-        occurrenceOrder: 1
-      }),
-      taskObservationInput({
-        itemRef: "production-calibration-items",
-        taskMode: "spontaneous_production",
-        performance: { kind: "aggregate", correctCount: 1, totalCount: 4 },
-        occurrenceOrder: 2
-      })
-    ]
-  });
-
-  boundary.processCurrentInteraction(runRef);
-  const snapshot = boundary.captureInspectionSnapshot(runRef);
-  const comparison = snapshot.records.find((record) => record.family === "dimension_comparison");
-  const recognition = boundary.inspectRecord(runRef, ingested.acceptedInputRefs[0]);
-  const production = boundary.inspectRecord(runRef, ingested.acceptedInputRefs[1]);
-
-  assert.equal(recognition.role, "task_observation");
-  assert.equal(recognition.payload.taskMode, "recognition");
-  assert.equal(production.role, "task_observation");
-  assert.equal(production.payload.taskMode, "spontaneous_production");
-  assert.equal(comparison.targetDimension, "particle_pattern_a");
-  assert.deepEqual(comparison.recognitionPerformance, { correctCount: 4, totalCount: 4 });
-  assert.deepEqual(comparison.productionPerformance, { correctCount: 1, totalCount: 4 });
-  assert.equal(comparison.comparisonResult, "recognition_score_higher");
-  assert.equal(comparison.uncertainty, "bounded_to_supplied_calibration");
-  assert.equal(comparison.recognitionObservationRefs[0], recognition.reference);
-  assert.equal(comparison.productionObservationRefs[0], production.reference);
-  assert.equal(snapshot.records.some((record) => (
-    ["current_skill_state", "global_skill_state", "trial_candidate", "active_trial"].includes(record.family)
-  )), false);
-
-  const relations = boundary.enumerateLocalRelations(runRef, comparison.reference);
-  assert.ok(relations.some((relation) => (
-    relation.targetRole === "recognition_observation"
-    && relation.semanticTaskMode === "recognition"
-  )));
-  assert.ok(relations.some((relation) => (
-    relation.targetRole === "production_observation"
-    && relation.semanticTaskMode === "spontaneous_production"
-  )));
-  assert.ok(relations.every((relation) => relation.semanticDimension === "particle_pattern_a"));
-  const transition = boundary.inspectRecord(runRef, comparison.createdByTransitionRef);
-  assert.equal(transition.transitionKind, "compare_recognition_and_spontaneous_production");
-  assert.ok(transition.resultReferences.includes(comparison.reference));
-});
-
-test("equal calibration remains a no-difference comparison and does not create production-focused state", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [
-      taskObservationInput({
-        itemRef: "recognition-calibration-items",
-        taskMode: "recognition",
-        performance: { kind: "aggregate", correctCount: 3, totalCount: 4 },
-        occurrenceOrder: 1
-      }),
-      taskObservationInput({
-        itemRef: "production-calibration-items",
-        taskMode: "spontaneous_production",
-        performance: { kind: "aggregate", correctCount: 3, totalCount: 4 },
-        occurrenceOrder: 2
-      })
-    ]
-  });
-
-  boundary.processCurrentInteraction(runRef);
-  const records = boundary.captureInspectionSnapshot(runRef).records;
-  const comparison = records.find((record) => record.family === "dimension_comparison");
-
-  assert.equal(comparison.comparisonResult, "no_observed_score_difference");
-  assert.equal(records.some((record) => (
-    ["trial_candidate", "production_focused_candidate", "active_trial"].includes(record.family)
-  )), false);
-});
-
-test("a retained recognition-production split forms one bounded non-active production candidate", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const comparison = createCalibrationComparison(boundary, runRef, 4, 1);
-  const candidateInputs = boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [
-      candidateSupportInput(comparison.reference),
-      affordanceInput(),
-      affordanceInput({
-        occurrenceOrder: 5,
-        direction: "TRIAL-RECOG-REVIEW",
-        description: "Recognition-focused review."
-      }),
-      affordanceInput({
-        occurrenceOrder: 6,
-        direction: "TRIAL-WHOLE-PATTERN",
-        description: "Whole-pattern practice."
-      })
-    ]
-  });
-
-  boundary.processCurrentInteraction(runRef);
-  const snapshot = boundary.captureInspectionSnapshot(runRef);
-  const candidates = snapshot.records.filter((record) => record.family === "trial_candidate");
-  const candidate = candidates[0];
-  const selectedAffordance = boundary.inspectRecord(runRef, candidateInputs.acceptedInputRefs[1]);
-
-  assert.equal(candidates.length, 1);
-  assert.equal(candidate.candidateType, "production_focused_practice");
-  assert.equal(candidate.trialDirectionRef, selectedAffordance.reference);
-  assert.equal(candidate.supportComparisonRef, comparison.reference);
-  assert.deepEqual(candidate.proposedScope, {
-    dimension: "particle_pattern_a",
-    taskMode: "spontaneous_production"
-  });
-  assert.equal(candidate.lifecycleStatus, "formed_non_active");
-  assert.equal(candidate.lifecycleVersion, 1);
-  assert.equal(candidate.purpose, "provisional_evaluative_trial");
-  assert.equal(snapshot.records.some((record) => (
-    ["trial_proposal", "active_trial", "trial_outcome"].includes(record.family)
-  )), false);
-
-  const relations = boundary.enumerateLocalRelations(runRef, candidate.reference);
-  assert.ok(relations.some((relation) => (
-    relation.relationKind === "basis"
-    && relation.toRef === selectedAffordance.reference
-    && relation.targetRole === "selected_trial_direction"
-  )));
-  assert.ok(relations.some((relation) => (
-    relation.relationKind === "basis"
-    && relation.toRef === comparison.reference
-    && relation.targetRole === "comparison_input"
-  )));
-  assert.ok(relations.some((relation) => (
-    relation.relationKind === "support"
-    && relation.toRef === comparison.reference
-    && relation.targetRole === "dimension_comparison"
-  )));
-  assert.equal(relations.some((relation) => (
-    relation.relationKind === "support"
-    && relation.toRef === selectedAffordance.reference
-  )), false);
-  const transition = boundary.inspectRecord(runRef, candidate.createdByTransitionRef);
-  assert.equal(transition.transitionKind, "form_or_withhold_production_focused_candidate");
-  assert.equal(transition.result, "candidate_formed");
-  assert.ok(transition.resultReferences.includes(candidate.reference));
-  assert.deepEqual(boundary.emitAvailableOutputs(runRef), []);
-
-  const immutableCandidate = boundary.inspectRecord(runRef, candidate.reference);
-  boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [communicationInput({ occurrenceOrder: 7 })]
-  });
-  boundary.processCurrentInteraction(runRef);
-  assert.deepEqual(boundary.inspectRecord(runRef, candidate.reference), immutableCandidate);
-});
-
-test("an equal calibration records non-activation without forming a candidate", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const comparison = createCalibrationComparison(boundary, runRef, 3, 3);
-  boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [candidateSupportInput(comparison.reference), affordanceInput()]
-  });
-
-  boundary.processCurrentInteraction(runRef);
-  const snapshot = boundary.captureInspectionSnapshot(runRef);
-  const disposition = snapshot.records.find((record) => (
-    record.family === "non_activation_disposition"
-  ));
-
-  assert.equal(snapshot.records.some((record) => record.family === "trial_candidate"), false);
-  assert.equal(disposition.disposition, "DISP-WITHHOLD");
-  assert.equal(disposition.reason, "no_observed_recognition_production_difference");
-  assert.equal(disposition.supportComparisonRef, comparison.reference);
-  const relations = boundary.enumerateLocalRelations(runRef, disposition.reference);
-  assert.ok(relations.some((relation) => (
-    relation.relationKind === "basis"
-    && relation.toRef === comparison.reference
-    && relation.targetRole === "comparison_evidence"
-  )));
-  assert.equal(boundary.inspectRecord(runRef, disposition.createdByTransitionRef).result, "non_activation_recorded");
-});
-
-test("candidate formation withholds when the required fixed affordance is unavailable", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const comparison = createCalibrationComparison(boundary, runRef, 4, 1);
-  boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [
-      candidateSupportInput(comparison.reference),
-      affordanceInput({ direction: "TRIAL-RECOG-REVIEW" })
-    ]
-  });
-
-  boundary.processCurrentInteraction(runRef);
-  const records = boundary.captureInspectionSnapshot(runRef).records;
-  const disposition = records.find((record) => record.family === "non_activation_disposition");
-  assert.equal(records.some((record) => record.family === "trial_candidate"), false);
-  assert.equal(disposition.disposition, "DISP-WITHHOLD");
-  assert.equal(disposition.reason, "required_trial_direction_unavailable");
-});
-
-test("candidate support must resolve to a SUT-owned dimension comparison", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const observation = boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [taskObservationInput()]
-  });
-  boundary.processCurrentInteraction(runRef);
-  boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [candidateSupportInput(observation.acceptedInputRefs[0]), affordanceInput()]
-  });
-
-  boundary.processCurrentInteraction(runRef);
-  const records = boundary.captureInspectionSnapshot(runRef).records;
-  const disposition = records.find((record) => record.family === "non_activation_disposition");
-  assert.equal(records.some((record) => record.family === "trial_candidate"), false);
-  assert.equal(disposition.disposition, "DISP-REQUEST-MORE-EVIDENCE");
-  assert.equal(disposition.reason, "candidate_support_did_not_resolve_to_dimension_comparison");
-});
-
-test("processing does not compare recognition and production observations across dimensions", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [
-      taskObservationInput({
-        taskMode: "recognition",
-        dimension: "particle_pattern_a",
-        performance: { kind: "aggregate", correctCount: 4, totalCount: 4 },
-        occurrenceOrder: 1
-      }),
-      taskObservationInput({
-        taskMode: "spontaneous_production",
-        dimension: "particle_pattern_b",
-        performance: { kind: "aggregate", correctCount: 1, totalCount: 4 },
-        occurrenceOrder: 2
-      })
-    ]
-  });
-
-  boundary.processCurrentInteraction(runRef);
-  assert.equal(boundary.captureInspectionSnapshot(runRef).records.some((record) => (
-    record.family === "dimension_comparison"
-  )), false);
-});
-
-test("invalid aggregate performance is rejected without semantic side effects", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const before = boundary.captureInspectionSnapshot(runRef);
-
-  assert.throws(
-    () => boundary.ingestSutVisibleInputs(runRef, {
-      inputs: [taskObservationInput({
-        performance: { kind: "aggregate", correctCount: 5, totalCount: 4 }
-      })]
-    }),
-    /must not exceed totalCount/
-  );
-  assert.deepEqual(boundary.captureInspectionSnapshot(runRef), before);
-});
-
-test("processing applies the selected >90-day rule without blanket-staling recent history", () => {
-  const oldBoundary = createSutBoundary();
-  const oldRun = oldBoundary.startRun();
-  const oldResult = oldBoundary.ingestSutVisibleInputs(oldRun, {
-    inputs: [
-      taskObservationInput({ occurrenceScenarioDay: 0, sessionId: "session-old", sessionOrder: 1 }),
-      chronologyInput({ scenarioDay: 135 })
-    ]
-  });
-  oldBoundary.processCurrentInteraction(oldRun);
-  const oldAssessment = oldBoundary.captureInspectionSnapshot(oldRun).records.find((record) => (
-    record.family === "temporal_eligibility_assessment"
-  ));
-
-  const recentBoundary = createSutBoundary();
-  const recentRun = recentBoundary.startRun();
-  const recentResult = recentBoundary.ingestSutVisibleInputs(recentRun, {
-    inputs: [
-      taskObservationInput({ occurrenceScenarioDay: 0, sessionId: "session-recent", sessionOrder: 1 }),
-      chronologyInput({ scenarioDay: 30 })
-    ]
-  });
-  recentBoundary.processCurrentInteraction(recentRun);
-  const recentAssessment = recentBoundary.captureInspectionSnapshot(recentRun).records.find((record) => (
-    record.family === "temporal_eligibility_assessment"
-  ));
-
-  assert.equal(oldAssessment.eligibility, "ineligible");
-  assert.equal(oldAssessment.ageDays, 135);
-  assert.equal(recentAssessment.eligibility, "eligible");
-  assert.equal(recentAssessment.ageDays, 30);
-  assert.equal(oldBoundary.inspectRecord(oldRun, oldResult.acceptedInputRefs[0]).payload.occurrenceScenarioDay, 0);
-  assert.equal(recentBoundary.inspectRecord(recentRun, recentResult.acceptedInputRefs[0]).payload.occurrenceScenarioDay, 0);
-  const oldRelations = oldBoundary.enumerateLocalRelations(oldRun, oldAssessment.reference);
-  assert.ok(oldRelations.some((relation) => relation.targetRole === "assessed_evidence"));
-  assert.ok(oldRelations.some((relation) => relation.targetRole === "current_chronology"));
-
-  const beforeRepeatedProcessing = oldBoundary.captureInspectionSnapshot(oldRun);
-  oldBoundary.processCurrentInteraction(oldRun);
-  assert.deepEqual(oldBoundary.captureInspectionSnapshot(oldRun), beforeRepeatedProcessing);
-});
-
-test("processing consumes interactions in order and reassesses referenced evidence at the current chronology", () => {
-  const boundary = createSutBoundary();
-  const runRef = boundary.startRun();
-  const firstInteraction = boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [
-      taskObservationInput({ occurrenceScenarioDay: 0, sessionId: "session-old", sessionOrder: 1 }),
-      chronologyInput({ scenarioDay: 30 })
-    ]
-  });
-  const secondInteraction = boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [
-      {
-        kind: "state_reference",
-        sourceActor: "fixture-driver",
-        occurrenceOrder: 3,
-        stateRef: firstInteraction.acceptedInputRefs[0],
-        purpose: "independent_current_skill_authority"
-      },
-      chronologyInput({ occurrenceOrder: 4, scenarioDay: 135, sessionOrder: 3 })
-    ]
-  });
-
-  boundary.processCurrentInteraction(runRef);
-  let assessments = boundary.captureInspectionSnapshot(runRef).records.filter((record) => (
-    record.family === "temporal_eligibility_assessment"
-  ));
-  assert.equal(assessments.length, 1);
-  assert.equal(assessments[0].ageDays, 30);
-  assert.equal(assessments[0].eligibility, "eligible");
-  assert.equal(assessments[0].chronologyRef, firstInteraction.acceptedInputRefs[1]);
-  const firstFact = boundary.inspectRecord(runRef, firstInteraction.acceptedInputRefs[0]);
-  const processedInteractions = boundary.captureInspectionSnapshot(runRef).records.filter((record) => (
-    record.transitionKind === "process_interaction_segment"
-  ));
-  assert.equal(processedInteractions.length, 1);
-  assert.equal(processedInteractions[0].interactionRef, firstFact.interactionRef);
-
-  boundary.processCurrentInteraction(runRef);
-  assessments = boundary.captureInspectionSnapshot(runRef).records.filter((record) => (
-    record.family === "temporal_eligibility_assessment"
-  ));
-  assert.equal(assessments.length, 2);
-  const laterAssessment = assessments.find((assessment) => assessment.ageDays === 135);
-  assert.equal(laterAssessment.eligibility, "ineligible");
-  assert.equal(laterAssessment.assessedObservationRef, firstInteraction.acceptedInputRefs[0]);
-  assert.equal(laterAssessment.chronologyRef, secondInteraction.acceptedInputRefs[1]);
-  assert.equal(laterAssessment.evidenceReferenceRef, secondInteraction.acceptedInputRefs[0]);
-  const transition = boundary.inspectRecord(runRef, laterAssessment.createdByTransitionRef);
-  assert.ok(transition.resultReferences.includes(laterAssessment.reference));
-  assert.ok(transition.inputReferences.includes(secondInteraction.acceptedInputRefs[0]));
-});
-
-test("inspection interleaving does not change attribution or temporal-assessment results", () => {
-  const withoutInspection = createSutBoundary();
-  const withoutRun = withoutInspection.startRun();
-  withoutInspection.ingestSutVisibleInputs(withoutRun, {
-    inputs: [communicationInput(), taskObservationInput({ occurrenceScenarioDay: 0 }), chronologyInput({ scenarioDay: 135 })]
-  });
-  withoutInspection.processCurrentInteraction(withoutRun);
-
-  const withInspection = createSutBoundary();
-  const withRun = withInspection.startRun();
-  const ingested = withInspection.ingestSutVisibleInputs(withRun, {
-    inputs: [communicationInput(), taskObservationInput({ occurrenceScenarioDay: 0 }), chronologyInput({ scenarioDay: 135 })]
-  });
-  withInspection.captureInspectionSnapshot(withRun);
-  withInspection.inspectRecord(withRun, ingested.acceptedInputRefs[0]);
-  withInspection.processCurrentInteraction(withRun);
-
-  assert.deepEqual(
-    semanticSummary(withoutInspection.captureInspectionSnapshot(withoutRun)),
-    semanticSummary(withInspection.captureInspectionSnapshot(withRun))
-  );
-});
-
-test("inspection interleaving does not change the scoped dimension comparison", () => {
-  const inputs = [
+function calibrationInputs(recognitionCorrect = 4, productionCorrect = 1, overrides = {}) {
+  const dimension = overrides.dimension ?? "particle_pattern_a";
+  return [
     taskObservationInput({
+      sourceFactRef: overrides.recognitionSourceFactRef ?? sourceRef(),
+      itemRef: "recognition-calibration-items",
       taskMode: "recognition",
-      performance: { kind: "aggregate", correctCount: 4, totalCount: 4 },
+      dimension,
+      performance: { kind: "aggregate", correctCount: recognitionCorrect, totalCount: 4 },
       occurrenceOrder: 1
     }),
     taskObservationInput({
+      sourceFactRef: overrides.productionSourceFactRef ?? sourceRef(),
+      itemRef: "production-calibration-items",
       taskMode: "spontaneous_production",
-      performance: { kind: "aggregate", correctCount: 1, totalCount: 4 },
+      dimension,
+      performance: { kind: "aggregate", correctCount: productionCorrect, totalCount: 4 },
       occurrenceOrder: 2
     })
   ];
-  const withoutInspection = createSutBoundary();
-  const withoutRun = withoutInspection.startRun();
-  withoutInspection.ingestSutVisibleInputs(withoutRun, { inputs });
-  withoutInspection.processCurrentInteraction(withoutRun);
+}
 
-  const withInspection = createSutBoundary();
-  const withRun = withInspection.startRun();
-  const ingested = withInspection.ingestSutVisibleInputs(withRun, { inputs });
-  withInspection.captureInspectionSnapshot(withRun);
-  withInspection.inspectRecord(withRun, ingested.acceptedInputRefs[0]);
-  withInspection.enumerateLocalRelations(withRun, ingested.transitionRef);
-  withInspection.processCurrentInteraction(withRun);
+function ingest(boundary, runRef, inputs) {
+  return boundary.ingestSutVisibleInputs(runRef, { inputs });
+}
 
-  assert.deepEqual(
-    dimensionComparisonSummary(withoutInspection.captureInspectionSnapshot(withoutRun)),
-    dimensionComparisonSummary(withInspection.captureInspectionSnapshot(withRun))
+function recordsOf(boundary, runRef, family) {
+  return boundary.captureInspectionSnapshot(runRef).records.filter((record) => record.family === family);
+}
+
+function prepareComparison(boundary, runRef, recognitionCorrect = 4, productionCorrect = 1) {
+  const inputs = calibrationInputs(recognitionCorrect, productionCorrect);
+  const ingestion = ingest(boundary, runRef, inputs);
+  boundary.processCurrentInteraction(runRef);
+  return {
+    inputs,
+    ingestion,
+    comparison: recordsOf(boundary, runRef, "dimension_comparison")[0]
+  };
+}
+
+function replayTrialBasis(boundary, runRef, observations, affordances = [affordanceInput()]) {
+  const ingestion = ingest(boundary, runRef, [...observations, ...affordances]);
+  boundary.processCurrentInteraction(runRef);
+  return ingestion;
+}
+
+test("rejected payload and changed source-identity content have no semantic side effect", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const communication = communicationInput();
+  ingest(boundary, runRef, [communication]);
+  const before = boundary.captureInspectionSnapshot(runRef);
+
+  assert.throws(
+    () => ingest(boundary, runRef, [{ ...communication, content: "Changed meaning." }]),
+    /cannot be rebound/
   );
+  assert.deepEqual(boundary.captureInspectionSnapshot(runRef), before);
+  assert.throws(
+    () => ingest(boundary, runRef, [communicationInput({ oracleRule: "INV-001" })]),
+    /must contain exactly/
+  );
+  assert.deepEqual(boundary.captureInspectionSnapshot(runRef), before);
 });
 
-test("inspection interleaving does not change candidate formation", () => {
-  const withoutInspection = createSutBoundary();
-  const withoutRun = withoutInspection.startRun();
-  const withoutComparison = createCalibrationComparison(withoutInspection, withoutRun, 4, 1);
-  withoutInspection.ingestSutVisibleInputs(withoutRun, {
-    inputs: [candidateSupportInput(withoutComparison.reference), affordanceInput()]
-  });
-  withoutInspection.processCurrentInteraction(withoutRun);
+test("source identity is separate from canonical SUT state identity and rejects literal evaluation IDs", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const input = communicationInput();
+  const result = ingest(boundary, runRef, [input]);
+  const fact = boundary.inspectRecord(runRef, result.acceptedInputRefs[0]);
 
-  const withInspection = createSutBoundary();
-  const withRun = withInspection.startRun();
-  const withComparison = createCalibrationComparison(withInspection, withRun, 4, 1);
-  const ingested = withInspection.ingestSutVisibleInputs(withRun, {
-    inputs: [candidateSupportInput(withComparison.reference), affordanceInput()]
-  });
-  withInspection.captureInspectionSnapshot(withRun);
-  withInspection.inspectRecord(withRun, ingested.acceptedInputRefs[0]);
-  withInspection.enumerateLocalRelations(withRun, withComparison.reference);
-  withInspection.processCurrentInteraction(withRun);
-
-  assert.deepEqual(
-    trialDecisionSummary(withoutInspection.captureInspectionSnapshot(withoutRun)),
-    trialDecisionSummary(withInspection.captureInspectionSnapshot(withRun))
-  );
+  assert.equal(fact.sourceFactRef, input.sourceFactRef);
+  assert.notEqual(fact.reference, input.sourceFactRef);
+  assert.match(fact.reference, /^state_/);
+  for (const evaluationIdentity of [
+    "C-005",
+    "CF1-C-005",
+    "SCN001-SSFO-V0.2.0",
+    "SCN001-SSFO-V0.2.0-CANONICAL-THIN",
+    "B-TRIAL-FORM",
+    "DP-TRIAL-FORM",
+    "CC-EVIDENCE-TRIAL-FORMATION"
+  ]) {
+    assert.throws(
+      () => ingest(boundary, runRef, [communicationInput({ sourceFactRef: evaluationIdentity })]),
+      /opaque run-local source-fact reference/
+    );
+  }
 });
 
-test("a candidate and its references do not survive run termination", () => {
+test("redelivery reuses one input fact while preserving new interaction and ingestion evidence", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const input = communicationInput();
+  const first = ingest(boundary, runRef, [input]);
+  boundary.processCurrentInteraction(runRef);
+  const second = ingest(boundary, runRef, [structuredClone(input)]);
+  boundary.processCurrentInteraction(runRef);
+
+  assert.equal(first.acceptedInputRefs[0], second.acceptedInputRefs[0]);
+  assert.equal(recordsOf(boundary, runRef, "input_fact").length, 1);
+  assert.equal(recordsOf(boundary, runRef, "interaction_segment").length, 2);
+  const ingestions = recordsOf(boundary, runRef, "sut_transition_evidence")
+    .filter((record) => record.transitionKind === "ingest_sut_visible_inputs");
+  assert.equal(ingestions.length, 2);
+  assert.ok(ingestions.every((transition) => transition.inputReferences[0] === first.acceptedInputRefs[0]));
+  const processing = recordsOf(boundary, runRef, "sut_transition_evidence")
+    .filter((record) => record.transitionKind === "process_interaction_segment");
+  assert.equal(processing.length, 2);
+  assert.ok(processing.every((transition) => transition.inputReferences.includes(first.acceptedInputRefs[0])));
+  assert.equal(recordsOf(boundary, runRef, "attributed_assertion").length, 1);
+});
+
+test("inspection between first delivery and redelivery does not alter canonical resolution", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const input = communicationInput();
+  const first = ingest(boundary, runRef, [input]);
+  const before = boundary.captureInspectionSnapshot(runRef);
+  boundary.inspectRecord(runRef, first.acceptedInputRefs[0]);
+  boundary.enumerateLocalRelations(runRef, first.acceptedInputRefs[0]);
+  assert.deepEqual(boundary.captureInspectionSnapshot(runRef), before);
+  const second = ingest(boundary, runRef, [input]);
+  assert.equal(second.acceptedInputRefs[0], first.acceptedInputRefs[0]);
+});
+
+test("different source identities with identical payload remain distinct facts and assertions", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const first = communicationInput();
+  const second = { ...first, sourceFactRef: sourceRef() };
+  const result = ingest(boundary, runRef, [first, second]);
+  boundary.processCurrentInteraction(runRef);
+
+  assert.notEqual(result.acceptedInputRefs[0], result.acceptedInputRefs[1]);
+  assert.equal(recordsOf(boundary, runRef, "input_fact").length, 2);
+  assert.equal(recordsOf(boundary, runRef, "attributed_assertion").length, 2);
+});
+
+test("fixture-initialized attribution is reused on redelivery but distinct sources remain distinct", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const historical = communicationInput({ semanticStatusOrigin: "fixture_initialized" });
+  ingest(boundary, runRef, [historical]);
+  ingest(boundary, runRef, [historical]);
+  assert.equal(recordsOf(boundary, runRef, "attributed_assertion").length, 1);
+  ingest(boundary, runRef, [{ ...historical, sourceFactRef: sourceRef() }]);
+  assert.equal(recordsOf(boundary, runRef, "attributed_assertion").length, 2);
+});
+
+test("temporal assessment uses redelivered raw observation and chronology without a state selector", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const observation = taskObservationInput({ occurrenceScenarioDay: 0, sessionId: "session-old", sessionOrder: 1 });
+  const first = ingest(boundary, runRef, [observation]);
+  boundary.processCurrentInteraction(runRef);
+  const chronology = chronologyInput({ scenarioDay: 135, sessionOrder: 3 });
+  ingest(boundary, runRef, [observation, chronology]);
+  boundary.processCurrentInteraction(runRef);
+  const assessment = recordsOf(boundary, runRef, "temporal_eligibility_assessment")[0];
+
+  assert.equal(assessment.assessedObservationRef, first.acceptedInputRefs[0]);
+  assert.equal(assessment.eligibility, "ineligible");
+  assert.equal(assessment.ageDays, 135);
+  assert.equal(assessment.useTarget, "independent_current_skill_authority");
+  assert.equal(boundary.inspectRecord(runRef, first.acceptedInputRefs[0]).payload.occurrenceScenarioDay, 0);
+  assert.equal(recordsOf(boundary, runRef, "input_fact").some((fact) => fact.role === "state_reference"), false);
+});
+
+test("same temporal basis reuses its assessment while a new chronology creates a new one", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const observation = taskObservationInput({ occurrenceScenarioDay: 0, sessionOrder: 1 });
+  const chronology = chronologyInput({ scenarioDay: 30, sessionOrder: 2 });
+  ingest(boundary, runRef, [observation, chronology]);
+  boundary.processCurrentInteraction(runRef);
+  ingest(boundary, runRef, [observation, chronology]);
+  boundary.processCurrentInteraction(runRef);
+  assert.equal(recordsOf(boundary, runRef, "temporal_eligibility_assessment").length, 1);
+
+  const laterChronology = chronologyInput({ scenarioDay: 135, occurrenceOrder: 3, sessionOrder: 3 });
+  ingest(boundary, runRef, [observation, laterChronology]);
+  boundary.processCurrentInteraction(runRef);
+  const assessments = recordsOf(boundary, runRef, "temporal_eligibility_assessment");
+  assert.equal(assessments.length, 2);
+  assert.deepEqual(assessments.map((record) => record.eligibility).sort(), ["eligible", "ineligible"]);
+});
+
+test("recent evidence remains eligible and old evidence remains ineligible under the selected rule", () => {
+  for (const [scenarioDay, expected] of [[30, "eligible"], [91, "ineligible"]]) {
+    const boundary = createSutBoundary();
+    const runRef = boundary.startRun();
+    ingest(boundary, runRef, [
+      taskObservationInput({ occurrenceScenarioDay: 0, sessionOrder: 1 }),
+      chronologyInput({ scenarioDay })
+    ]);
+    boundary.processCurrentInteraction(runRef);
+    assert.equal(recordsOf(boundary, runRef, "temporal_eligibility_assessment")[0].eligibility, expected);
+  }
+});
+
+test("exact calibration redelivery reuses canonical facts and one role-qualified comparison", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const prepared = prepareComparison(boundary, runRef);
+  const replay = ingest(boundary, runRef, prepared.inputs);
+  boundary.processCurrentInteraction(runRef);
+
+  assert.deepEqual(replay.acceptedInputRefs, prepared.ingestion.acceptedInputRefs);
+  assert.equal(recordsOf(boundary, runRef, "dimension_comparison").length, 1);
+});
+
+test("equal-score observations with different source identities form a distinct comparison basis", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  prepareComparison(boundary, runRef, 4, 1);
+  ingest(boundary, runRef, calibrationInputs(4, 1));
+  boundary.processCurrentInteraction(runRef);
+  assert.equal(recordsOf(boundary, runRef, "dimension_comparison").length, 2);
+});
+
+test("observations from different dimensions do not form a comparison or candidate", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const inputs = calibrationInputs();
+  inputs[1] = { ...inputs[1], dimension: "particle_pattern_b" };
+  ingest(boundary, runRef, [...inputs, affordanceInput()]);
+  boundary.processCurrentInteraction(runRef);
+  assert.equal(recordsOf(boundary, runRef, "dimension_comparison").length, 0);
+  assert.equal(recordsOf(boundary, runRef, "trial_candidate").length, 0);
+  assert.equal(recordsOf(boundary, runRef, "non_activation_disposition")[0].reason, "exact_comparison_support_unavailable");
+});
+
+test("candidate forms from current raw observations through exact local comparison relations", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const prepared = prepareComparison(boundary, runRef);
+  const affordance = affordanceInput();
+  replayTrialBasis(boundary, runRef, prepared.inputs, [affordance]);
+  const candidate = recordsOf(boundary, runRef, "trial_candidate")[0];
+  const relations = boundary.enumerateLocalRelations(runRef, candidate.reference);
+
+  assert.equal(candidate.supportComparisonRef, prepared.comparison.reference);
+  assert.equal(candidate.lifecycleStatus, "formed_non_active");
+  assert.ok(relations.some((relation) => relation.relationKind === "basis" && relation.targetRole === "selected_trial_direction"));
+  assert.ok(relations.some((relation) => relation.relationKind === "basis" && relation.targetRole === "comparison_input"));
+  assert.ok(relations.some((relation) => relation.relationKind === "support" && relation.targetRole === "dimension_comparison"));
+  assert.equal(relations.some((relation) => relation.targetRole === "state_reference_carrier"), false);
+  assert.deepEqual(boundary.emitAvailableOutputs(runRef), []);
+});
+
+test("equal calibration records one exact-basis non-activation disposition across replay", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const prepared = prepareComparison(boundary, runRef, 3, 3);
+  const affordance = affordanceInput();
+  replayTrialBasis(boundary, runRef, prepared.inputs, [affordance]);
+  replayTrialBasis(boundary, runRef, prepared.inputs, [affordance]);
+  assert.equal(recordsOf(boundary, runRef, "trial_candidate").length, 0);
+  const dispositions = recordsOf(boundary, runRef, "non_activation_disposition");
+  assert.equal(dispositions.length, 1);
+  assert.equal(dispositions[0].reason, "no_observed_recognition_production_difference");
+});
+
+test("missing production affordance withholds and exact trial replay does not duplicate a candidate", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const prepared = prepareComparison(boundary, runRef);
+  const wrongAffordance = affordanceInput({ direction: "TRIAL-RECOG-REVIEW" });
+  replayTrialBasis(boundary, runRef, prepared.inputs, [wrongAffordance]);
+  assert.equal(recordsOf(boundary, runRef, "non_activation_disposition")[0].reason, "required_trial_direction_unavailable");
+
+  const productionAffordance = affordanceInput();
+  replayTrialBasis(boundary, runRef, prepared.inputs, [productionAffordance]);
+  replayTrialBasis(boundary, runRef, prepared.inputs, [productionAffordance]);
+  assert.equal(recordsOf(boundary, runRef, "trial_candidate").length, 1);
+});
+
+test("a retained comparison state reference cannot rescue missing or subset raw support", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const prepared = prepareComparison(boundary, runRef);
+  ingest(boundary, runRef, [
+    prepared.inputs[0],
+    stateReferenceInput(prepared.comparison.reference),
+    affordanceInput()
+  ]);
+  boundary.processCurrentInteraction(runRef);
+  assert.equal(recordsOf(boundary, runRef, "trial_candidate").length, 0);
+  assert.equal(recordsOf(boundary, runRef, "non_activation_disposition")[0].reason, "exact_comparison_support_unavailable");
+});
+
+test("a comparison sharing only one observation is not accepted for a mixed exact basis", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const prepared = prepareComparison(boundary, runRef);
+  const differentProduction = { ...prepared.inputs[1], sourceFactRef: sourceRef() };
+  ingest(boundary, runRef, [prepared.inputs[0], differentProduction, affordanceInput()]);
+  boundary.processCurrentInteraction(runRef);
+  const candidates = recordsOf(boundary, runRef, "trial_candidate");
+  assert.equal(candidates.length, 1);
+  assert.notEqual(candidates[0].supportComparisonRef, prepared.comparison.reference);
+  const newComparison = recordsOf(boundary, runRef, "dimension_comparison")
+    .find((comparison) => comparison.reference !== prepared.comparison.reference);
+  assert.equal(candidates[0].supportComparisonRef, newComparison.reference);
+});
+
+test("multiple materially distinct exact comparison anchors fail closed", () => {
+  const run = new RunState();
+  const observations = calibrationInputs();
+  run.assertSourceFactConsistency(observations);
+  run.ingest(observations);
+  run.processCurrentInteraction();
+  const comparison = [...run.records.values()].find((record) => record.family === "dimension_comparison");
+  const duplicate = { ...structuredClone(comparison), reference: createReference("state") };
+  run.records.set(duplicate.reference, duplicate);
+  for (const relation of run.relations.filter((item) => item.fromRef === comparison.reference)) {
+    run.relations.push({ ...structuredClone(relation), fromRef: duplicate.reference });
+  }
+  const trialInputs = [...observations, affordanceInput()];
+  run.assertSourceFactConsistency(trialInputs);
+  run.ingest(trialInputs);
+  assert.throws(() => run.processCurrentInteraction(), /Multiple materially distinct exact dimension comparisons/);
+});
+
+test("an inert opaque state reference does not change temporal or candidate behavior", () => {
+  function execute(includeReference) {
+    const boundary = createSutBoundary();
+    const runRef = boundary.startRun();
+    const prepared = prepareComparison(boundary, runRef);
+    const inputs = [...prepared.inputs, affordanceInput()];
+    if (includeReference) {
+      inputs.push(stateReferenceInput(prepared.comparison.reference));
+    }
+    ingest(boundary, runRef, inputs);
+    boundary.processCurrentInteraction(runRef);
+    return recordsOf(boundary, runRef, "trial_candidate").map((candidate) => ({
+      candidateType: candidate.candidateType,
+      proposedScope: candidate.proposedScope,
+      lifecycleStatus: candidate.lifecycleStatus
+    }));
+  }
+  assert.deepEqual(execute(false), execute(true));
+});
+
+test("state-reference shape has no semantic purpose and remains same-run opaque", () => {
   const boundary = createSutBoundary();
   const firstRun = boundary.startRun();
-  const comparison = createCalibrationComparison(boundary, firstRun, 4, 1);
-  boundary.ingestSutVisibleInputs(firstRun, {
-    inputs: [candidateSupportInput(comparison.reference), affordanceInput()]
-  });
-  boundary.processCurrentInteraction(firstRun);
-  const candidate = boundary.captureInspectionSnapshot(firstRun).records.find((record) => (
-    record.family === "trial_candidate"
-  ));
-
-  boundary.endRun(firstRun);
-  const secondRun = boundary.startRun();
-  assert.deepEqual(boundary.captureInspectionSnapshot(secondRun).records, []);
-  assert.throws(() => boundary.inspectRecord(secondRun, candidate.reference), /Unknown or closed/);
+  const fact = ingest(boundary, firstRun, [communicationInput()]);
   assert.throws(
-    () => boundary.ingestSutVisibleInputs(secondRun, {
-      inputs: [candidateSupportInput(comparison.reference), affordanceInput()]
-    }),
+    () => ingest(boundary, firstRun, [stateReferenceInput(fact.acceptedInputRefs[0], { purpose: "candidate_support" })]),
+    /must contain exactly/
+  );
+  const secondRun = boundary.startRun();
+  assert.throws(
+    () => ingest(boundary, secondRun, [stateReferenceInput(fact.acceptedInputRefs[0])]),
     /does not resolve inside this run/
   );
 });
 
-test("independent runs do not retain state or references after a run ends", () => {
-  const boundary = createSutBoundary();
-  const firstRun = boundary.startRun();
-  const firstResult = boundary.ingestSutVisibleInputs(firstRun, {
-    inputs: [communicationInput()]
-  });
-
-  boundary.endRun(firstRun);
-  const secondRun = boundary.startRun();
-
-  assert.throws(() => boundary.inspectRecord(secondRun, firstResult.acceptedInputRefs[0]), /Unknown or closed/);
-  assert.deepEqual(boundary.captureInspectionSnapshot(secondRun).records, []);
-  assert.throws(() => boundary.captureInspectionSnapshot(firstRun), /Unknown or closed/);
+test("inspection interleaving does not change exact-basis reuse or candidate formation", () => {
+  function execute(withInspection) {
+    const boundary = createSutBoundary();
+    const runRef = boundary.startRun();
+    const prepared = prepareComparison(boundary, runRef);
+    if (withInspection) {
+      boundary.captureInspectionSnapshot(runRef);
+      boundary.inspectRecord(runRef, prepared.comparison.reference);
+      boundary.enumerateLocalRelations(runRef, prepared.comparison.reference);
+    }
+    const affordance = affordanceInput();
+    replayTrialBasis(boundary, runRef, prepared.inputs, [affordance]);
+    replayTrialBasis(boundary, runRef, prepared.inputs, [affordance]);
+    return {
+      comparisons: recordsOf(boundary, runRef, "dimension_comparison").length,
+      candidates: recordsOf(boundary, runRef, "trial_candidate").length,
+      dispositions: recordsOf(boundary, runRef, "non_activation_disposition").length
+    };
+  }
+  assert.deepEqual(execute(false), execute(true));
 });
 
-function semanticSummary(snapshot) {
-  return snapshot.records
-    .filter((record) => ["attributed_assertion", "temporal_eligibility_assessment"].includes(record.family))
-    .map((record) => ({
-      family: record.family,
-      context: record.context,
-      epistemicStatus: record.epistemicStatus,
-      useTarget: record.useTarget,
-      dimension: record.dimension,
-      ageDays: record.ageDays,
-      eligibility: record.eligibility
-    }))
-    .sort((left, right) => left.family.localeCompare(right.family));
-}
-
-function dimensionComparisonSummary(snapshot) {
-  return snapshot.records
-    .filter((record) => record.family === "dimension_comparison")
-    .map((record) => ({
-      targetDimension: record.targetDimension,
-      recognitionPerformance: record.recognitionPerformance,
-      productionPerformance: record.productionPerformance,
-      comparisonResult: record.comparisonResult,
-      uncertainty: record.uncertainty
-    }));
-}
-
-function createCalibrationComparison(boundary, runRef, recognitionCorrect, productionCorrect) {
-  boundary.ingestSutVisibleInputs(runRef, {
-    inputs: [
-      taskObservationInput({
-        itemRef: "recognition-calibration-items",
-        taskMode: "recognition",
-        performance: { kind: "aggregate", correctCount: recognitionCorrect, totalCount: 4 },
-        occurrenceOrder: 1
-      }),
-      taskObservationInput({
-        itemRef: "production-calibration-items",
-        taskMode: "spontaneous_production",
-        performance: { kind: "aggregate", correctCount: productionCorrect, totalCount: 4 },
-        occurrenceOrder: 2
-      })
-    ]
-  });
-  boundary.processCurrentInteraction(runRef);
-  return boundary.captureInspectionSnapshot(runRef).records.find((record) => (
-    record.family === "dimension_comparison"
-  ));
-}
-
-function trialDecisionSummary(snapshot) {
-  return snapshot.records
-    .filter((record) => ["trial_candidate", "non_activation_disposition"].includes(record.family))
-    .map((record) => ({
-      family: record.family,
-      candidateType: record.candidateType,
-      materialIntent: record.materialIntent,
-      purpose: record.purpose,
-      proposedScope: record.proposedScope,
-      lifecycleStatus: record.lifecycleStatus,
-      disposition: record.disposition,
-      reason: record.reason,
-      targetDimension: record.targetDimension
-    }));
-}
+test("independent runs cannot resolve prior source identity or retained state", () => {
+  const boundary = createSutBoundary();
+  const firstRun = boundary.startRun();
+  const input = communicationInput();
+  const first = ingest(boundary, firstRun, [input]);
+  boundary.endRun(firstRun);
+  const secondRun = boundary.startRun();
+  const second = ingest(boundary, secondRun, [input]);
+  assert.notEqual(second.acceptedInputRefs[0], first.acceptedInputRefs[0]);
+  assert.throws(() => boundary.inspectRecord(secondRun, first.acceptedInputRefs[0]), /Unknown or closed/);
+  assert.throws(() => boundary.captureInspectionSnapshot(firstRun), /Unknown or closed/);
+});

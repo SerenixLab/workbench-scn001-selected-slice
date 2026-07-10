@@ -37,6 +37,7 @@ export function createSutBoundary() {
       const run = getRun(runs, runRef);
       const inputs = validateInputBatch(batch);
       run.assertInputReferencesResolve(inputs);
+      run.assertSourceFactConsistency(inputs);
       return run.ingest(inputs);
     },
 

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 const roleDefinitions = {
   communication_event: {
     kind: "communication",
@@ -33,7 +35,7 @@ const roleDefinitions = {
   },
   sut_state_reference: {
     kind: "state_reference",
-    keys: ["stateRef", "purpose"]
+    keys: ["stateRef"]
   },
   outcome_fact: {
     kind: "outcome_fact",
@@ -45,7 +47,7 @@ const roleDefinitions = {
   }
 };
 
-export function projectFixtureRecord(record) {
+export function projectFixtureRecord(record, sourceFactRef = createSourceFactReference()) {
   assertExactKeys(record, ["fixtureRecordId", "role", "sourceActor", "occurrenceOrder", "data", "oracleAnnotations"], "fixture record");
   const definition = roleDefinitions[record.role];
   if (!definition) {
@@ -57,6 +59,7 @@ export function projectFixtureRecord(record) {
   }
 
   return {
+    sourceFactRef,
     kind: definition.kind,
     sourceActor: record.sourceActor,
     occurrenceOrder: record.occurrenceOrder,
@@ -64,13 +67,20 @@ export function projectFixtureRecord(record) {
   };
 }
 
-export function projectFixtureRecords(records) {
+export function projectFixtureRecords(records, sourceFactReferenceFor = () => createSourceFactReference()) {
   if (!Array.isArray(records) || records.length === 0) {
     throw new Error("Fixture projection requires a non-empty record array.");
   }
   return {
-    inputs: records.map(projectFixtureRecord)
+    inputs: records.map((record) => projectFixtureRecord(
+      record,
+      sourceFactReferenceFor(record.fixtureRecordId)
+    ))
   };
+}
+
+export function createSourceFactReference() {
+  return `source_${randomUUID()}`;
 }
 
 function assertExactKeys(value, expectedKeys, path) {

@@ -2,7 +2,8 @@ import { SutBoundaryValidationError } from "./errors.js";
 
 const inputValidators = {
   communication: (input, path) => {
-    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "content", "context", "semanticStatusOrigin"], path);
+    assertCommonInputFields(input, path);
+    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "content", "context", "semanticStatusOrigin"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertString(input.content, `${path}.content`);
@@ -10,7 +11,8 @@ const inputValidators = {
     assertOneOf(input.semanticStatusOrigin, ["unclassified", "fixture_initialized"], `${path}.semanticStatusOrigin`);
   },
   task_observation: (input, path) => {
-    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "itemRef", "taskMode", "dimension", "performance", "occurrenceScenarioDay", "sessionId", "sessionOrder"], path);
+    assertCommonInputFields(input, path);
+    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "itemRef", "taskMode", "dimension", "performance", "occurrenceScenarioDay", "sessionId", "sessionOrder"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertString(input.itemRef, `${path}.itemRef`);
@@ -22,7 +24,8 @@ const inputValidators = {
     assertPositiveInteger(input.sessionOrder, `${path}.sessionOrder`);
   },
   chronology_fact: (input, path) => {
-    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "scenarioDay", "sessionId", "sessionOrder"], path);
+    assertCommonInputFields(input, path);
+    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "scenarioDay", "sessionId", "sessionOrder"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertNonNegativeInteger(input.scenarioDay, `${path}.scenarioDay`);
@@ -30,7 +33,8 @@ const inputValidators = {
     assertPositiveInteger(input.sessionOrder, `${path}.sessionOrder`);
   },
   context_label: (input, path) => {
-    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "surfaceLabel", "activity", "taskMode", "consequence"], path);
+    assertCommonInputFields(input, path);
+    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "surfaceLabel", "activity", "taskMode", "consequence"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertString(input.surfaceLabel, `${path}.surfaceLabel`);
@@ -39,28 +43,32 @@ const inputValidators = {
     assertString(input.consequence, `${path}.consequence`);
   },
   affordance_fact: (input, path) => {
-    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "direction", "description"], path);
+    assertCommonInputFields(input, path);
+    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "direction", "description"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertString(input.direction, `${path}.direction`);
     assertString(input.description, `${path}.description`);
   },
   fixture_control_fact: (input, path) => {
-    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "control", "value"], path);
+    assertCommonInputFields(input, path);
+    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "control", "value"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertString(input.control, `${path}.control`);
     assertString(input.value, `${path}.value`);
   },
   user_response: (input, path) => {
-    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "content", "context"], path);
+    assertCommonInputFields(input, path);
+    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "content", "context"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertString(input.content, `${path}.content`);
     assertString(input.context, `${path}.context`);
   },
   simulator_realization: (input, path) => {
-    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "requestedRef", "realizedBehavior", "fidelity"], path);
+    assertCommonInputFields(input, path);
+    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "requestedRef", "realizedBehavior", "fidelity"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertOpaqueStateReference(input.requestedRef, `${path}.requestedRef`);
@@ -68,25 +76,23 @@ const inputValidators = {
     assertOneOf(input.fidelity, ["match", "mismatch", "unknown"], `${path}.fidelity`);
   },
   state_reference: (input, path) => {
-    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "stateRef", "purpose"], path);
+    assertCommonInputFields(input, path);
+    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "stateRef"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertOpaqueStateReference(input.stateRef, `${path}.stateRef`);
-    assertOneOf(
-      input.purpose,
-      ["independent_current_skill_authority", "candidate_support"],
-      `${path}.purpose`
-    );
   },
   outcome_fact: (input, path) => {
-    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "observation", "context"], path);
+    assertCommonInputFields(input, path);
+    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "observation", "context"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertString(input.observation, `${path}.observation`);
     assertString(input.context, `${path}.context`);
   },
   material_context_change: (input, path) => {
-    assertExactKeys(input, ["kind", "sourceActor", "occurrenceOrder", "description"], path);
+    assertCommonInputFields(input, path);
+    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "description"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertString(input.description, `${path}.description`);
@@ -112,6 +118,10 @@ export function validateInputBatch(batch) {
   });
 
   return structuredClone(batch.inputs);
+}
+
+function assertCommonInputFields(input, path) {
+  assertOpaqueSourceFactReference(input.sourceFactRef, `${path}.sourceFactRef`);
 }
 
 function assertExactKeys(value, expectedKeys, path) {
@@ -171,8 +181,14 @@ function assertNonNegativeInteger(value, path) {
 }
 
 function assertOpaqueStateReference(value, path) {
-  if (typeof value !== "string" || !/^state_[0-9a-f-]{36}$/.test(value)) {
+  if (typeof value !== "string" || !/^state_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)) {
     throw new SutBoundaryValidationError(`${path} must be an opaque SUT state reference.`);
+  }
+}
+
+function assertOpaqueSourceFactReference(value, path) {
+  if (typeof value !== "string" || !/^source_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)) {
+    throw new SutBoundaryValidationError(`${path} must be an opaque run-local source-fact reference.`);
   }
 }
 

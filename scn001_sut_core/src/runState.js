@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
-import { SutBoundaryValidationError, SutReferenceError } from "./errors.js";
+import { SutBoundaryValidationError, SutReferenceError, SutStateIntegrityError } from "./errors.js";
 
 const PRODUCTION_FOCUSED_TRIAL_DIRECTION = "TRIAL-PROD-FOCUS";
 
@@ -11,6 +12,7 @@ export class RunState {
     this.records = new Map();
     this.relations = [];
     this.actorReferences = new Map();
+    this.sourceFactBindings = new Map();
     this.pendingInteractions = [];
   }
 
@@ -18,20 +20,34 @@ export class RunState {
     const interactionRef = createReference("interaction");
     const stagedActors = [];
     const stagedFacts = [];
+    const inputFacts = [];
 
     for (const input of inputs) {
+      const existingBinding = this.sourceFactBindings.get(input.sourceFactRef);
+      if (existingBinding) {
+        inputFacts.push(this.records.get(existingBinding.inputFactRef));
+        continue;
+      }
+      const alreadyStaged = stagedFacts.find((fact) => fact.sourceFactRef === input.sourceFactRef);
+      if (alreadyStaged) {
+        inputFacts.push(alreadyStaged);
+        continue;
+      }
       const origin = inputOrigin(input);
       const actor = this.stageActor(input.sourceActor, origin, stagedActors);
-      stagedFacts.push({
+      const fact = {
         reference: createReference("state"),
         family: "input_fact",
         origin,
         role: input.kind,
+        sourceFactRef: input.sourceFactRef,
         payload: input,
-        interactionRef,
+        firstInteractionRef: interactionRef,
         createdOrder: this.allocateOrder(),
         sourceActorRef: actor.reference
-      });
+      };
+      stagedFacts.push(fact);
+      inputFacts.push(fact);
     }
 
     const initializedAssertions = stagedFacts
@@ -56,7 +72,7 @@ export class RunState {
       reference: interactionRef,
       family: "interaction_segment",
       origin: "sut",
-      inputReferences: stagedFacts.map((fact) => fact.reference),
+      inputReferences: inputFacts.map((fact) => fact.reference),
       createdOrder: this.allocateOrder()
     };
 
@@ -66,7 +82,7 @@ export class RunState {
       origin: "sut",
       transitionKind: "ingest_sut_visible_inputs",
       interactionRef,
-      inputReferences: stagedFacts.map((fact) => fact.reference),
+      inputReferences: inputFacts.map((fact) => fact.reference),
       resultReferences: [
         interaction.reference,
         ...initializedAssertions.map((assertion) => assertion.reference)
@@ -85,6 +101,10 @@ export class RunState {
     }
     for (const fact of stagedFacts) {
       this.records.set(fact.reference, fact);
+      this.sourceFactBindings.set(fact.sourceFactRef, {
+        inputFactRef: fact.reference,
+        semanticMeaning: sourceFactMeaning(fact.payload)
+      });
     }
     for (const assertion of initializedAssertions) {
       this.records.set(assertion.reference, assertion);
@@ -102,6 +122,8 @@ export class RunState {
         createdOrder: transition.createdOrder,
         assertedByRole: "sut"
       });
+    }
+    for (const fact of inputFacts) {
       this.relations.push({
         relationKind: "basis",
         fromRef: transition.reference,
@@ -137,9 +159,30 @@ export class RunState {
     this.pendingInteractions.push(interaction);
 
     return {
-      acceptedInputRefs: stagedFacts.map((fact) => fact.reference),
+      acceptedInputRefs: inputFacts.map((fact) => fact.reference),
       transitionRef: transition.reference
     };
+  }
+
+  assertSourceFactConsistency(inputs) {
+    const batchMeanings = new Map();
+    for (const input of inputs) {
+      const meaning = sourceFactMeaning(input);
+      const batchMeaning = batchMeanings.get(input.sourceFactRef);
+      if (batchMeaning && !isDeepStrictEqual(batchMeaning, meaning)) {
+        throw new SutBoundaryValidationError(
+          `Source-fact reference ${input.sourceFactRef} cannot identify different SUT-visible fact content.`
+        );
+      }
+      batchMeanings.set(input.sourceFactRef, meaning);
+
+      const existing = this.sourceFactBindings.get(input.sourceFactRef);
+      if (existing && !isDeepStrictEqual(existing.semanticMeaning, meaning)) {
+        throw new SutBoundaryValidationError(
+          `Source-fact reference ${input.sourceFactRef} cannot be rebound to different SUT-visible fact content.`
+        );
+      }
+    }
   }
 
   assertInputReferencesResolve(inputs) {
@@ -220,6 +263,11 @@ export class RunState {
     const communicationFacts = interactionFacts.filter((fact) => (
       fact.role === "communication"
       && fact.payload.semanticStatusOrigin === "unclassified"
+      && !this.findRecord((record) => (
+        record.family === "attributed_assertion"
+        && record.sourceCommunicationRef === fact.reference
+        && record.statusOrigin === "sut_transition"
+      ))
     ));
     if (communicationFacts.length === 0) {
       return undefined;
@@ -276,17 +324,27 @@ export class RunState {
       return undefined;
     }
 
-    const evidenceEntries = this.temporalEvidenceEntries(interactionFacts)
-      .filter(({ observation }) => (
+    const observations = interactionFacts
+      .filter((fact) => fact.role === "task_observation")
+      .filter((observation) => (
         observation.payload.occurrenceScenarioDay < currentChronology.payload.scenarioDay
       ));
-    if (evidenceEntries.length === 0) {
+    if (observations.length === 0) {
       return undefined;
     }
 
-    const assessments = evidenceEntries.map(({ observation, referenceFact }) => {
+    const assessments = observations.flatMap((observation) => {
+      const existing = this.findRecord((record) => (
+        record.family === "temporal_eligibility_assessment"
+        && record.assessedObservationRef === observation.reference
+        && record.chronologyRef === currentChronology.reference
+        && record.useTarget === "independent_current_skill_authority"
+      ));
+      if (existing) {
+        return [];
+      }
       const ageDays = currentChronology.payload.scenarioDay - observation.payload.occurrenceScenarioDay;
-      return {
+      return [{
         reference: createReference("state"),
         family: "temporal_eligibility_assessment",
         origin: "sut",
@@ -300,15 +358,15 @@ export class RunState {
         eligibility: ageDays > 90 ? "ineligible" : "eligible",
         temporalUncertainty: "none",
         statusOrigin: "sut_transition",
-        evidenceReferenceRef: referenceFact?.reference,
         interactionRef: interaction.reference,
         createdOrder: this.allocateOrder()
-      };
+      }];
     });
+    if (assessments.length === 0) {
+      return undefined;
+    }
     const inputReferences = uniqueReferences([
-      ...evidenceEntries.flatMap(({ observation, referenceFact }) => (
-        referenceFact ? [observation.reference, referenceFact.reference] : [observation.reference]
-      )),
+      ...assessments.map((assessment) => assessment.assessedObservationRef),
       currentChronology.reference
     ]);
     const transition = this.createTransition(
@@ -341,18 +399,6 @@ export class RunState {
         createdOrder: transition.createdOrder,
         assertedByRole: "sut"
       });
-      if (assessment.evidenceReferenceRef) {
-        this.relations.push({
-          relationKind: "basis",
-          fromRef: assessment.reference,
-          toRef: assessment.evidenceReferenceRef,
-          targetRole: "evidence_reference",
-          semanticUseTarget: assessment.useTarget,
-          effectiveOrder: assessment.createdOrder,
-          createdOrder: transition.createdOrder,
-          assertedByRole: "sut"
-        });
-      }
     }
     return transition.reference;
   }
@@ -384,6 +430,20 @@ export class RunState {
         continue;
       }
 
+      const recognitionObservationRefs = grouped.recognition.map((fact) => fact.reference);
+      const productionObservationRefs = grouped.spontaneousProduction.map((fact) => fact.reference);
+      const existing = this.findRecord((record) => (
+        record.family === "dimension_comparison"
+        && record.targetDimension === dimension
+        && record.recognitionTaskMode === "recognition"
+        && record.productionTaskMode === "spontaneous_production"
+        && sameReferenceSet(record.recognitionObservationRefs, recognitionObservationRefs)
+        && sameReferenceSet(record.productionObservationRefs, productionObservationRefs)
+      ));
+      if (existing) {
+        continue;
+      }
+
       const recognitionPerformance = summarizePerformance(grouped.recognition);
       const productionPerformance = summarizePerformance(grouped.spontaneousProduction);
       comparisons.push({
@@ -393,8 +453,8 @@ export class RunState {
         targetDimension: dimension,
         recognitionTaskMode: "recognition",
         productionTaskMode: "spontaneous_production",
-        recognitionObservationRefs: grouped.recognition.map((fact) => fact.reference),
-        productionObservationRefs: grouped.spontaneousProduction.map((fact) => fact.reference),
+        recognitionObservationRefs,
+        productionObservationRefs,
         recognitionPerformance,
         productionPerformance,
         comparisonResult: comparePerformance(recognitionPerformance, productionPerformance),
@@ -444,64 +504,90 @@ export class RunState {
   }
 
   deriveTrialCandidateDecisions(interaction, interactionFacts) {
-    const supportReferences = interactionFacts.filter((fact) => (
-      fact.role === "state_reference"
-      && fact.payload.purpose === "candidate_support"
+    const observations = interactionFacts.filter((fact) => (
+      fact.role === "task_observation"
+      && ["recognition", "spontaneous_production"].includes(fact.payload.taskMode)
     ));
-    if (supportReferences.length === 0) {
+    const affordances = interactionFacts.filter((fact) => fact.role === "affordance_fact");
+    if (observations.length === 0 || affordances.length === 0) {
       return undefined;
     }
 
-    const affordances = interactionFacts.filter((fact) => fact.role === "affordance_fact");
     const productionAffordances = affordances.filter((fact) => (
       fact.payload.direction === PRODUCTION_FOCUSED_TRIAL_DIRECTION
     ));
-    const decisions = supportReferences.map((supportReference) => {
-      const comparison = this.records.get(supportReference.payload.stateRef);
+    const observationGroups = groupCalibrationObservations(observations);
+    const completeGroups = [...observationGroups.entries()].filter(([, grouped]) => (
+      grouped.recognition.length > 0 && grouped.spontaneousProduction.length > 0
+    ));
+    const decisions = [];
 
-      if (comparison?.family !== "dimension_comparison") {
-        return {
+    if (completeGroups.length === 0) {
+      decisions.push({
+        kind: "non_activation",
+        disposition: "DISP-REQUEST-MORE-EVIDENCE",
+        reason: "exact_comparison_support_unavailable"
+      });
+    }
+
+    for (const [dimension, grouped] of completeGroups) {
+      const comparison = this.resolveExactDimensionComparison(
+        dimension,
+        grouped.recognition.map((fact) => fact.reference),
+        grouped.spontaneousProduction.map((fact) => fact.reference)
+      );
+      if (!comparison) {
+        decisions.push({
           kind: "non_activation",
-          supportReference,
           disposition: "DISP-REQUEST-MORE-EVIDENCE",
-          reason: "candidate_support_did_not_resolve_to_dimension_comparison"
-        };
+          reason: "exact_comparison_support_unavailable",
+          targetDimension: dimension
+        });
+        continue;
       }
       if (productionAffordances.length !== 1) {
-        return {
+        decisions.push({
           kind: "non_activation",
-          supportReference,
           comparison,
           disposition: "DISP-WITHHOLD",
           reason: productionAffordances.length === 0
             ? "required_trial_direction_unavailable"
             : "required_trial_direction_ambiguous"
-        };
+        });
+        continue;
       }
 
       const selectedAffordance = productionAffordances[0];
       if (comparison.comparisonResult !== "recognition_score_higher") {
-        return {
+        decisions.push({
           kind: "non_activation",
-          supportReference,
           comparison,
           selectedAffordance,
           disposition: "DISP-WITHHOLD",
           reason: comparison.comparisonResult === "no_observed_score_difference"
             ? "no_observed_recognition_production_difference"
             : "production_focused_direction_not_supported"
-        };
+        });
+        continue;
       }
 
-      return {
+      decisions.push({
         kind: "candidate",
-        supportReference,
         comparison,
         selectedAffordance
-      };
-    });
+      });
+    }
 
-    const decisionRecords = decisions.map((decision) => (
+    const decisionBasisAffordanceRefs = sortedReferences(affordances.map((fact) => fact.reference));
+    const newDecisions = decisions.filter((decision) => !this.findExistingTrialDecision(
+      decision,
+      decisionBasisAffordanceRefs
+    ));
+    if (newDecisions.length === 0) {
+      return undefined;
+    }
+
+    const decisionRecords = newDecisions.map((decision) => (
       decision.kind === "candidate"
         ? {
             reference: createReference("state"),
@@ -521,6 +607,7 @@ export class RunState {
             correctionPath: "separate_activation_required_before_behavior_effect",
             lifecycleStatus: "formed_non_active",
             lifecycleVersion: 1,
+            decisionBasisAffordanceRefs,
             uncertainty: decision.comparison.uncertainty,
             statusOrigin: "sut_transition",
             interactionRef: interaction.reference,
@@ -535,7 +622,8 @@ export class RunState {
             appliesTo: "trial_candidate_formation",
             consideredTrialDirectionRef: decision.selectedAffordance?.reference,
             supportComparisonRef: decision.comparison?.reference,
-            targetDimension: decision.comparison?.targetDimension,
+            targetDimension: decision.comparison?.targetDimension ?? decision.targetDimension,
+            decisionBasisAffordanceRefs,
             statusOrigin: "sut_transition",
             interactionRef: interaction.reference,
             createdOrder: this.allocateOrder()
@@ -544,15 +632,17 @@ export class RunState {
     const transition = this.createTransition(
       "form_or_withhold_production_focused_candidate",
       uniqueReferences([
-        ...supportReferences.map((fact) => fact.reference),
-        ...supportReferences.map((fact) => fact.payload.stateRef),
+        ...observations.map((fact) => fact.reference),
+        ...newDecisions.flatMap((decision) => (
+          decision.comparison ? [decision.comparison.reference] : []
+        )),
         ...affordances.map((fact) => fact.reference)
       ]),
       decisionRecords.map((record) => record.reference),
       interaction.reference
     );
-    const candidateCount = decisions.filter((decision) => decision.kind === "candidate").length;
-    transition.result = candidateCount === decisions.length
+    const candidateCount = newDecisions.filter((decision) => decision.kind === "candidate").length;
+    transition.result = candidateCount === newDecisions.length
       ? "candidate_formed"
       : candidateCount === 0
         ? "non_activation_recorded"
@@ -560,17 +650,8 @@ export class RunState {
     attachCreatingTransition(decisionRecords, transition);
     this.commitDerivedRecords(decisionRecords, transition);
 
-    decisions.forEach((decision, index) => {
+    newDecisions.forEach((decision, index) => {
       const record = decisionRecords[index];
-      this.relations.push({
-        relationKind: "basis",
-        fromRef: record.reference,
-        toRef: decision.supportReference.reference,
-        targetRole: "state_reference_carrier",
-        effectiveOrder: record.createdOrder,
-        createdOrder: transition.createdOrder,
-        assertedByRole: "sut"
-      });
       if (decision.kind === "candidate") {
         this.relations.push({
           relationKind: "basis",
@@ -628,6 +709,66 @@ export class RunState {
     return transition.reference;
   }
 
+  resolveExactDimensionComparison(dimension, recognitionRefs, productionRefs) {
+    const candidateAnchors = intersectReferenceSets([
+      ...recognitionRefs.map((reference) => this.comparisonAnchorsFor(
+        reference,
+        "recognition_observation"
+      )),
+      ...productionRefs.map((reference) => this.comparisonAnchorsFor(
+        reference,
+        "production_observation"
+      ))
+    ]);
+    const exactMatches = [...candidateAnchors]
+      .map((reference) => this.records.get(reference))
+      .filter((record) => (
+        record?.family === "dimension_comparison"
+        && record.targetDimension === dimension
+        && record.recognitionTaskMode === "recognition"
+        && record.productionTaskMode === "spontaneous_production"
+        && sameReferenceSet(record.recognitionObservationRefs, recognitionRefs)
+        && sameReferenceSet(record.productionObservationRefs, productionRefs)
+      ));
+
+    if (exactMatches.length > 1) {
+      throw new SutStateIntegrityError(
+        "Multiple materially distinct exact dimension comparisons resolve from the current observation basis."
+      );
+    }
+    return exactMatches[0];
+  }
+
+  comparisonAnchorsFor(observationRef, targetRole) {
+    return new Set(this.relations
+      .filter((relation) => (
+        relation.relationKind === "basis"
+        && relation.toRef === observationRef
+        && relation.targetRole === targetRole
+      ))
+      .map((relation) => relation.fromRef));
+  }
+
+  findExistingTrialDecision(decision, affordanceRefs) {
+    return this.findRecord((record) => {
+      if (!sameReferenceSet(record.decisionBasisAffordanceRefs ?? [], affordanceRefs)) {
+        return false;
+      }
+      if (decision.kind === "candidate") {
+        return record.family === "trial_candidate"
+          && record.supportComparisonRef === decision.comparison.reference
+          && record.trialDirectionRef === decision.selectedAffordance.reference;
+      }
+      return record.family === "non_activation_disposition"
+        && record.reason === decision.reason
+        && record.disposition === decision.disposition
+        && record.supportComparisonRef === decision.comparison?.reference
+        && record.targetDimension === (
+          decision.comparison?.targetDimension ?? decision.targetDimension
+        );
+    });
+  }
+
   stageActor(sourceActor, origin, stagedActors) {
     const identityKey = actorReferenceKey(sourceActor, origin);
     const existingReference = this.actorReferences.get(identityKey);
@@ -663,35 +804,6 @@ export class RunState {
       ))[0];
   }
 
-  temporalEvidenceEntries(interactionFacts) {
-    const entries = [];
-    const seenObservationRefs = new Set();
-
-    for (const fact of interactionFacts) {
-      const observation = fact.role === "task_observation"
-        ? fact
-        : fact.role === "state_reference"
-          && fact.payload.purpose === "independent_current_skill_authority"
-          ? this.records.get(fact.payload.stateRef)
-          : undefined;
-      if (
-        observation?.family !== "input_fact"
-        || observation.role !== "task_observation"
-        || seenObservationRefs.has(observation.reference)
-      ) {
-        continue;
-      }
-
-      seenObservationRefs.add(observation.reference);
-      entries.push({
-        observation,
-        referenceFact: fact.role === "state_reference" ? fact : undefined
-      });
-    }
-
-    return entries;
-  }
-
   createTransition(transitionKind, inputReferences, resultReferences, interactionRef) {
     return {
       reference: createReference("transition"),
@@ -711,6 +823,10 @@ export class RunState {
       this.records.set(record.reference, record);
     }
     this.records.set(transition.reference, transition);
+  }
+
+  findRecord(predicate) {
+    return [...this.records.values()].find(predicate);
   }
 
   allocateOrder() {
@@ -744,6 +860,45 @@ function attachCreatingTransition(records, transition) {
 
 function uniqueReferences(references) {
   return [...new Set(references)];
+}
+
+function sourceFactMeaning(input) {
+  const meaning = structuredClone(input);
+  delete meaning.sourceFactRef;
+  return meaning;
+}
+
+function sortedReferences(references) {
+  return [...references].sort();
+}
+
+function sameReferenceSet(left, right) {
+  return isDeepStrictEqual(sortedReferences(left), sortedReferences(right));
+}
+
+function intersectReferenceSets(sets) {
+  if (sets.length === 0) {
+    return new Set();
+  }
+  return new Set([...sets[0]].filter((reference) => (
+    sets.slice(1).every((set) => set.has(reference))
+  )));
+}
+
+function groupCalibrationObservations(observations) {
+  const groups = new Map();
+  for (const observation of observations) {
+    const grouped = groups.get(observation.payload.dimension) ?? {
+      recognition: [],
+      spontaneousProduction: []
+    };
+    const target = observation.payload.taskMode === "recognition"
+      ? grouped.recognition
+      : grouped.spontaneousProduction;
+    target.push(observation);
+    groups.set(observation.payload.dimension, grouped);
+  }
+  return groups;
 }
 
 function summarizePerformance(observations) {

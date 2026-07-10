@@ -1,21 +1,41 @@
 import { SUT_PUBLIC_BOUNDARY_METHODS } from "@zoey/scn001-sut-core";
 
-import { projectFixtureRecords } from "./fixtureProjection.js";
+import { createSourceFactReference, projectFixtureRecords } from "./fixtureProjection.js";
 
 export function createEvaluationHarness(sutBoundary) {
   assertPublicBoundary(sutBoundary);
+  const runSourceFactReferences = new Map();
 
   return Object.freeze({
     startRun() {
-      return sutBoundary.startRun();
+      const runRef = sutBoundary.startRun();
+      runSourceFactReferences.set(runRef, new Map());
+      return runRef;
     },
 
     endRun(runRef) {
-      return sutBoundary.endRun(runRef);
+      sutBoundary.endRun(runRef);
+      runSourceFactReferences.delete(runRef);
     },
 
     deliverFixtureRecords(runRef, fixtureRecords) {
-      return sutBoundary.ingestSutVisibleInputs(runRef, projectFixtureRecords(fixtureRecords));
+      const sourceReferences = runSourceFactReferences.get(runRef);
+      if (!sourceReferences) {
+        throw new Error(`Unknown or closed evaluation run: ${runRef}.`);
+      }
+      const sourceFactReferenceFor = (fixtureRecordId) => {
+        const existing = sourceReferences.get(fixtureRecordId);
+        if (existing) {
+          return existing;
+        }
+        const created = createSourceFactReference();
+        sourceReferences.set(fixtureRecordId, created);
+        return created;
+      };
+      return sutBoundary.ingestSutVisibleInputs(
+        runRef,
+        projectFixtureRecords(fixtureRecords, sourceFactReferenceFor)
+      );
     },
 
     processCurrentInteraction(runRef) {
