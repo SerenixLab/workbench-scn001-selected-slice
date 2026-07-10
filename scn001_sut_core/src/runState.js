@@ -20,17 +20,22 @@ export class RunState {
     const interactionRef = createReference("interaction");
     const stagedActors = [];
     const stagedFacts = [];
+    const acceptedInputFacts = [];
     const inputFacts = [];
+    const semanticInputReferences = new Set();
 
     for (const input of inputs) {
       const existingBinding = this.sourceFactBindings.get(input.sourceFactRef);
       if (existingBinding) {
-        inputFacts.push(this.records.get(existingBinding.inputFactRef));
+        const fact = this.records.get(existingBinding.inputFactRef);
+        acceptedInputFacts.push(fact);
+        appendUniqueSemanticInput(inputFacts, semanticInputReferences, fact);
         continue;
       }
       const alreadyStaged = stagedFacts.find((fact) => fact.sourceFactRef === input.sourceFactRef);
       if (alreadyStaged) {
-        inputFacts.push(alreadyStaged);
+        acceptedInputFacts.push(alreadyStaged);
+        appendUniqueSemanticInput(inputFacts, semanticInputReferences, alreadyStaged);
         continue;
       }
       const origin = inputOrigin(input);
@@ -47,7 +52,8 @@ export class RunState {
         sourceActorRef: actor.reference
       };
       stagedFacts.push(fact);
-      inputFacts.push(fact);
+      acceptedInputFacts.push(fact);
+      appendUniqueSemanticInput(inputFacts, semanticInputReferences, fact);
     }
 
     const initializedAssertions = stagedFacts
@@ -159,7 +165,7 @@ export class RunState {
     this.pendingInteractions.push(interaction);
 
     return {
-      acceptedInputRefs: inputFacts.map((fact) => fact.reference),
+      acceptedInputRefs: acceptedInputFacts.map((fact) => fact.reference),
       transitionRef: transition.reference
     };
   }
@@ -526,7 +532,8 @@ export class RunState {
       decisions.push({
         kind: "non_activation",
         disposition: "DISP-REQUEST-MORE-EVIDENCE",
-        reason: "exact_comparison_support_unavailable"
+        reason: "exact_comparison_support_unavailable",
+        observationBasisRefs: uniqueReferences(observations.map((fact) => fact.reference))
       });
     }
 
@@ -541,7 +548,11 @@ export class RunState {
           kind: "non_activation",
           disposition: "DISP-REQUEST-MORE-EVIDENCE",
           reason: "exact_comparison_support_unavailable",
-          targetDimension: dimension
+          targetDimension: dimension,
+          observationBasisRefs: uniqueReferences([
+            ...grouped.recognition.map((fact) => fact.reference),
+            ...grouped.spontaneousProduction.map((fact) => fact.reference)
+          ])
         });
         continue;
       }
@@ -623,6 +634,7 @@ export class RunState {
             consideredTrialDirectionRef: decision.selectedAffordance?.reference,
             supportComparisonRef: decision.comparison?.reference,
             targetDimension: decision.comparison?.targetDimension ?? decision.targetDimension,
+            observationBasisRefs: decision.observationBasisRefs,
             decisionBasisAffordanceRefs,
             statusOrigin: "sut_transition",
             interactionRef: interaction.reference,
@@ -688,6 +700,17 @@ export class RunState {
           fromRef: record.reference,
           toRef: decision.comparison.reference,
           targetRole: "comparison_evidence",
+          effectiveOrder: record.createdOrder,
+          createdOrder: transition.createdOrder,
+          assertedByRole: "sut"
+        });
+      }
+      for (const observationRef of decision.observationBasisRefs ?? []) {
+        this.relations.push({
+          relationKind: "basis",
+          fromRef: record.reference,
+          toRef: observationRef,
+          targetRole: "candidate_formation_observation",
           effectiveOrder: record.createdOrder,
           createdOrder: transition.createdOrder,
           assertedByRole: "sut"
@@ -763,6 +786,10 @@ export class RunState {
         && record.reason === decision.reason
         && record.disposition === decision.disposition
         && record.supportComparisonRef === decision.comparison?.reference
+        && sameReferenceSet(
+          record.observationBasisRefs ?? [],
+          decision.observationBasisRefs ?? []
+        )
         && record.targetDimension === (
           decision.comparison?.targetDimension ?? decision.targetDimension
         );
@@ -860,6 +887,14 @@ function attachCreatingTransition(records, transition) {
 
 function uniqueReferences(references) {
   return [...new Set(references)];
+}
+
+function appendUniqueSemanticInput(inputFacts, semanticInputReferences, fact) {
+  if (semanticInputReferences.has(fact.reference)) {
+    return;
+  }
+  semanticInputReferences.add(fact.reference);
+  inputFacts.push(fact);
 }
 
 function sourceFactMeaning(input) {
