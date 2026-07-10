@@ -25,6 +25,28 @@ function communicationFixtureRecord(overrides = {}) {
   };
 }
 
+function taskObservationFixtureRecord(overrides = {}) {
+  return {
+    fixtureRecordId: "C-005",
+    role: "task_observation",
+    sourceActor: "fixture-scorer",
+    occurrenceOrder: 1,
+    data: {
+      itemRef: "recognition-calibration-items",
+      taskMode: "recognition",
+      dimension: "particle_pattern_a",
+      performance: { kind: "aggregate", correctCount: 4, totalCount: 4 },
+      occurrenceScenarioDay: 135,
+      sessionId: "session-current",
+      sessionOrder: 2
+    },
+    oracleAnnotations: {
+      expectedComparison: "recognition_score_higher"
+    },
+    ...overrides
+  };
+}
+
 test("fixture projection removes evaluation-only annotations before public SUT ingestion", () => {
   const boundary = createSutBoundary();
   const harness = createEvaluationHarness(boundary);
@@ -53,6 +75,39 @@ test("fixture projection rejects pre-promoted SUT semantic conclusions", () => {
         context: "spontaneous_production",
         semanticStatusOrigin: "unclassified",
         correctionControlState: "active"
+      }
+    })),
+    /must contain exactly/
+  );
+  assert.throws(
+    () => projectFixtureRecord(taskObservationFixtureRecord({
+      data: {
+        ...taskObservationFixtureRecord().data,
+        performance: {
+          kind: "aggregate",
+          correctCount: 4,
+          totalCount: 4,
+          expectedComparison: "recognition_score_higher"
+        }
+      }
+    })),
+    /must contain exactly/
+  );
+});
+
+test("task-observation projection preserves aggregate performance without projecting a comparison", () => {
+  const projected = projectFixtureRecord(taskObservationFixtureRecord());
+
+  assert.equal(projected.kind, "task_observation");
+  assert.equal(projected.taskMode, "recognition");
+  assert.deepEqual(projected.performance, { kind: "aggregate", correctCount: 4, totalCount: 4 });
+  assert.doesNotMatch(JSON.stringify(projected), /expectedComparison|comparisonResult/);
+
+  assert.throws(
+    () => projectFixtureRecord(taskObservationFixtureRecord({
+      data: {
+        ...taskObservationFixtureRecord().data,
+        comparisonResult: "recognition_score_higher"
       }
     })),
     /must contain exactly/

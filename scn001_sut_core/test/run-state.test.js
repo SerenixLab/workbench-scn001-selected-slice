@@ -522,6 +522,38 @@ test("inspection interleaving does not change attribution or temporal-assessment
   );
 });
 
+test("inspection interleaving does not change the scoped dimension comparison", () => {
+  const inputs = [
+    taskObservationInput({
+      taskMode: "recognition",
+      performance: { kind: "aggregate", correctCount: 4, totalCount: 4 },
+      occurrenceOrder: 1
+    }),
+    taskObservationInput({
+      taskMode: "spontaneous_production",
+      performance: { kind: "aggregate", correctCount: 1, totalCount: 4 },
+      occurrenceOrder: 2
+    })
+  ];
+  const withoutInspection = createSutBoundary();
+  const withoutRun = withoutInspection.startRun();
+  withoutInspection.ingestSutVisibleInputs(withoutRun, { inputs });
+  withoutInspection.processCurrentInteraction(withoutRun);
+
+  const withInspection = createSutBoundary();
+  const withRun = withInspection.startRun();
+  const ingested = withInspection.ingestSutVisibleInputs(withRun, { inputs });
+  withInspection.captureInspectionSnapshot(withRun);
+  withInspection.inspectRecord(withRun, ingested.acceptedInputRefs[0]);
+  withInspection.enumerateLocalRelations(withRun, ingested.transitionRef);
+  withInspection.processCurrentInteraction(withRun);
+
+  assert.deepEqual(
+    dimensionComparisonSummary(withoutInspection.captureInspectionSnapshot(withoutRun)),
+    dimensionComparisonSummary(withInspection.captureInspectionSnapshot(withRun))
+  );
+});
+
 test("independent runs do not retain state or references after a run ends", () => {
   const boundary = createSutBoundary();
   const firstRun = boundary.startRun();
@@ -550,4 +582,16 @@ function semanticSummary(snapshot) {
       eligibility: record.eligibility
     }))
     .sort((left, right) => left.family.localeCompare(right.family));
+}
+
+function dimensionComparisonSummary(snapshot) {
+  return snapshot.records
+    .filter((record) => record.family === "dimension_comparison")
+    .map((record) => ({
+      targetDimension: record.targetDimension,
+      recognitionPerformance: record.recognitionPerformance,
+      productionPerformance: record.productionPerformance,
+      comparisonResult: record.comparisonResult,
+      uncertainty: record.uncertainty
+    }));
 }

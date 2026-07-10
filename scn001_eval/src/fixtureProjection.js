@@ -52,6 +52,9 @@ export function projectFixtureRecord(record) {
     throw new Error(`Unsupported fixture role: ${record.role}.`);
   }
   assertExactKeys(record.data, definition.keys, `fixture record ${record.fixtureRecordId}.data`);
+  if (definition.kind === "task_observation") {
+    assertRawPerformance(record.data.performance, `fixture record ${record.fixtureRecordId}.data.performance`);
+  }
 
   return {
     kind: definition.kind,
@@ -79,6 +82,33 @@ function assertExactKeys(value, expectedKeys, path) {
   if (actualKeys.length !== expected.length || actualKeys.some((key, index) => key !== expected[index])) {
     throw new Error(`${path} must contain exactly: ${expected.join(", ")}.`);
   }
+}
+
+function assertRawPerformance(value, path) {
+  if (!isPlainObject(value) || typeof value.kind !== "string") {
+    throw new Error(`${path}.kind must identify a supported raw performance form.`);
+  }
+  if (value.kind === "binary") {
+    assertExactKeys(value, ["kind", "correct"], path);
+    if (typeof value.correct !== "boolean") {
+      throw new Error(`${path}.correct must be boolean.`);
+    }
+    return;
+  }
+  if (value.kind === "aggregate") {
+    assertExactKeys(value, ["kind", "correctCount", "totalCount"], path);
+    if (!Number.isInteger(value.correctCount) || value.correctCount < 0) {
+      throw new Error(`${path}.correctCount must be a non-negative integer.`);
+    }
+    if (!Number.isInteger(value.totalCount) || value.totalCount < 1) {
+      throw new Error(`${path}.totalCount must be a positive integer.`);
+    }
+    if (value.correctCount > value.totalCount) {
+      throw new Error(`${path}.correctCount must not exceed totalCount.`);
+    }
+    return;
+  }
+  throw new Error(`${path}.kind is not an accepted raw performance form.`);
 }
 
 function isPlainObject(value) {
