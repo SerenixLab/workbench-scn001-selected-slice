@@ -1050,10 +1050,26 @@ export class RunState {
     let materialIntentStatus;
     let reason;
 
+    const realizationClosures = realizations.map((realization) => {
+      const target = this.records.get(realization.payload.requestedRef);
+      if (target?.family !== "proposal_intent") {
+        throw new SutStateIntegrityError("Current proposal-response binding target is unresolved.");
+      }
+      const resolved = this.resolveProposalRealizationClosure(target.reference, realization.reference);
+      if (!resolved) {
+        throw new SutStateIntegrityError("Ambiguous binding cannot claim an unprocessed realization participant.");
+      }
+      return resolved;
+    });
+
     if (responses.length !== 1 || realizations.length > 1) {
       bindingStatus = "ambiguous";
       materialIntentStatus = "unknown";
       reason = "multiple_current_binding_participants";
+      if (realizationClosures.length === 1) {
+        closure = realizationClosures[0];
+        proposal = closure.proposal;
+      }
     } else if (realizations.length === 0) {
       bindingStatus = "unbound";
       materialIntentStatus = "unknown";
@@ -1064,16 +1080,18 @@ export class RunState {
       if (proposal?.family !== "proposal_intent") {
         throw new SutStateIntegrityError("Current proposal-response binding target is unresolved.");
       }
-      closure = this.resolveProposalRealizationClosure(proposal.reference);
+      closure = realizationClosures[0];
       if (!closure || closure.fact.reference !== realization.reference) {
         throw new SutStateIntegrityError(
           "Proposal-response binding requires the exact current P/S/F/R/E realization closure."
         );
       }
       this.validateCandidateBoundProposal(proposal.reference);
-      bindingStatus = "bound";
+      const attributable = this.isCanonicalProposalResponse(responses[0]);
+      bindingStatus = attributable ? "bound" : "unbound";
       materialIntentStatus = realization.payload.fidelity === "match" ? "match" : "mismatch";
-      reason = materialIntentStatus === "match"
+      reason = !attributable ? "response_not_attributable_to_expected_user"
+        : materialIntentStatus === "match"
         ? "exact_candidate_bound_proposal_response"
         : "surfaced_realization_material_mismatch";
     }
@@ -1083,16 +1101,23 @@ export class RunState {
       : "ambiguous_or_non_accepting";
     const realizationFactRefs = realizations.map((fact) => fact.reference);
     const userResponseRefs = responses.map((fact) => fact.reference);
-    const existing = this.findRecord((record) => (
+    const existing = [...this.records.values()].filter((record) => (
       record.family === "binding_assessment"
       && record.proposalRef === (proposal?.reference ?? null)
       && sameReferenceSet(record.realizationFactRefs, realizationFactRefs)
       && sameReferenceSet(record.userResponseRefs, userResponseRefs)
-      && record.bindingStatus === bindingStatus
-      && record.responseStatus === responseStatus
-      && record.materialIntentStatus === materialIntentStatus
     ));
-    if (existing) return undefined;
+    if (existing.length > 1) throw new SutStateIntegrityError("Multiple matching binding assessments exist.");
+    if (existing.length === 1) {
+      this.validateBindingAssessmentClosure(existing[0]);
+      if (existing[0].bindingStatus !== bindingStatus
+        || existing[0].responseStatus !== responseStatus
+        || existing[0].materialIntentStatus !== materialIntentStatus
+        || existing[0].reason !== reason) {
+        throw new SutStateIntegrityError("Existing binding assessment contradicts the exact current classification.");
+      }
+      return undefined;
+    }
 
     const assessment = {
       reference: createReference("state"),
@@ -1114,7 +1139,7 @@ export class RunState {
       ...(proposal ? [proposal.reference] : []),
       ...realizationFactRefs,
       ...userResponseRefs,
-      ...(closure ? [closure.transition.reference] : [])
+      ...realizationClosures.map((item) => item.transition.reference)
     ]);
     const transition = this.createTransition(
       "assess_proposal_response_binding",
@@ -1131,9 +1156,9 @@ export class RunState {
         transition, response.reference, "user_response_fact"
       ));
     }
-    if (closure) {
+    for (const realizationClosure of realizationClosures) {
       this.relations.push(bindingBasisRelation(
-        transition, closure.transition.reference, "proposal_realization_evidence"
+        transition, realizationClosure.transition.reference, "proposal_realization_evidence"
       ));
     }
     if (proposal) {
@@ -1152,6 +1177,101 @@ export class RunState {
       ));
     }
     return transition.reference;
+  }
+
+  isCanonicalProposalResponse(response) {
+    const actor = this.records.get(response.sourceActorRef);
+    return response.payload.context === "proposal_response"
+      && response.payload.sourceActor === "synthetic-user-a"
+      && actor?.family === "semantic_source" && actor.origin === "fixture"
+      && actor.sourceActor === "synthetic-user-a";
+  }
+
+  validateBindingAssessmentClosure(assessment) {
+    if (assessment?.family !== "binding_assessment" || assessment.origin !== "sut"
+      || assessment.bindingType !== "candidate_bound_proposal_response"
+      || assessment.statusOrigin !== "sut_transition") {
+      throw new SutStateIntegrityError("Binding assessment identity is malformed.");
+    }
+    const transitions = [...this.records.values()].filter((record) =>
+      record.transitionKind === "assess_proposal_response_binding"
+      && (record.resultReferences?.includes(assessment.reference)
+        || record.reference === assessment.createdByTransitionRef));
+    if (transitions.length !== 1) throw new SutStateIntegrityError("Binding assessment requires exactly one transition.");
+    const transition = transitions[0];
+    const responses = assessment.userResponseRefs.map((reference) => this.records.get(reference));
+    if (responses.some((response) => response?.role !== "user_response")) {
+      throw new SutStateIntegrityError("Binding assessment has an invalid response participant.");
+    }
+    const realizationClosures = assessment.realizationFactRefs.map((reference) => {
+      const fact = this.records.get(reference);
+      const proposalRef = fact?.payload?.requestedRef;
+      const closure = proposalRef && this.resolveProposalRealizationClosure(proposalRef, reference);
+      if (!closure) throw new SutStateIntegrityError("Binding assessment has an invalid realization participant.");
+      return closure;
+    });
+    const expectedInputs = uniqueReferences([
+      ...(assessment.proposalRef ? [assessment.proposalRef] : []),
+      ...assessment.realizationFactRefs, ...assessment.userResponseRefs,
+      ...realizationClosures.map((closure) => closure.transition.reference)
+    ]);
+    const basis = this.relations.filter((relation) => relation.fromRef === transition.reference
+      && relation.relationKind === "basis");
+    const bindings = this.relations.filter((relation) => relation.fromRef === assessment.reference
+      && relation.relationKind === "binding");
+    const expectedBindings = [
+      ...(assessment.proposalRef ? [[assessment.proposalRef, "candidate_bound_proposal_intent"]] : []),
+      ...assessment.realizationFactRefs.map((ref) => [ref, "actual_surfaced_realization"]),
+      ...assessment.userResponseRefs.map((ref) => [ref, "actual_user_response"])
+    ];
+    const validRelations = expectedBindings.every(([toRef, role]) => bindings.filter((relation) =>
+      relation.toRef === toRef && relation.targetRole === role && relation.assertedByRole === "sut"
+      && relation.effectiveOrder === assessment.createdOrder
+      && relation.createdOrder === transition.createdOrder).length === 1);
+    const expectedBasis = [
+      ...assessment.userResponseRefs.map((ref) => [ref, "user_response_fact"]),
+      ...realizationClosures.map((closure) => [closure.transition.reference, "proposal_realization_evidence"])
+    ];
+    const canonicalBound = assessment.bindingStatus === "bound"
+      && assessment.responseStatus === "accepted"
+      && assessment.materialIntentStatus === "match"
+      && assessment.reason === "exact_candidate_bound_proposal_response"
+      && responses.length === 1 && this.isCanonicalProposalResponse(responses[0])
+      && realizationClosures.length === 1 && assessment.proposalRef === realizationClosures[0].proposal.reference;
+    const validUnbound = assessment.bindingStatus === "unbound"
+      && assessment.responseStatus === (responses.length === 1
+        && classifyProposalResponse(responses[0].payload.content) ? "accepted" : "ambiguous_or_non_accepting")
+      && ((realizationClosures.length === 0 && assessment.proposalRef === null
+        && assessment.materialIntentStatus === "unknown"
+        && assessment.reason === "no_current_surfaced_realization")
+        || (realizationClosures.length === 1 && responses.length === 1
+          && !this.isCanonicalProposalResponse(responses[0])
+          && assessment.reason === "response_not_attributable_to_expected_user"));
+    const validAmbiguous = assessment.bindingStatus === "ambiguous"
+      && assessment.reason === "multiple_current_binding_participants"
+      && assessment.materialIntentStatus === "unknown"
+      && (responses.length !== 1 || realizationClosures.length > 1);
+    const validBasis = expectedBasis.every(([toRef, role]) => basis.filter((relation) =>
+      relation.toRef === toRef && relation.targetRole === role && relation.assertedByRole === "sut"
+      && relation.effectiveOrder === transition.createdOrder
+      && relation.createdOrder === transition.createdOrder).length === 1);
+    if (transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
+      || transition.result !== "binding_assessed" || transition.interactionRef !== assessment.interactionRef
+      || !sameReferenceSet(transition.inputReferences, expectedInputs)
+      || transition.resultReferences?.length !== 1 || transition.resultReferences[0] !== assessment.reference
+      || assessment.createdByTransitionRef !== transition.reference
+      || transition.createdOrder <= assessment.createdOrder
+      || responses.some((response) => transition.createdOrder <= response.createdOrder)
+      || realizationClosures.some((closure) => transition.createdOrder <= closure.transition.createdOrder)
+      || !(canonicalBound || validUnbound || validAmbiguous
+        || (assessment.bindingStatus === "bound" && assessment.materialIntentStatus === "mismatch"
+          && assessment.reason === "surfaced_realization_material_mismatch"
+          && responses.length === 1 && this.isCanonicalProposalResponse(responses[0])))
+      || bindings.length !== expectedBindings.length || !validRelations
+      || basis.length !== expectedBasis.length || !validBasis) {
+      throw new SutStateIntegrityError("Binding assessment does not form an exact B/T/P/F/U/R closure.");
+    }
+    return assessment;
   }
 
   validateCandidateBoundProposal(proposalRef) {
@@ -1175,6 +1295,11 @@ export class RunState {
       relation.fromRef === proposal.reference
       && ["basis", "support"].includes(relation.relationKind)
     ));
+    const directionBasis = this.relations.filter((relation) => (
+      relation.fromRef === candidate.reference && relation.relationKind === "basis"
+      && relation.targetRole === "selected_trial_direction"
+    ));
+    const direction = this.records.get(candidate.trialDirectionRef);
     if (
       candidate.family !== "trial_candidate"
       || candidate.candidateType !== "production_focused_practice"
@@ -1205,6 +1330,13 @@ export class RunState {
       || ancestry[0].effectiveOrder !== proposal.createdOrder
       || ancestry[0].createdOrder !== proposalTransition.createdOrder
       || copiedEvidence.length !== 0
+      || direction?.family !== "input_fact" || direction.origin !== "fixture"
+      || direction.role !== "affordance_fact"
+      || direction.payload?.direction !== PRODUCTION_FOCUSED_TRIAL_DIRECTION
+      || directionBasis.length !== 1 || directionBasis[0].toRef !== direction.reference
+      || directionBasis[0].assertedByRole !== "sut"
+      || directionBasis[0].effectiveOrder !== candidate.createdOrder
+      || directionBasis[0].createdOrder !== candidateTransition.createdOrder
     ) {
       throw new SutStateIntegrityError(
         "Candidate-bound proposal intent has malformed material, creation, or ancestry closure."
@@ -1213,7 +1345,7 @@ export class RunState {
     return proposal;
   }
 
-  resolveProposalRealizationClosure(proposalRef) {
+  resolveProposalRealizationClosure(proposalRef, expectedFactRef) {
     const proposal = this.validateCandidateBoundProposal(proposalRef);
     const selections = [...this.records.values()].filter((record) => (
       record.transitionKind === "select_proposal_for_realization"
@@ -1254,6 +1386,7 @@ export class RunState {
       || fact.origin !== "simulator"
       || fact.role !== "simulator_realization"
       || fact.payload?.requestedRef !== proposal.reference
+      || (expectedFactRef && fact.reference !== expectedFactRef)
       || fact.createdOrder <= selection.createdOrder
       || interaction?.family !== "interaction_segment"
       || !interaction.inputReferences?.includes(fact.reference)

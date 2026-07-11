@@ -71,7 +71,7 @@ Unless a row says otherwise:
 | `ENG-CONF-STATE-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Selection and realization recording consume revalidated proposal closure and preserve exact P/S/F/R/E inputs, order, typed bases, and relation evidence. | `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2` | Transition/ref/order/role assertions; missing/duplicate basis and transition attacks; exact valid replay; distinct-realization failure. Contract and negative modes. | `scn001_sut_core/src/runState.js`; package tests | Default | uncovered | merge-blocking; claim-blocking | Proposal realization mutation provenance is covered; response binding, activation, lifecycle, and outcome mutations remain absent. |
 | `ENG-HEALTH-ABSTRACTION-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Public boundary, harness, validation, fixture-projection, and run-state abstractions are non-throwaway. | `ADR-001 R1` | Bounded package/module responsibilities; manual justification review. | `README.md`; `scn001_sut_core/src/`; `scn001_eval/src/`; package `AGENTS.md` files | Local-recorded review | review-only | advisory or merge-blocking by condition | Abstraction justification is not captured by an automated check; future generalization could outrun concrete pressure. |
 | `ENG-HEALTH-API-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The SUT surface is unchanged; evaluation package root now exports only the formal one-argument harness constructor, with renderer/projector helpers and failure injection internal. | Rule entry | Exact package-root export test; constructor override rejection; internal-only SUT resolvers and evaluation mechanism-test seam. | `scn001_sut_core/index.js`; `scn001_eval/index.js`; package tests; `scripts/check-dependency-boundary.mjs` | Default | uncovered | merge-blocking; claim-blocking | Governing consumer/need review for future API additions remains manual. |
-| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The current increment adds branch-controlled raw proposal-acceptance delivery and exact SUT-owned proposal-response binding assessment without activation. | Rule entry | Focused-diff inspection against starting `HEAD` `08eebef`; one primary purpose: close the realized-proposal-to-binding seam. | Current working-tree diff; package tests; binding increment record below | Fresh independent ChatGPT review of the pushed binding diff is pending; the realization-seam review does not attest this change. | uncovered | advisory or merge-blocking by condition | The new binding diff has not received qualifying independent review and cannot self-attest this control. |
+| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The current correction closes exact branch checkpoint identity, response attribution, and binding-assessment closure integrity without activation. | Rule entry | Focused-diff inspection against starting `HEAD` `4ca47df`; one primary purpose: close branch-delivery and binding-integrity defects before activation. | Current working-tree diff; package tests; corrective record below | Fresh independent ChatGPT review of the corrected pushed diff is pending. | uncovered | advisory or merge-blocking by condition | The implementing task cannot independently review its own corrected diff. |
 | `ENG-HEALTH-COMMENT-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No JavaScript implementation/test comment is present or used to justify behavior. Future trigger: adding, generating, or relying on a code comment. | Rule entry | Source inventory. | `rg` over `scn001_sut_core`, `scn001_eval`, `tests`, and `scripts` returned no JavaScript comment lines | Not applicable until trigger. | N/A | advisory or merge-blocking by condition | Governance prose is controlled as documentation/claims; code comments require review when introduced. |
 | `ENG-HEALTH-DEAD-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No dead, commented-out, prototype, experiment, or throwaway implementation artifact is present. Future trigger: introducing or promoting one. | Rule entry | Repository and source inventory; manual review. | Current package/source tree; no throwaway directory or commented-out implementation | Not applicable until trigger. | N/A | merge-blocking; promotion-blocking | Static gate does not comprehensively prove reachability; disposition must change if a prototype appears. |
 | `ENG-HEALTH-DEPENDENCY-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Evaluation declares a runtime dependency on the local SUT package and CI installs the workspace lock. | Rule entry | Local file dependency; lockfile; dependency-boundary static check; no external runtime dependency. | `package-lock.json`; `scn001_eval/package.json`; `scn001_sut_core/package.json`; `scripts/check-dependency-boundary.mjs`; `README.md` | Default | uncovered | merge-blocking; promotion-blocking | Dependency rationale/maintenance review is manual; future external dependencies require a new review record. |
@@ -304,6 +304,80 @@ With this recorded review outcome, the current applicability/status counts are:
 * 34 applicable rules `uncovered`;
 * no applicable rule `revalidation-required`;
 * no rule claimed `enforced`.
+
+## Binding-Integrity Corrective Increment And Blocking Review Record
+
+An independent ChatGPT review of binding commit
+`4ca47df70f71ac91466860b630e17cf2a1eafbeb` found three blocking defects:
+
+1. evaluation branch eligibility recovered a simulator fact by equal payload and
+   accepted an incomplete realization checkpoint instead of retaining the exact
+   originally accepted fact and validating complete P/S/F/R/E closure;
+2. the formal acceptance package and SUT classifier did not require raw-response
+   attribution to the canonical synthetic user and proposal-response context;
+3. assessment replay matched fields without validating exact B/T/P/F/U/R closure,
+   and ambiguous assessments could label unprocessed realization facts as actual
+   surfaced realizations.
+
+Independent review outcome for `4ca47df70f71ac91466860b630e17cf2a1eafbeb`:
+**blocking / failed**. This historical failed review is preserved and is not
+rewritten as passing by the correction.
+
+The corrective implementation has one bounded purpose:
+
+```text
+close exact branch checkpoint identity,
+user-response attribution,
+and binding-assessment closure integrity
+before activation
+```
+
+The harness transport now retains `{ record, simulatorFactRef }` only after
+simulator ingress returns exactly one accepted reference. Branch policy resolves
+that exact fact and requires exact proposal, selection, simulator fact,
+recording transition, realization relation, both transition bases, and the
+candidate-to-production-affordance lineage. Zero R/E remains retryable; partial,
+malformed, duplicate, mismatched, or ambiguous evidence fails closed.
+
+The exact five-record acceptance contract now validates the package-local actor
+and occurrence order for the response and all controls before source mapping,
+projection, ingress, or transport mutation. The SUT independently resolves the
+raw response's semantic source actor and ordinary proposal-response context.
+Acceptance-shaped content from another actor remains raw evidence but receives
+an unbound, non-positive assessment and cannot produce the activation-positive
+triple.
+
+One internal binding resolver validates assessment family/origin/type/status
+origin and the exact assessment transition, participants, result, ordering,
+proposal-realization and user-response bases, and proposal/realization/response
+binding relations. Exact replay reuses only a complete closure. Duplicate or
+malformed closure evidence fails closed. Every ambiguous realization participant
+must first resolve its own complete realization closure; an unprocessed fact is
+never labeled `actual_surfaced_realization`. Distinct response identity still
+creates a distinct assessment, while multiple responses are preserved without
+first/latest selection.
+
+Affected evidence/residual-risk rows reviewed for this correction are
+`ENG-CONF-CAPTURE-001`, `ENG-CONF-DEP-001`, `ENG-CONF-HARNESS-001`,
+`ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`, `ENG-CONF-PAYLOAD-001`,
+`ENG-CONF-PAYLOAD-002`, `ENG-CONF-PUBLIC-001`, `ENG-CONF-REF-001`,
+`ENG-CONF-ROLE-001`, `ENG-CONF-RUN-001`, `ENG-CONF-SIM-001`,
+`ENG-CONF-STATE-001`, `ENG-CONF-STATE-002`, `ENG-HEALTH-API-001`,
+`ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-FAILURE-001`, `ENG-HEALTH-TEST-001`,
+and `ENG-HEALTH-TEST-002`. Applicable claim-boundary rules were reviewed without
+changed applicability or broader claim.
+
+At completion, `ENG-HEALTH-CHANGE-001` is **uncovered** because the implementing
+Codex task cannot independently review its own corrected diff. A fresh independent
+ChatGPT review of the corrected pushed diff is pending. Current counts remain 44
+applicable and 5 not applicable; 9 applicable rules are `review-only`, 35 are
+`uncovered`, none is `revalidation-required`, and no rule is claimed `enforced`.
+
+Residual risks remain: fresh independent change and test-validity review,
+unverified protected required-check configuration, incomplete generic future-
+family lineage attacks, and all intentionally absent activation, active-trial,
+later-use, outcome, formal-evaluation, scoring, and milestone semantics. No
+passing independent review of the corrected diff is claimed.
 
 ## Branch-Controlled Proposal Acceptance And Binding Increment
 

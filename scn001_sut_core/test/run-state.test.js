@@ -770,7 +770,7 @@ test("multiple current response participants create one ambiguous assessment wit
   }
 });
 
-test("multiple current realization participants create one ambiguous assessment without selection", () => {
+test("an unprocessed current realization participant fails closed instead of being labeled surfaced", () => {
   const realized = realizedProposalRun();
   const secondRealization = simulatorInput(realized.proposal.reference);
   const response = userResponseInput();
@@ -778,16 +778,84 @@ test("multiple current realization participants create one ambiguous assessment 
   realized.run.ingest([realized.input, secondRealization, response]);
   const interaction = realized.run.pendingInteractions.at(-1);
   const facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
-  realized.run.assessProposalResponseBinding(interaction, facts);
-  const assessments = [...realized.run.records.values()].filter(
+  assert.throws(() => realized.run.assessProposalResponseBinding(interaction, facts), /P\/S\/F\/R\/E/);
+  assert.equal([...realized.run.records.values()].filter(
     (record) => record.family === "binding_assessment"
-  );
-  assert.equal(assessments.length, 1);
-  assert.equal(assessments[0].bindingStatus, "ambiguous");
-  assert.equal(assessments[0].realizationFactRefs.length, 2);
+  ).length, 0);
   assert.equal([...realized.run.records.values()].filter(
     (record) => record.transitionKind === "record_proposal_realization"
   ).length, 1);
+});
+
+test("wrong actor or response context remains raw evidence but cannot become bound", () => {
+  for (const overrides of [
+    { sourceActor: "fixture-driver" },
+    { sourceActor: "simulated_dependency" },
+    { context: "focused_drill" }
+  ]) {
+    const realized = realizedProposalRun();
+    const response = userResponseInput(overrides);
+    realized.run.assertSourceFactConsistency([realized.input, response]);
+    realized.run.ingest([realized.input, response]);
+    const interaction = realized.run.pendingInteractions.at(-1);
+    const facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
+    realized.run.assessProposalResponseBinding(interaction, facts);
+    const assessment = [...realized.run.records.values()].find((record) => record.family === "binding_assessment");
+    assert.equal(assessment.bindingStatus, "unbound");
+    assert.equal(assessment.responseStatus, "accepted");
+    assert.equal(assessment.materialIntentStatus, "match");
+    assert.equal(assessment.reason, "response_not_attributable_to_expected_user");
+    const raw = realized.run.records.get(assessment.userResponseRefs[0]);
+    assert.deepEqual(raw.payload, response);
+    assert.equal("bindingStatus" in raw.payload, false);
+  }
+});
+
+test("binding replay validates exact transition, bases, and participant relations", () => {
+  const attacks = [
+    ({ assessment }) => { assessment.origin = "fixture"; },
+    ({ assessment }) => { assessment.bindingType = "other"; },
+    ({ assessment }) => { assessment.statusOrigin = "fixture"; },
+    ({ assessment }) => { assessment.reason = "other"; },
+    ({ run, transition }) => { run.records.delete(transition.reference); },
+    ({ transition }) => { transition.inputReferences[0] = createReference("state"); },
+    ({ run, transition }) => { run.relations.splice(run.relations.findIndex((r) => r.fromRef === transition.reference && r.targetRole === "proposal_realization_evidence"), 1); },
+    ({ run, transition }) => { run.relations.splice(run.relations.findIndex((r) => r.fromRef === transition.reference && r.targetRole === "user_response_fact"), 1); },
+    ({ run, assessment }) => { run.relations.splice(run.relations.findIndex((r) => r.fromRef === assessment.reference && r.targetRole === "candidate_bound_proposal_intent"), 1); },
+    ({ run, assessment }) => { run.relations.splice(run.relations.findIndex((r) => r.fromRef === assessment.reference && r.targetRole === "actual_surfaced_realization"), 1); },
+    ({ run, assessment }) => { run.relations.splice(run.relations.findIndex((r) => r.fromRef === assessment.reference && r.targetRole === "actual_user_response"), 1); },
+    ({ run, assessment }) => { run.relations.find((r) => r.fromRef === assessment.reference).targetRole = "wrong"; },
+    ({ run, assessment }) => { run.relations.find((r) => r.fromRef === assessment.reference).assertedByRole = "fixture"; },
+    ({ run, assessment }) => { run.relations.find((r) => r.fromRef === assessment.reference).createdOrder -= 1; },
+    ({ run, assessment }) => { run.relations.push(structuredClone(run.relations.find((r) => r.fromRef === assessment.reference))); },
+    ({ run, assessment }) => {
+      const duplicate = structuredClone(assessment);
+      duplicate.reference = createReference("state");
+      run.records.set(duplicate.reference, duplicate);
+    },
+    ({ run, transition }) => {
+      const duplicate = structuredClone(transition);
+      duplicate.reference = createReference("transition");
+      run.records.set(duplicate.reference, duplicate);
+    }
+  ];
+  for (const attack of attacks) {
+    const realized = realizedProposalRun();
+    const response = userResponseInput();
+    realized.run.assertSourceFactConsistency([realized.input, response]);
+    realized.run.ingest([realized.input, response]);
+    let interaction = realized.run.pendingInteractions.at(-1);
+    let facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
+    realized.run.assessProposalResponseBinding(interaction, facts);
+    const assessment = [...realized.run.records.values()].find((record) => record.family === "binding_assessment");
+    const transition = realized.run.records.get(assessment.createdByTransitionRef);
+    attack({ ...realized, assessment, transition });
+    realized.run.assertSourceFactConsistency([realized.input, response]);
+    realized.run.ingest([realized.input, response]);
+    interaction = realized.run.pendingInteractions.at(-1);
+    facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
+    assert.throws(() => realized.run.assessProposalResponseBinding(interaction, facts), /[Bb]inding|B\/T\/P\/F\/U\/R/);
+  }
 });
 
 test("noncanonical response stays non-accepting and mismatch fidelity never becomes material match", () => {

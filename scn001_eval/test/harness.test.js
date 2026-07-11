@@ -410,6 +410,30 @@ test("acceptance package validation rejects missing, extra, caller realization, 
   assert.throws(() => harness.deliverProposalAcceptanceIfEligible(runRef, changed), /package-local content/);
 });
 
+test("acceptance package rejects wrong actors and order before source allocation or SUT mutation", () => {
+  for (const mutate of [
+    (records) => { records[0].sourceActor = "fixture-driver"; },
+    (records) => { records[0].sourceActor = "simulated_dependency"; },
+    (records) => { records[1].sourceActor = "synthetic-user-a"; },
+    (records) => { records[4].occurrenceOrder = 99; }
+  ]) {
+    const real = createSutBoundary();
+    let ingressCalls = 0;
+    const boundary = Object.freeze({ ...real, ingestSutVisibleInputs(...args) {
+      ingressCalls += 1;
+      return real.ingestSutVisibleInputs(...args);
+    }});
+    const harness = createEvaluationHarness(boundary);
+    const runRef = harness.startRun();
+    const before = harness.captureInspectionSnapshot(runRef);
+    const records = proposalAcceptanceRecords();
+    mutate(records);
+    assert.throws(() => harness.deliverProposalAcceptanceIfEligible(runRef, records), /source actor|occurrence order/);
+    assert.equal(ingressCalls, 0);
+    assert.deepEqual(harness.captureInspectionSnapshot(runRef), before);
+  }
+});
+
 test("harness fails closed before routing multiple outputs", () => {
   const real = createSutBoundary();
   let ingressCalls = 0;
