@@ -4,6 +4,11 @@ import { isDeepStrictEqual } from "node:util";
 import { SutBoundaryValidationError, SutReferenceError, SutStateIntegrityError } from "./errors.js";
 
 const PRODUCTION_FOCUSED_TRIAL_DIRECTION = "TRIAL-PROD-FOCUS";
+const ACTIVATION_CHECK_NAMES = Object.freeze([
+  "scope", "basis_lineage", "current_stale_basis", "user_governed_constraints",
+  "reversibility", "consequence", "current_applicability", "retention_basis",
+  "non_adaptation_boundary"
+]);
 
 export class RunState {
   constructor() {
@@ -240,6 +245,15 @@ export class RunState {
       interaction,
       interactionFacts
     );
+    const activationAssessmentTransitionRef = this.assessProductionTrialActivation(
+      interaction,
+      interactionFacts,
+      bindingAssessmentTransitionRef
+    );
+    const activeTrialTransitionRef = this.activateProductionFocusedTrial(
+      interaction,
+      activationAssessmentTransitionRef
+    );
     const semanticTransitionRefs = [
       attributionTransitionRef,
       temporalAssessmentTransitionRef,
@@ -248,7 +262,9 @@ export class RunState {
       proposalIntentTransitionRef,
       proposalRealizationSelectionTransitionRef,
       proposalRealizationTransitionRef,
-      bindingAssessmentTransitionRef
+      bindingAssessmentTransitionRef,
+      activationAssessmentTransitionRef,
+      activeTrialTransitionRef
     ].filter(Boolean);
     const processingTransition = this.createTransition(
       "process_interaction_segment",
@@ -1178,6 +1194,338 @@ export class RunState {
     return transition.reference;
   }
 
+  assessProductionTrialActivation(interaction, interactionFacts, bindingTransitionRef) {
+    if (!bindingTransitionRef) return undefined;
+    const bindingTransition = this.records.get(bindingTransitionRef);
+    const binding = this.records.get(bindingTransition?.resultReferences?.[0]);
+    this.validateBindingAssessmentClosure(binding);
+    const positive = binding.bindingStatus === "bound" && binding.responseStatus === "accepted"
+      && binding.materialIntentStatus === "match"
+      && binding.reason === "exact_candidate_bound_proposal_response";
+    if (!positive) return undefined;
+
+    const currentRealizations = interactionFacts.filter((fact) => fact.role === "simulator_realization");
+    const currentResponses = interactionFacts.filter((fact) => fact.role === "user_response");
+    const currentControls = interactionFacts.filter((fact) => fact.role === "fixture_control_fact");
+    const requiredCurrentControls = [
+      "evaluation_retention_basis", "user_governed_constraints", "consequence", "reversibility"
+    ];
+    if (currentRealizations.length !== 1 || currentResponses.length !== 1
+      || requiredCurrentControls.some((control) => (
+        currentControls.filter((fact) => fact.payload.control === control).length !== 1
+      ))) return undefined;
+
+    const proposal = this.validateCandidateBoundProposal(binding.proposalRef);
+    const candidateClosure = this.validateProductionCandidateClosure(proposal.candidateRef);
+    const candidate = candidateClosure.candidate;
+    const basis = this.resolveActivationCandidateBasis(candidate);
+    const controls = {
+      trialPolicy: this.resolveExactControl(basis.interaction, "trial_policy"),
+      userGoverned: this.resolveExactControl(interaction, "user_governed_constraints"),
+      consequence: this.resolveExactControl(interaction, "consequence", basis.interaction),
+      reversibility: this.resolveExactControl(interaction, "reversibility", basis.interaction),
+      retention: this.resolveExactControl(interaction, "evaluation_retention_basis")
+    };
+    const contextChanges = interactionFacts.filter((fact) => fact.role === "material_context_change");
+    const checkResults = this.deriveActivationCheckResults({
+      candidate, proposal, binding, basis, controls, contextChanges
+    });
+    const overallStatus = deriveActivationOverallStatus(checkResults);
+    const materialRefs = [
+      candidate.reference, binding.reference, basis.comparison.reference,
+      basis.recognition.reference, basis.production.reference, basis.chronology.reference,
+      basis.context.reference, controls.trialPolicy.reference, controls.userGoverned.reference,
+      controls.consequence.reference, controls.reversibility.reference, controls.retention.reference
+    ];
+    const existing = [...this.records.values()].filter((record) => (
+      record.family === "activation_assessment"
+      && record.candidateRef === candidate.reference
+      && record.bindingAssessmentRef === binding.reference
+    ));
+    if (existing.length > 1) throw new SutStateIntegrityError("Multiple competing activation assessments resolve for one candidate and binding.");
+    if (existing.length === 1) {
+      this.validActivationAssessmentClosure(existing[0]);
+      if (!sameReferenceSet(existing[0].materialBasisRefs, materialRefs)
+        || !isDeepStrictEqual(existing[0].checkResults, checkResults)) {
+        throw new SutStateIntegrityError("Existing activation assessment has a competing material basis.");
+      }
+      return undefined;
+    }
+
+    const assessment = {
+      reference: createReference("state"), family: "activation_assessment", origin: "sut",
+      activationType: "production_focused_candidate_activation",
+      activationBasisType: "bound_candidate_specific_proposal_acceptance",
+      candidateRef: candidate.reference, bindingAssessmentRef: binding.reference,
+      activeScope: structuredClone(candidate.proposedScope), overallStatus,
+      checkResults, materialBasisRefs: materialRefs,
+      statusOrigin: "sut_transition", interactionRef: interaction.reference,
+      createdOrder: this.allocateOrder()
+    };
+    const transition = this.createTransition(
+      "assess_production_focused_trial_activation", materialRefs,
+      [assessment.reference], interaction.reference
+    );
+    transition.result = "activation_assessed";
+    attachCreatingTransition([assessment], transition);
+    this.commitDerivedRecords([assessment], transition);
+    const roles = [
+      "activation_candidate", "proposal_response_binding", "candidate_support_comparison",
+      "current_recognition_evidence", "current_production_evidence", "activation_chronology",
+      "activation_context", "trial_policy_control", "user_governed_control",
+      "consequence_control", "reversibility_control", "retention_control"
+    ];
+    materialRefs.forEach((reference, index) => this.relations.push({
+      relationKind: "basis", fromRef: assessment.reference, toRef: reference,
+      targetRole: roles[index], effectiveOrder: assessment.createdOrder,
+      createdOrder: transition.createdOrder, assertedByRole: "sut"
+    }));
+    return transition.reference;
+  }
+
+  activateProductionFocusedTrial(interaction, assessmentTransitionRef) {
+    if (!assessmentTransitionRef) return undefined;
+    const assessmentTransition = this.records.get(assessmentTransitionRef);
+    const assessment = this.records.get(assessmentTransition?.resultReferences?.[0]);
+    this.validActivationAssessmentClosure(assessment);
+    if (assessment.overallStatus !== "sufficient"
+      || Object.values(assessment.checkResults).some((result) => result.status !== "passed")) {
+      return undefined;
+    }
+    const candidate = this.records.get(assessment.candidateRef);
+    const existing = [...this.records.values()].filter((record) => (
+      record.family === "active_trial" && record.candidateRef === candidate.reference
+    ));
+    if (existing.length > 1) throw new SutStateIntegrityError("Multiple active trials resolve for one candidate.");
+    if (existing.length === 1) {
+      this.validActiveTrialClosure(existing[0]);
+      if (existing[0].activationAssessmentRef !== assessment.reference) {
+        throw new SutStateIntegrityError("A competing active trial already resolves for this candidate.");
+      }
+      return undefined;
+    }
+    const trial = {
+      reference: createReference("state"), family: "active_trial", origin: "sut",
+      trialType: "production_focused_practice", trialOrigin: "zoey_derived_trial",
+      candidateRef: candidate.reference, activationAssessmentRef: assessment.reference,
+      activationBasisType: "bound_candidate_specific_proposal_acceptance",
+      activeScope: structuredClone(candidate.proposedScope), currentStatus: "active",
+      lifecycleVersion: 1, correctionPath: "narrow_retire_supersede_or_clarify",
+      statusOrigin: "sut_transition", interactionRef: interaction.reference,
+      createdOrder: this.allocateOrder()
+    };
+    const transition = this.createTransition(
+      "activate_production_focused_trial", [candidate.reference, assessment.reference],
+      [trial.reference], interaction.reference
+    );
+    transition.result = "trial_activated";
+    attachCreatingTransition([trial], transition);
+    this.commitDerivedRecords([trial], transition);
+    for (const [reference, role] of [
+      [candidate.reference, "trial_candidate"], [assessment.reference, "activation_assessment"]
+    ]) this.relations.push({
+      relationKind: "transition_ancestry", fromRef: trial.reference, toRef: reference,
+      targetRole: role, effectiveOrder: trial.createdOrder,
+      createdOrder: transition.createdOrder, assertedByRole: "sut"
+    });
+    return transition.reference;
+  }
+
+  resolveActivationCandidateBasis(candidate) {
+    const interaction = this.records.get(candidate.interactionRef);
+    const comparison = this.records.get(candidate.supportComparisonRef);
+    const candidateRelations = this.relations.filter((relation) => relation.fromRef === candidate.reference);
+    const comparisonBasis = candidateRelations.filter((relation) => relation.relationKind === "basis"
+      && relation.targetRole === "comparison_input" && relation.toRef === comparison?.reference);
+    const support = candidateRelations.filter((relation) => relation.relationKind === "support"
+      && relation.targetRole === "dimension_comparison" && relation.toRef === comparison?.reference);
+    const competing = candidateRelations.filter((relation) => ["comparison_input", "dimension_comparison"].includes(relation.targetRole));
+    if (comparison?.family !== "dimension_comparison" || comparisonBasis.length !== 1
+      || support.length !== 1 || competing.length !== 2
+      || comparison.targetDimension !== candidate.proposedScope.dimension) {
+      throw new SutStateIntegrityError("Activation requires the exact candidate support comparison closure.");
+    }
+    const recognition = this.resolveSingleComparisonParticipant(comparison, "recognitionObservationRefs", "recognition");
+    const production = this.resolveSingleComparisonParticipant(comparison, "productionObservationRefs", "spontaneous_production");
+    const chronologyFacts = interaction.inputReferences.map((ref) => this.records.get(ref))
+      .filter((fact) => fact?.role === "chronology_fact");
+    const contexts = interaction.inputReferences.map((ref) => this.records.get(ref))
+      .filter((fact) => fact?.role === "context_label");
+    if (chronologyFacts.length !== 1 || contexts.length !== 1) {
+      throw new SutStateIntegrityError("Activation requires exact chronology and context participants.");
+    }
+    return { interaction, comparison, recognition, production, chronology: chronologyFacts[0], context: contexts[0] };
+  }
+
+  resolveSingleComparisonParticipant(comparison, property, taskMode) {
+    if (comparison[property]?.length !== 1) {
+      throw new SutStateIntegrityError("Activation requires one exact observation per comparison role.");
+    }
+    const observation = this.records.get(comparison[property][0]);
+    const relation = this.relations.filter((candidate) => candidate.fromRef === comparison.reference
+      && candidate.toRef === observation?.reference && candidate.relationKind === "basis"
+      && candidate.targetRole === (taskMode === "recognition" ? "recognition_observation" : "production_observation"));
+    if (observation?.role !== "task_observation" || observation.payload.taskMode !== taskMode
+      || relation.length !== 1 || relation[0].assertedByRole !== "sut") {
+      throw new SutStateIntegrityError("Activation comparison observation closure is malformed.");
+    }
+    return observation;
+  }
+
+  resolveExactControl(primaryInteraction, control, canonicalInteraction) {
+    const controlsIn = (interaction) => interaction.inputReferences.map((ref) => this.records.get(ref))
+      .filter((fact) => fact?.role === "fixture_control_fact" && fact.payload.control === control);
+    const primary = controlsIn(primaryInteraction);
+    if (primary.length !== 1) throw new SutStateIntegrityError(`Activation requires one exact ${control} control.`);
+    if (canonicalInteraction) {
+      const prior = controlsIn(canonicalInteraction);
+      if (prior.length !== 1 || prior[0].reference !== primary[0].reference) {
+        throw new SutStateIntegrityError(`Redelivered ${control} control must preserve canonical identity.`);
+      }
+    }
+    this.validateFixtureControlFact(primary[0], primaryInteraction);
+    return primary[0];
+  }
+
+  validateFixtureControlFact(fact, interaction) {
+    const actor = this.records.get(fact.sourceActorRef);
+    const ingestion = this.records.get(interaction.createdByTransitionRef);
+    const source = this.relations.filter((relation) => relation.fromRef === fact.reference
+      && relation.relationKind === "source" && relation.targetRole === "semantic_source");
+    const basis = this.relations.filter((relation) => relation.fromRef === ingestion?.reference
+      && relation.toRef === fact.reference && relation.relationKind === "basis"
+      && relation.targetRole === "ingested_input");
+    if (fact.family !== "input_fact" || fact.origin !== "fixture" || fact.role !== "fixture_control_fact"
+      || actor?.origin !== "fixture" || actor.sourceActor !== "fixture-driver"
+      || source.length !== 1 || source[0].toRef !== actor.reference || source[0].assertedByRole !== "sut"
+      || basis.length !== 1 || basis[0].assertedByRole !== "sut"
+      || !interaction.inputReferences.includes(fact.reference)) {
+      throw new SutStateIntegrityError("Activation control provenance is malformed.");
+    }
+  }
+
+  deriveActivationCheckResults({ candidate, proposal, binding, basis, controls, contextChanges }) {
+    const pass = (reason) => ({ status: "passed", reason });
+    const fail = (reason) => ({ status: "failed", reason });
+    const current = basis.recognition.payload.occurrenceScenarioDay === basis.chronology.payload.scenarioDay
+      && basis.production.payload.occurrenceScenarioDay === basis.chronology.payload.scenarioDay
+      && basis.recognition.firstInteractionRef === candidate.interactionRef
+      && basis.production.firstInteractionRef === candidate.interactionRef;
+    const contextCompatible = basis.context.payload.activity === "japanese_practice"
+      && basis.context.payload.taskMode === "spontaneous_production";
+    return {
+      scope: isDeepStrictEqual(proposal.proposedScope, candidate.proposedScope)
+        && candidate.proposedScope.taskMode === "spontaneous_production"
+        ? pass("exact_bounded_candidate_scope") : fail("candidate_proposal_scope_mismatch"),
+      basis_lineage: binding.proposalRef === proposal.reference
+        ? pass("exact_candidate_proposal_binding_lineage") : fail("incomplete_activation_lineage"),
+      current_stale_basis: current
+        ? pass("current_calibration_support") : fail("support_not_current_under_chronology"),
+      user_governed_constraints: controls.userGoverned.payload.value === "exhaustive_selected_slice_scope"
+        ? pass("exhaustive_selected_slice_constraints") : fail("unsupported_user_governed_constraints"),
+      reversibility: candidate.reversibility === "retirable_before_activation"
+        && controls.reversibility.payload.value === "reversible"
+        ? pass("reversible_separate_trial_state") : fail("reversibility_not_supported"),
+      consequence: basis.context.payload.consequence === "low" && controls.consequence.payload.value === "low"
+        ? pass("low_consequence_synthetic_context") : fail("consequence_not_low"),
+      current_applicability: contextCompatible && contextChanges.length === 0
+        ? pass("current_japanese_production_context_compatible") : fail("current_context_not_applicable"),
+      retention_basis: controls.retention.payload.value === "named_formal_run"
+        ? pass("named_formal_run_disposable_retention") : fail("unsupported_retention_basis"),
+      non_adaptation_boundary: candidate.purpose === "provisional_evaluative_trial"
+        && controls.trialPolicy.payload.value === "bounded_reversible_trial_no_durable_adaptation"
+        ? pass("bounded_zoey_trial_not_durable_adaptation") : fail("durable_adaptation_not_permitted")
+    };
+  }
+
+  validActivationAssessmentClosure(assessment) {
+    if (assessment?.family !== "activation_assessment" || assessment.origin !== "sut"
+      || assessment.activationType !== "production_focused_candidate_activation"
+      || assessment.activationBasisType !== "bound_candidate_specific_proposal_acceptance"
+      || assessment.statusOrigin !== "sut_transition" || !hasExactKeys(assessment.checkResults, ACTIVATION_CHECK_NAMES)) {
+      throw new SutStateIntegrityError("Activation assessment identity or check set is malformed.");
+    }
+    const competingAssessments = [...this.records.values()].filter((record) => (
+      record.family === "activation_assessment"
+      && record.candidateRef === assessment.candidateRef
+      && record.bindingAssessmentRef === assessment.bindingAssessmentRef
+    ));
+    if (competingAssessments.length !== 1 || competingAssessments[0].reference !== assessment.reference) {
+      throw new SutStateIntegrityError("Activation assessment identity is duplicated or competing.");
+    }
+    const transition = this.records.get(assessment.createdByTransitionRef);
+    const candidate = this.records.get(assessment.candidateRef);
+    const binding = this.records.get(assessment.bindingAssessmentRef);
+    this.validateBindingAssessmentClosure(binding);
+    const proposal = this.validateCandidateBoundProposal(binding.proposalRef);
+    const basis = this.resolveActivationCandidateBasis(candidate);
+    const material = assessment.materialBasisRefs.map((ref) => this.records.get(ref));
+    const controls = {
+      trialPolicy: material[7], userGoverned: material[8], consequence: material[9],
+      reversibility: material[10], retention: material[11]
+    };
+    for (const control of Object.values(controls)) this.validateFixtureControlFact(
+      control,
+      this.records.get(control.firstInteractionRef)
+    );
+    const activationInteraction = this.records.get(assessment.interactionRef);
+    const contextChanges = activationInteraction.inputReferences.map((ref) => this.records.get(ref))
+      .filter((fact) => fact?.role === "material_context_change");
+    const expected = this.deriveActivationCheckResults({
+      candidate, proposal, binding, basis, controls, contextChanges
+    });
+    const relations = this.relations.filter((relation) => relation.fromRef === assessment.reference
+      && relation.relationKind === "basis");
+    if (transition?.transitionKind !== "assess_production_focused_trial_activation"
+      || transition.result !== "activation_assessed"
+      || !isDeepStrictEqual(transition.inputReferences, assessment.materialBasisRefs)
+      || !isDeepStrictEqual(transition.resultReferences, [assessment.reference])
+      || relations.length !== 12 || new Set(relations.map((relation) => `${relation.targetRole}:${relation.toRef}`)).size !== 12
+      || relations.some((relation) => relation.assertedByRole !== "sut"
+        || relation.effectiveOrder !== assessment.createdOrder
+        || relation.createdOrder !== transition.createdOrder)
+      || !isDeepStrictEqual(assessment.checkResults, expected)
+      || assessment.overallStatus !== deriveActivationOverallStatus(expected)
+      || !isDeepStrictEqual(assessment.activeScope, candidate.proposedScope)
+      || assessment.createdOrder >= transition.createdOrder) {
+      throw new SutStateIntegrityError("Activation assessment closure is malformed.");
+    }
+    return assessment;
+  }
+
+  validActiveTrialClosure(trial) {
+    const transition = this.records.get(trial?.createdByTransitionRef);
+    const candidate = this.records.get(trial?.candidateRef);
+    const assessment = this.records.get(trial?.activationAssessmentRef);
+    this.validActivationAssessmentClosure(assessment);
+    const ancestry = this.relations.filter((relation) => relation.fromRef === trial?.reference
+      && relation.relationKind === "transition_ancestry");
+    const competingTrials = [...this.records.values()].filter((record) => (
+      record.family === "active_trial" && record.candidateRef === trial?.candidateRef
+    ));
+    if (trial?.family !== "active_trial" || trial.origin !== "sut"
+      || trial.trialType !== "production_focused_practice" || trial.trialOrigin !== "zoey_derived_trial"
+      || trial.currentStatus !== "active" || trial.lifecycleVersion !== 1
+      || trial.correctionPath !== "narrow_retire_supersede_or_clarify"
+      || competingTrials.length !== 1 || competingTrials[0].reference !== trial.reference
+      || trial.statusOrigin !== "sut_transition" || !isDeepStrictEqual(trial.activeScope, candidate.proposedScope)
+      || candidate.lifecycleStatus !== "formed_non_active" || candidate.lifecycleVersion !== 1
+      || assessment.overallStatus !== "sufficient"
+      || transition?.transitionKind !== "activate_production_focused_trial"
+      || transition.result !== "trial_activated"
+      || !isDeepStrictEqual(transition.inputReferences, [candidate.reference, assessment.reference])
+      || !isDeepStrictEqual(transition.resultReferences, [trial.reference])
+      || ancestry.length !== 2
+      || !ancestry.some((relation) => relation.toRef === candidate.reference && relation.targetRole === "trial_candidate")
+      || !ancestry.some((relation) => relation.toRef === assessment.reference && relation.targetRole === "activation_assessment")
+      || ancestry.some((relation) => relation.assertedByRole !== "sut"
+        || relation.effectiveOrder !== trial.createdOrder || relation.createdOrder !== transition.createdOrder)
+      || assessment.createdOrder >= trial.createdOrder || trial.createdOrder >= transition.createdOrder) {
+      throw new SutStateIntegrityError("Active trial closure is malformed.");
+    }
+    return trial;
+  }
+
   isCanonicalProposalResponse(response) {
     const actor = this.records.get(response.sourceActorRef);
     const ingestionInteraction = this.records.get(response.firstInteractionRef);
@@ -1911,6 +2259,13 @@ function assertProposalPreservesCandidate(proposal, candidate) {
 function hasExactKeys(value, keys) {
   return value && Object.getPrototypeOf(value) === Object.prototype
     && Object.keys(value).sort().join("|") === [...keys].sort().join("|");
+}
+
+function deriveActivationOverallStatus(checkResults) {
+  const results = Object.values(checkResults);
+  if (results.some((result) => result.status === "failed")) return "insufficient";
+  if (results.some((result) => result.status === "unresolved")) return "unresolved_conflict";
+  return "sufficient";
 }
 
 function clone(value) {

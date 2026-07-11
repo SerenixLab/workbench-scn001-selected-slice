@@ -184,6 +184,52 @@ function realizedProposalRun() {
   return { ...selected, input, interaction, fact, transition, relation };
 }
 
+function activationReadyRun(overrides = {}) {
+  const run = new RunState();
+  const consequence = fixtureControlInput({
+    control: "consequence", value: overrides.consequence ?? "low", occurrenceOrder: 13
+  });
+  const reversibility = fixtureControlInput({
+    control: "reversibility", value: overrides.reversibility ?? "reversible", occurrenceOrder: 14
+  });
+  const inputs = [
+    chronologyInput({ scenarioDay: 0 }),
+    ...calibrationInputs(),
+    {
+      sourceFactRef: sourceRef(), kind: "context_label", sourceActor: "fixture-driver",
+      occurrenceOrder: 4, surfaceLabel: "text_simulated",
+      activity: overrides.activity ?? "japanese_practice",
+      taskMode: "spontaneous_production", consequence: overrides.contextConsequence ?? "low"
+    },
+    affordanceInput(),
+    fixtureControlInput({
+      control: "trial_policy",
+      value: overrides.trialPolicy ?? "bounded_reversible_trial_no_durable_adaptation",
+      occurrenceOrder: 6
+    }),
+    consequence,
+    reversibility
+  ];
+  run.assertSourceFactConsistency(inputs);
+  run.ingest(inputs);
+  run.processCurrentInteraction();
+  const proposal = [...run.records.values()].find((record) => record.family === "proposal_intent");
+  const realization = simulatorInput(proposal.reference);
+  run.assertSourceFactConsistency([realization]);
+  run.ingest([realization]);
+  run.processCurrentInteraction();
+  const acceptance = [
+    realization, userResponseInput(),
+    fixtureControlInput({ control: "evaluation_retention_basis", value: overrides.retention ?? "named_formal_run", occurrenceOrder: 11 }),
+    fixtureControlInput({ control: "user_governed_constraints", value: overrides.userControl ?? "exhaustive_selected_slice_scope", occurrenceOrder: 12 }),
+    consequence, reversibility
+  ];
+  run.assertSourceFactConsistency(acceptance);
+  run.ingest(acceptance);
+  run.processCurrentInteraction();
+  return run;
+}
+
 test("rejected payload and changed source-identity content have no semantic side effect", () => {
   const boundary = createSutBoundary();
   const runRef = boundary.startRun();
@@ -1620,4 +1666,57 @@ test("proposal intent does not survive independent run termination", () => {
   const secondRun = boundary.startRun();
   assert.equal(recordsOf(boundary, secondRun, "proposal_intent").length, 0);
   assert.throws(() => boundary.inspectRecord(secondRun, proposalRef), /Unknown or closed/);
+});
+
+test("activation assessment derives nine checks and a separate active trial from exact closure", () => {
+  const run = activationReadyRun();
+  const assessment = [...run.records.values()].find((record) => record.family === "activation_assessment");
+  const trial = [...run.records.values()].find((record) => record.family === "active_trial");
+  assert.deepEqual(Object.keys(assessment.checkResults).sort(), [
+    "scope", "basis_lineage", "current_stale_basis", "user_governed_constraints",
+    "reversibility", "consequence", "current_applicability", "retention_basis",
+    "non_adaptation_boundary"
+  ].sort());
+  assert.equal(Object.values(assessment.checkResults).every((result) => result.status === "passed"), true);
+  assert.equal(assessment.overallStatus, "sufficient");
+  assert.equal(trial.activationAssessmentRef, assessment.reference);
+  assert.equal(run.records.get(trial.candidateRef).lifecycleStatus, "formed_non_active");
+  run.validActivationAssessmentClosure(assessment);
+  run.validActiveTrialClosure(trial);
+});
+
+test("each semantic activation failure retains an insufficient assessment and creates no trial", () => {
+  for (const overrides of [
+    { userControl: "unsupported" }, { reversibility: "irreversible" },
+    { consequence: "high" }, { contextConsequence: "high" },
+    { activity: "calendar_operation" }, { retention: "production_memory" },
+    { trialPolicy: "durable_adaptation" }
+  ]) {
+    const run = activationReadyRun(overrides);
+    const assessment = [...run.records.values()].find((record) => record.family === "activation_assessment");
+    assert.equal(assessment.overallStatus, "insufficient");
+    assert.equal(Object.values(assessment.checkResults).some((result) => result.status === "failed"), true);
+    assert.equal([...run.records.values()].some((record) => record.family === "active_trial"), false);
+    run.validActivationAssessmentClosure(assessment);
+  }
+});
+
+test("activation replay validates assessment and trial closure instead of trusting stored labels", () => {
+  const attacks = [
+    ({ assessment }) => { assessment.overallStatus = "insufficient"; },
+    ({ assessment }) => { assessment.checkResults.scope.status = "failed"; },
+    ({ run, assessment }) => { run.relations.splice(run.relations.findIndex((relation) => relation.fromRef === assessment.reference && relation.relationKind === "basis"), 1); },
+    ({ run, trial }) => { run.relations.splice(run.relations.findIndex((relation) => relation.fromRef === trial.reference && relation.relationKind === "transition_ancestry"), 1); },
+    ({ trial }) => { trial.currentStatus = "active"; trial.activationAssessmentRef = createReference("state"); }
+  ];
+  for (const attack of attacks) {
+    const run = activationReadyRun();
+    const assessment = [...run.records.values()].find((record) => record.family === "activation_assessment");
+    const trial = [...run.records.values()].find((record) => record.family === "active_trial");
+    attack({ run, assessment, trial });
+    assert.throws(
+      () => run.validActiveTrialClosure(trial),
+      /Activation assessment|Active trial/
+    );
+  }
 });

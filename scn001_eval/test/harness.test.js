@@ -220,6 +220,12 @@ test("evaluation cannot import a private SUT module through the package boundary
 
 function productionProposalRecords() {
   return [
+    {
+      fixtureRecordId: "C-004", role: "chronology_fact", sourceActor: "fixture-driver",
+      occurrenceOrder: 3,
+      data: { scenarioDay: 135, sessionId: "session-current", sessionOrder: 2 },
+      oracleAnnotations: { pathId: "canonical", expectedTransition: "current" }
+    },
     taskObservationFixtureRecord(),
     taskObservationFixtureRecord({
       fixtureRecordId: "C-006",
@@ -232,10 +238,34 @@ function productionProposalRecords() {
       }
     }),
     {
-      fixtureRecordId: "A-001", role: "affordance_fact", sourceActor: "fixture-driver",
-      occurrenceOrder: 3,
+      fixtureRecordId: "C-007", role: "context_label", sourceActor: "fixture-driver",
+      occurrenceOrder: 4,
+      data: { surfaceLabel: "text_simulated", activity: "japanese_practice", taskMode: "spontaneous_production", consequence: "low" },
+      oracleAnnotations: { canonicalAnswer: true }
+    },
+    {
+      fixtureRecordId: "TD-001", role: "affordance_fact", sourceActor: "fixture-driver",
+      occurrenceOrder: 5,
       data: { direction: "TRIAL-PROD-FOCUS", description: "Production-focused practice." },
       oracleAnnotations: { expectedTransition: "proposal" }
+    },
+    {
+      fixtureRecordId: "FC-TRIAL-001", role: "fixture_control_fact", sourceActor: "fixture-driver",
+      occurrenceOrder: 6,
+      data: { control: "trial_policy", value: "bounded_reversible_trial_no_durable_adaptation" },
+      oracleAnnotations: { expectedTransition: "activation_check" }
+    },
+    {
+      fixtureRecordId: "FC-CONSEQ-001", role: "fixture_control_fact", sourceActor: "fixture-driver",
+      occurrenceOrder: 13,
+      data: { control: "consequence", value: "low" },
+      oracleAnnotations: { expectedTransition: "activation_check" }
+    },
+    {
+      fixtureRecordId: "FC-REV-001", role: "fixture_control_fact", sourceActor: "fixture-driver",
+      occurrenceOrder: 14,
+      data: { control: "reversibility", value: "reversible" },
+      oracleAnnotations: { expectedTransition: "activation_check" }
     }
   ];
 }
@@ -397,9 +427,30 @@ test("branch delivery waits for exact processed realization then creates canonic
   ].sort());
   assert.equal(["proposalRef", "candidateRef", "realizationRef", "bindingStatus",
     "branchPolicy", "activationIntent"].some((key) => key in response.payload), false);
-  assert.equal(snapshot.records.some((record) => [
-    "activation_assessment", "activation_check_result", "active_trial"
-  ].includes(record.family)), false);
+  const activation = snapshot.records.find((record) => record.family === "activation_assessment");
+  const trial = snapshot.records.find((record) => record.family === "active_trial");
+  assert.deepEqual(Object.keys(activation.checkResults).sort(), [
+    "scope", "basis_lineage", "current_stale_basis", "user_governed_constraints",
+    "reversibility", "consequence", "current_applicability", "retention_basis",
+    "non_adaptation_boundary"
+  ].sort());
+  assert.equal(Object.values(activation.checkResults).every((result) => (
+    Object.keys(result).sort().join("|") === "reason|status" && result.status === "passed"
+  )), true);
+  assert.equal(activation.overallStatus, "sufficient");
+  assert.equal(trial.candidateRef, activation.candidateRef);
+  assert.equal(trial.activationAssessmentRef, activation.reference);
+  assert.equal(trial.trialOrigin, "zoey_derived_trial");
+  assert.equal(snapshot.records.find((record) => record.reference === trial.candidateRef).lifecycleStatus, "formed_non_active");
+  assert.equal(snapshot.relations.filter((relation) => (
+    relation.fromRef === activation.reference && relation.relationKind === "basis"
+  )).length, 12);
+  assert.equal(snapshot.relations.filter((relation) => (
+    relation.fromRef === trial.reference && relation.relationKind === "transition_ancestry"
+  )).length, 2);
+  assert.deepEqual(harness.processCurrentInteraction(runRef), []);
+  assert.deepEqual(harness.emitAvailableOutputs(runRef), []);
+  assert.doesNotMatch(JSON.stringify(snapshot), /fixtureRecordId|canonicalAnswer|activation_check/);
 });
 
 test("acceptance branch validates complete C/A/P/S/F/R/E closure before ingress", () => {
