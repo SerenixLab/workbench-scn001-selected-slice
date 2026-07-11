@@ -71,7 +71,7 @@ Unless a row says otherwise:
 | `ENG-CONF-STATE-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Selection and realization recording consume revalidated proposal closure and preserve exact P/S/F/R/E inputs, order, typed bases, and relation evidence. | `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2` | Transition/ref/order/role assertions; missing/duplicate basis and transition attacks; exact valid replay; distinct-realization failure. Contract and negative modes. | `scn001_sut_core/src/runState.js`; package tests | Default | uncovered | merge-blocking; claim-blocking | Proposal realization mutation provenance is covered; response binding, activation, lifecycle, and outcome mutations remain absent. |
 | `ENG-HEALTH-ABSTRACTION-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Public boundary, harness, validation, fixture-projection, and run-state abstractions are non-throwaway. | `ADR-001 R1` | Bounded package/module responsibilities; manual justification review. | `README.md`; `scn001_sut_core/src/`; `scn001_eval/src/`; package `AGENTS.md` files | Local-recorded review | review-only | advisory or merge-blocking by condition | Abstraction justification is not captured by an automated check; future generalization could outrun concrete pressure. |
 | `ENG-HEALTH-API-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The SUT surface is unchanged; evaluation package root now exports only the formal one-argument harness constructor, with renderer/projector helpers and failure injection internal. | Rule entry | Exact package-root export test; constructor override rejection; internal-only SUT resolvers and evaluation mechanism-test seam. | `scn001_sut_core/index.js`; `scn001_eval/index.js`; package tests; `scripts/check-dependency-boundary.mjs` | Default | uncovered | merge-blocking; claim-blocking | Governing consumer/need review for future API additions remains manual. |
-| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | This correction closes pre-emission candidate-bound integrity, exact realization closure validation, and the harness simulator/projector override seam before response binding. | Rule entry | Focused-diff inspection against starting `HEAD` `c469798`; one primary purpose: close realization-seam integrity and simulator-boundary bypasses. | Current working-tree diff; package tests; corrective record below | Fresh independent ChatGPT review of the corrected pushed diff is pending; prior proposal-intent and realization-seam reviews are not reused. | uncovered | advisory or merge-blocking by condition | The implementing task cannot independently review its own corrected diff. |
+| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | This correction closes pre-emission candidate-bound integrity, exact realization closure validation, and the harness simulator/projector override seam before response binding. | Rule entry | Focused-diff inspection against starting `HEAD` `c469798`; one primary purpose: close realization-seam integrity and simulator-boundary bypasses. | Current working-tree diff; package tests; corrective record below | The passing independent ChatGPT review of realization-seam corrective commit `21186e5f3f683aa3e20e5f88576b5b6e936f59f7` is recorded below; the earlier failed realization-seam review remains preserved historically. | review-only | advisory or merge-blocking by condition | The bounded realization-seam corrective diff received qualifying independent review for this change; future non-throwaway semantic or boundary changes require fresh change-specific review. |
 | `ENG-HEALTH-COMMENT-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No JavaScript implementation/test comment is present or used to justify behavior. Future trigger: adding, generating, or relying on a code comment. | Rule entry | Source inventory. | `rg` over `scn001_sut_core`, `scn001_eval`, `tests`, and `scripts` returned no JavaScript comment lines | Not applicable until trigger. | N/A | advisory or merge-blocking by condition | Governance prose is controlled as documentation/claims; code comments require review when introduced. |
 | `ENG-HEALTH-DEAD-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No dead, commented-out, prototype, experiment, or throwaway implementation artifact is present. Future trigger: introducing or promoting one. | Rule entry | Repository and source inventory; manual review. | Current package/source tree; no throwaway directory or commented-out implementation | Not applicable until trigger. | N/A | merge-blocking; promotion-blocking | Static gate does not comprehensively prove reachability; disposition must change if a prototype appears. |
 | `ENG-HEALTH-DEPENDENCY-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Evaluation declares a runtime dependency on the local SUT package and CI installs the workspace lock. | Rule entry | Local file dependency; lockfile; dependency-boundary static check; no external runtime dependency. | `package-lock.json`; `scn001_eval/package.json`; `scn001_sut_core/package.json`; `scripts/check-dependency-boundary.mjs`; `README.md` | Default | uncovered | merge-blocking; promotion-blocking | Dependency rationale/maintenance review is manual; future external dependencies require a new review record. |
@@ -328,12 +328,94 @@ The package-root evaluation API now exports only `createEvaluationHarness(sutBou
 
 Affected rows updated by this correction are `ENG-CONF-DEP-001`, `ENG-CONF-HARNESS-001`, `ENG-CONF-INSPECT-001`, `ENG-CONF-PAYLOAD-001`, `ENG-CONF-PAYLOAD-002`, `ENG-CONF-PUBLIC-001`, `ENG-CONF-REF-001`, `ENG-CONF-ROLE-001`, `ENG-CONF-SIM-001`, `ENG-CONF-STATE-001`, `ENG-CONF-STATE-002`, `ENG-HEALTH-API-001`, `ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-FAILURE-001`, `ENG-HEALTH-TEST-001`, and `ENG-HEALTH-TEST-002`. `ENG-CONF-CAPTURE-001`, `ENG-CONF-IMPORT-002`, `ENG-CONF-INSPECT-002`, `ENG-CONF-CLAIM-001`, `ENG-CLAIM-001`, and `ENG-CLAIM-002` were reviewed without changed applicability or status.
 
-At completion of this implementing task, `ENG-HEALTH-CHANGE-001` remains
-`uncovered`: the implementing Codex task cannot independently review its own corrected diff. A fresh independent ChatGPT review of the corrected pushed diff is pending afterward. No passing independent review of the corrected diff is claimed.
+At completion of this implementing task, `ENG-HEALTH-CHANGE-001` was left `uncovered`: the implementing Codex task could not independently review its own corrected diff, and the corrected realization-seam change had not yet received a fresh qualifying independent review. No passing independent review of the corrected diff was claimed by the implementing task.
 
-Status counts remain 44 applicable and 5 not applicable; 9 applicable rules are `review-only`, 35 are `uncovered`, none is `revalidation-required`, and no rule is claimed `enforced`.
+At that point, status counts were 44 applicable and 5 not applicable; 9 applicable rules were `review-only`, 35 were `uncovered`, none was `revalidation-required`, and no rule was claimed `enforced`.
 
-The three blocking realization-seam risks above are addressed by implementation and regression tests. Remaining risks include absent response binding, activation, active-trial, later-use, outcome, replay/restore, operational reporting, formal evaluation and scoring contracts; manual semantic-selector and test-validity review; and unverified protected required-check configuration. No `P-USER-ACCEPT`, response binding, activation assessment, active trial, outcome, formal evaluation record, scoreability predicate, completion evidence package, completion-eligibility determination, owner disposition, milestone completion, broader `SCN-001`, or production-readiness claim is created.
+The subsequent independent review outcome is recorded separately below. It does not rewrite the prior blocking review of `c4697980f83b16426c81c23221b12fc612e39950` or the corrective implementing task's honest pending-review disposition.
+
+At completion of the implementing task, the three blocking realization-seam risks had been addressed by implementation and regression mechanisms but remained pending independent review of the corrected diff. Remaining risks included absent response binding, activation, active-trial, later-use, outcome, replay/restore, operational reporting, formal evaluation and scoring contracts; manual semantic-selector and test-validity review; and unverified protected required-check configuration.
+
+The subsequent review closes only the change-specific review condition for the bounded realization-seam correction. No `P-USER-ACCEPT`, response binding, activation assessment, active trial, outcome, formal evaluation record, scoreability predicate, completion evidence package, completion-eligibility determination, owner disposition, milestone completion, broader `SCN-001`, or production-readiness claim is created.
+
+## Realization-Seam Integrity Corrective Independent Review Closure
+
+On 2026-07-10, an independent ChatGPT review examined realization-seam corrective commit `21186e5f3f683aa3e20e5f88576b5b6e936f59f7` against the three blocking findings recorded for realization-seam commit `c4697980f83b16426c81c23221b12fc612e39950`, the accepted candidate/proposal and simulator boundaries, and the applicable conformance obligations.
+
+The independent review inspected:
+
+* candidate-bound proposal integrity at later consumption points;
+* selected proposal material and exact candidate identity preservation;
+* candidate and proposal creation-transition participants and ordering;
+* proposal-to-candidate ancestry orientation, multiplicity, assertion role, and contemporaneous order;
+* public output emission from retained proposal-selection evidence;
+* proposal realization recording from simulator input;
+* exact proposal/selection/simulator-fact/recording-transition/realization-relation closure;
+* malformed and ambiguous retained realization evidence;
+* exact simulator-fact replay and distinct-second-realization behavior;
+* formal evaluation-harness constructor shape;
+* package-root evaluation exports;
+* mechanism-test failure injection isolation;
+* full evaluation-side simulator-record validation;
+* requested-versus-realized material fidelity consistency;
+* narrow SUT-visible simulator projection;
+* retained non-arbitration, deterministic-rendering, response-binding, activation, and formal-evaluation boundaries.
+
+The review confirms that complete candidate-bound proposal integrity is revalidated before proposal selection is created or reused, before a retained selection can produce public realization output, and before simulator realization can be recorded. The shared proposal validator resolves the exact candidate identity and verifies the supported candidate and proposal material contracts, structural candidate-intent and proposed-scope preservation, candidate creation evidence, proposal creation-transition inputs/results/order, exact SUT-asserted candidate ancestry, and absence of copied candidate evidence relations.
+
+A selected proposal whose scope or material intent diverges from its candidate fails closed before public emission. Rebinding a proposal's `candidateRef` to a different candidate with structurally equal payload also fails because the proposal creation transition and exact candidate ancestry must still close over the same candidate identity. Missing or competing ancestry, corrupted proposal-formation participants, and malformed retained candidate state likewise fail before outward realization.
+
+The review confirms that proposal realization is no longer recognized through a loose realization-edge predicate. One exact proposal realization requires the complete local closure:
+
+```text
+P = exact candidate-bound proposal intent
+S = exact prior SUT proposal-realization selection
+F = exact retained simulator-realization input fact
+R = exact SUT record_proposal_realization transition
+E = exact typed realization relation
+```
+
+The realization resolver requires one exact valid selection; a simulator-origin retained fact whose `requestedRef` identifies the exact proposal and whose order follows selection; one SUT realization-recording transition with exact `[F, S, P]` participants and the required result/order contract; contemporaneous SUT-asserted `basis[simulator_realization_fact]` and `basis[proposal_realization_selection]` relations; and one SUT-asserted `F --realization[proposal_intent]--> P` relation with exact orientation and transition-consistent created/effective order.
+
+Zero realization relations and zero realization-recording transitions represent an unrealized selected proposal. Any partial, malformed, duplicate, or ambiguous realization evidence fails closed rather than silently suppressing public output or satisfying exact replay reuse. A valid exact canonical simulator-fact replay reuses the already validated closure without creating a second transition or realization relation. A second distinct simulator fact for the same already-realized proposal remains rejected rather than replacing, merging with, or strengthening the first realization.
+
+The review confirms that the formal package-root evaluation API exports only `createEvaluationHarness`. The formal harness constructor accepts only the SUT public boundary and rejects additional renderer/projector override arguments. Formal harness construction therefore uses the governed deterministic proposal renderer and simulator projector rather than an arbitrary caller-supplied replacement. Renderer/projector failure injection remains confined to the package-internal mechanism-test construction path and is not exposed from `scn001_eval/index.js`.
+
+The review confirms that the dedicated simulator projector validates the complete current evaluation-side simulator-record contract before SUT projection. It enforces the exact full-record key set, exact nested requested/realized material shapes, selection/proposal/candidate reference shapes, supported production-proposal material, simulator role and source actor, positive occurrence order, nonempty realized behavior, and fidelity/mismatch consistency. `fidelity = match` is accepted only when requested material meaning structurally equals declared realized material meaning and mismatch origin is absent; mismatch requires materially unequal meaning and a nonempty mismatch origin.
+
+The simulator-record validator does not use fixture path, branch policy, oracle annotation, canonical expectation, claim class, or score to derive fidelity. After validation, the SUT-visible projection remains limited to opaque run-local source identity, simulator-realization kind, source actor, occurrence order, requested proposal ref, realized behavior, and fidelity.
+
+The review also confirms that the corrected seam preserves the prior accepted boundaries:
+
+* the harness does not choose among competing proposal intents;
+* the simulator does not choose the proposal;
+* one exact current proposal receives SUT selection before public output;
+* multiple current proposal intents receive no selection;
+* no first/latest/best/relevance policy exists;
+* no lifecycle-bearing selected-proposal state was added;
+* public output identifies the exact SUT selection and proposal and contains no surfaced wording;
+* caller mutation cannot modify retained SUT proposal/candidate state;
+* multiple competing outstanding selections are not emitted for harness arbitration;
+* repeated successful routing does not duplicate simulator delivery;
+* the governed simulator preserves deterministic wording and derives fidelity from request/realization material preservation rather than canonical expectation;
+* `processCurrentInteraction()` remains an empty-output public operation;
+* no new SUT public method was added;
+* `P-USER-ACCEPT` remains absent;
+* response binding remains absent;
+* activation assessment and active-trial creation remain absent;
+* no formal evaluation, scoreability, completion-eligibility, milestone-completion, broader `SCN-001`, or production-readiness claim was created.
+
+Independent review outcome: **pass for realization-seam corrective commit `21186e5f3f683aa3e20e5f88576b5b6e936f59f7` under `ENG-HEALTH-CHANGE-001 R2`**.
+
+This passing review closes only the change-specific manual-review condition for the bounded realization-seam correction. It does not rewrite the failed review of `c4697980f83b16426c81c23221b12fc612e39950` as passing, does not establish automated enforcement, does not satisfy `ENG-HEALTH-TEST-002` test-validity review, and does not remove unrelated residual risks or unverified required-check/branch-protection integration.
+
+With this recorded review outcome, the current applicability/status counts are:
+
+* 44 rules `applicable` and 5 `not-applicable`;
+* 10 applicable rules `review-only`;
+* 34 applicable rules `uncovered`;
+* no applicable rule `revalidation-required`;
+* no rule claimed `enforced`.
 
 ## Candidate-Bound Proposal-Intent Formation Increment
 
