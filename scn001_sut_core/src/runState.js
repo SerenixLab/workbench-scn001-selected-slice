@@ -1206,37 +1206,20 @@ export class RunState {
 
     const currentRealizations = interactionFacts.filter((fact) => fact.role === "simulator_realization");
     const currentResponses = interactionFacts.filter((fact) => fact.role === "user_response");
-    const currentControls = interactionFacts.filter((fact) => fact.role === "fixture_control_fact");
-    const requiredCurrentControls = [
-      "evaluation_retention_basis", "user_governed_constraints", "consequence", "reversibility"
-    ];
-    if (currentRealizations.length !== 1 || currentResponses.length !== 1
-      || requiredCurrentControls.some((control) => (
-        currentControls.filter((fact) => fact.payload.control === control).length !== 1
-      ))) return undefined;
+    if (currentRealizations.length !== 1 || currentResponses.length !== 1) return undefined;
 
     const proposal = this.validateCandidateBoundProposal(binding.proposalRef);
     const candidateClosure = this.validateProductionCandidateClosure(proposal.candidateRef);
     const candidate = candidateClosure.candidate;
     const basis = this.resolveActivationCandidateBasis(candidate);
-    const controls = {
-      trialPolicy: this.resolveExactControl(basis.interaction, "trial_policy"),
-      userGoverned: this.resolveExactControl(interaction, "user_governed_constraints"),
-      consequence: this.resolveExactControl(interaction, "consequence", basis.interaction),
-      reversibility: this.resolveExactControl(interaction, "reversibility", basis.interaction),
-      retention: this.resolveExactControl(interaction, "evaluation_retention_basis")
-    };
+    const participants = this.resolveActivationParticipants(candidate, binding, basis, interaction);
     const contextChanges = interactionFacts.filter((fact) => fact.role === "material_context_change");
     const checkResults = this.deriveActivationCheckResults({
-      candidate, proposal, binding, basis, controls, contextChanges
+      candidate, proposal, binding, basis, controlBasisRefs: participants.controlBasisRefs,
+      contextChanges
     });
     const overallStatus = deriveActivationOverallStatus(checkResults);
-    const materialRefs = [
-      candidate.reference, binding.reference, basis.comparison.reference,
-      basis.recognition.reference, basis.production.reference, basis.chronology.reference,
-      basis.context.reference, controls.trialPolicy.reference, controls.userGoverned.reference,
-      controls.consequence.reference, controls.reversibility.reference, controls.retention.reference
-    ];
+    const materialRefs = activationMaterialBasisRefs(participants);
     const existing = [...this.records.values()].filter((record) => (
       record.family === "activation_assessment"
       && record.candidateRef === candidate.reference
@@ -1258,6 +1241,11 @@ export class RunState {
       activationBasisType: "bound_candidate_specific_proposal_acceptance",
       candidateRef: candidate.reference, bindingAssessmentRef: binding.reference,
       activeScope: structuredClone(candidate.proposedScope), overallStatus,
+      comparisonRef: participants.comparisonRef,
+      recognitionObservationRef: participants.recognitionObservationRef,
+      productionObservationRef: participants.productionObservationRef,
+      chronologyRef: participants.chronologyRef, contextRef: participants.contextRef,
+      controlBasisRefs: structuredClone(participants.controlBasisRefs),
       checkResults, materialBasisRefs: materialRefs,
       statusOrigin: "sut_transition", interactionRef: interaction.reference,
       createdOrder: this.allocateOrder()
@@ -1269,17 +1257,11 @@ export class RunState {
     transition.result = "activation_assessed";
     attachCreatingTransition([assessment], transition);
     this.commitDerivedRecords([assessment], transition);
-    const roles = [
-      "activation_candidate", "proposal_response_binding", "candidate_support_comparison",
-      "current_recognition_evidence", "current_production_evidence", "activation_chronology",
-      "activation_context", "trial_policy_control", "user_governed_control",
-      "consequence_control", "reversibility_control", "retention_control"
-    ];
-    materialRefs.forEach((reference, index) => this.relations.push({
+    for (const [reference, role] of activationParticipantRolePairs(participants)) this.relations.push({
       relationKind: "basis", fromRef: assessment.reference, toRef: reference,
-      targetRole: roles[index], effectiveOrder: assessment.createdOrder,
+      targetRole: role, effectiveOrder: assessment.createdOrder,
       createdOrder: transition.createdOrder, assertedByRole: "sut"
-    }));
+    });
     return transition.reference;
   }
 
@@ -1339,10 +1321,18 @@ export class RunState {
       && relation.targetRole === "comparison_input" && relation.toRef === comparison?.reference);
     const support = candidateRelations.filter((relation) => relation.relationKind === "support"
       && relation.targetRole === "dimension_comparison" && relation.toRef === comparison?.reference);
-    const competing = candidateRelations.filter((relation) => ["comparison_input", "dimension_comparison"].includes(relation.targetRole));
-    if (comparison?.family !== "dimension_comparison" || comparisonBasis.length !== 1
+    const competing = candidateRelations.filter((relation) => (
+      ["comparison_input", "dimension_comparison"].includes(relation.targetRole)
+      || this.records.get(relation.toRef)?.family === "dimension_comparison"
+    ));
+    const candidateTransition = this.records.get(candidate.createdByTransitionRef);
+    if (comparison?.family !== "dimension_comparison" || comparison.origin !== "sut"
+      || comparisonBasis.length !== 1
       || support.length !== 1 || competing.length !== 2
-      || comparison.targetDimension !== candidate.proposedScope.dimension) {
+      || comparison.targetDimension !== candidate.proposedScope.dimension
+      || [...comparisonBasis, ...support].some((relation) => relation.assertedByRole !== "sut"
+        || relation.effectiveOrder !== candidate.createdOrder
+        || relation.createdOrder !== candidateTransition.createdOrder)) {
       throw new SutStateIntegrityError("Activation requires the exact candidate support comparison closure.");
     }
     const recognition = this.resolveSingleComparisonParticipant(comparison, "recognitionObservationRefs", "recognition");
@@ -1354,6 +1344,8 @@ export class RunState {
     if (chronologyFacts.length !== 1 || contexts.length !== 1) {
       throw new SutStateIntegrityError("Activation requires exact chronology and context participants.");
     }
+    this.validateRetainedInputFact(chronologyFacts[0], "fixture", "chronology_fact", interaction);
+    this.validateRetainedInputFact(contexts[0], "fixture", "context_label", interaction);
     return { interaction, comparison, recognition, production, chronology: chronologyFacts[0], context: contexts[0] };
   }
 
@@ -1362,57 +1354,121 @@ export class RunState {
       throw new SutStateIntegrityError("Activation requires one exact observation per comparison role.");
     }
     const observation = this.records.get(comparison[property][0]);
+    const transition = this.records.get(comparison.createdByTransitionRef);
     const relation = this.relations.filter((candidate) => candidate.fromRef === comparison.reference
       && candidate.toRef === observation?.reference && candidate.relationKind === "basis"
       && candidate.targetRole === (taskMode === "recognition" ? "recognition_observation" : "production_observation"));
+    const allObservationRelations = this.relations.filter((candidate) => (
+      candidate.fromRef === comparison.reference && candidate.relationKind === "basis"
+    ));
+    const expectedInputs = uniqueReferences([
+      ...comparison.recognitionObservationRefs, ...comparison.productionObservationRefs
+    ]);
     if (observation?.role !== "task_observation" || observation.payload.taskMode !== taskMode
-      || relation.length !== 1 || relation[0].assertedByRole !== "sut") {
+      || observation.payload.dimension !== comparison.targetDimension
+      || relation.length !== 1 || relation[0].assertedByRole !== "sut"
+      || relation[0].semanticDimension !== comparison.targetDimension
+      || relation[0].semanticTaskMode !== taskMode
+      || relation[0].effectiveOrder !== comparison.createdOrder
+      || relation[0].createdOrder !== transition?.createdOrder
+      || transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
+      || transition.transitionKind !== "compare_recognition_and_spontaneous_production"
+      || transition.interactionRef !== comparison.interactionRef
+      || !isDeepStrictEqual(transition.inputReferences, expectedInputs)
+      || !isDeepStrictEqual(transition.resultReferences, [comparison.reference])
+      || transition.result !== "accepted" || comparison.createdOrder >= transition.createdOrder
+      || allObservationRelations.length !== expectedInputs.length) {
       throw new SutStateIntegrityError("Activation comparison observation closure is malformed.");
     }
+    this.validateRetainedInputFact(
+      observation, "fixture", "task_observation", this.records.get(comparison.interactionRef)
+    );
     return observation;
   }
 
-  resolveExactControl(primaryInteraction, control, canonicalInteraction) {
-    const controlsIn = (interaction) => interaction.inputReferences.map((ref) => this.records.get(ref))
-      .filter((fact) => fact?.role === "fixture_control_fact" && fact.payload.control === control);
-    const primary = controlsIn(primaryInteraction);
-    if (primary.length !== 1) throw new SutStateIntegrityError(`Activation requires one exact ${control} control.`);
-    if (canonicalInteraction) {
-      const prior = controlsIn(canonicalInteraction);
-      if (prior.length !== 1 || prior[0].reference !== primary[0].reference) {
-        throw new SutStateIntegrityError(`Redelivered ${control} control must preserve canonical identity.`);
-      }
-    }
-    this.validateFixtureControlFact(primary[0], primaryInteraction);
-    return primary[0];
-  }
-
-  validateFixtureControlFact(fact, interaction) {
+  validateRetainedInputFact(fact, origin, role, interaction) {
+    const binding = this.sourceFactBindings.get(fact?.sourceFactRef);
     const actor = this.records.get(fact.sourceActorRef);
     const ingestion = this.records.get(interaction.createdByTransitionRef);
+    const firstInteraction = this.records.get(fact.firstInteractionRef);
+    const firstIngestion = this.records.get(firstInteraction?.createdByTransitionRef);
     const source = this.relations.filter((relation) => relation.fromRef === fact.reference
-      && relation.relationKind === "source" && relation.targetRole === "semantic_source");
+      && relation.relationKind === "source");
     const basis = this.relations.filter((relation) => relation.fromRef === ingestion?.reference
-      && relation.toRef === fact.reference && relation.relationKind === "basis"
-      && relation.targetRole === "ingested_input");
-    if (fact.family !== "input_fact" || fact.origin !== "fixture" || fact.role !== "fixture_control_fact"
-      || actor?.origin !== "fixture" || actor.sourceActor !== "fixture-driver"
-      || source.length !== 1 || source[0].toRef !== actor.reference || source[0].assertedByRole !== "sut"
-      || basis.length !== 1 || basis[0].assertedByRole !== "sut"
-      || !interaction.inputReferences.includes(fact.reference)) {
-      throw new SutStateIntegrityError("Activation control provenance is malformed.");
+      && relation.toRef === fact.reference && relation.relationKind === "basis");
+    if (fact?.family !== "input_fact" || fact.origin !== origin || fact.role !== role
+      || binding?.inputFactRef !== fact.reference
+      || !isDeepStrictEqual(binding.semanticMeaning, sourceFactMeaning(fact.payload))
+      || actor?.family !== "semantic_source" || actor.origin !== origin
+      || actor.sourceActor !== fact.payload.sourceActor || actor.reference !== fact.sourceActorRef
+      || source.length !== 1 || source[0].toRef !== actor.reference
+      || source[0].targetRole !== "semantic_source" || source[0].assertedByRole !== "sut"
+      || source[0].effectiveOrder !== fact.createdOrder
+      || source[0].createdOrder !== firstIngestion?.createdOrder
+      || interaction?.family !== "interaction_segment" || !interaction.inputReferences.includes(fact.reference)
+      || ingestion?.family !== "sut_transition_evidence" || ingestion.origin !== "sut"
+      || ingestion.transitionKind !== "ingest_sut_visible_inputs"
+      || ingestion.interactionRef !== interaction.reference
+      || !ingestion.inputReferences.includes(fact.reference)
+      || basis.length !== 1 || basis[0].targetRole !== "ingested_input"
+      || basis[0].assertedByRole !== "sut" || basis[0].effectiveOrder !== ingestion.createdOrder
+      || basis[0].createdOrder !== ingestion.createdOrder) {
+      throw new SutStateIntegrityError("Activation retained input-fact closure is malformed.");
     }
   }
 
-  deriveActivationCheckResults({ candidate, proposal, binding, basis, controls, contextChanges }) {
+  resolveActivationParticipants(candidate, binding, basis, activationInteraction) {
+    for (const interaction of [basis.interaction, activationInteraction]) {
+      for (const fact of interaction.inputReferences.map((ref) => this.records.get(ref))
+        .filter((record) => record?.role === "fixture_control_fact")) {
+        this.validateRetainedInputFact(fact, "fixture", "fixture_control_fact", interaction);
+      }
+    }
+    const controlRefs = (interaction, control) => interaction.inputReferences
+      .map((ref) => this.records.get(ref))
+      .filter((fact) => fact?.role === "fixture_control_fact" && fact.payload.control === control)
+      .map((fact) => fact.reference);
+    const controlBasisRefs = {
+      trialPolicyRefs: controlRefs(basis.interaction, "trial_policy"),
+      userGovernedConstraintRefs: controlRefs(activationInteraction, "user_governed_constraints"),
+      consequenceRefs: controlRefs(activationInteraction, "consequence"),
+      reversibilityRefs: controlRefs(activationInteraction, "reversibility"),
+      retentionBasisRefs: controlRefs(activationInteraction, "evaluation_retention_basis")
+    };
+    return {
+      candidateRef: candidate.reference, bindingAssessmentRef: binding.reference,
+      comparisonRef: basis.comparison.reference,
+      recognitionObservationRef: basis.recognition.reference,
+      productionObservationRef: basis.production.reference,
+      chronologyRef: basis.chronology.reference, contextRef: basis.context.reference,
+      controlBasisRefs
+    };
+  }
+
+  deriveActivationCheckResults({ candidate, proposal, binding, basis, controlBasisRefs, contextChanges }) {
     const pass = (reason) => ({ status: "passed", reason });
     const fail = (reason) => ({ status: "failed", reason });
+    const unresolved = (reason) => ({ status: "unresolved", reason });
+    const classifyControl = (refs, supportedValue, reasons) => {
+      if (refs.length === 0) return fail(reasons.missing);
+      if (refs.length > 1) return unresolved(reasons.conflicting);
+      return this.records.get(refs[0]).payload.value === supportedValue
+        ? pass(reasons.passed) : fail(reasons.unsupported);
+    };
     const current = basis.recognition.payload.occurrenceScenarioDay === basis.chronology.payload.scenarioDay
       && basis.production.payload.occurrenceScenarioDay === basis.chronology.payload.scenarioDay
       && basis.recognition.firstInteractionRef === candidate.interactionRef
       && basis.production.firstInteractionRef === candidate.interactionRef;
     const contextCompatible = basis.context.payload.activity === "japanese_practice"
       && basis.context.payload.taskMode === "spontaneous_production";
+    const priorControlRefs = (control) => basis.interaction.inputReferences
+      .map((ref) => this.records.get(ref))
+      .filter((fact) => fact?.role === "fixture_control_fact" && fact.payload.control === control)
+      .map((fact) => fact.reference);
+    const canonicalConsequenceRetained = priorControlRefs("consequence").length === 1
+      && controlBasisRefs.consequenceRefs.includes(priorControlRefs("consequence")[0]);
+    const canonicalReversibilityRetained = priorControlRefs("reversibility").length === 1
+      && controlBasisRefs.reversibilityRefs.includes(priorControlRefs("reversibility")[0]);
     return {
       scope: isDeepStrictEqual(proposal.proposedScope, candidate.proposedScope)
         && candidate.proposedScope.taskMode === "spontaneous_production"
@@ -1421,25 +1477,49 @@ export class RunState {
         ? pass("exact_candidate_proposal_binding_lineage") : fail("incomplete_activation_lineage"),
       current_stale_basis: current
         ? pass("current_calibration_support") : fail("support_not_current_under_chronology"),
-      user_governed_constraints: controls.userGoverned.payload.value === "exhaustive_selected_slice_scope"
-        ? pass("exhaustive_selected_slice_constraints") : fail("unsupported_user_governed_constraints"),
-      reversibility: candidate.reversibility === "retirable_before_activation"
-        && controls.reversibility.payload.value === "reversible"
-        ? pass("reversible_separate_trial_state") : fail("reversibility_not_supported"),
-      consequence: basis.context.payload.consequence === "low" && controls.consequence.payload.value === "low"
-        ? pass("low_consequence_synthetic_context") : fail("consequence_not_low"),
+      user_governed_constraints: classifyControl(
+        controlBasisRefs.userGovernedConstraintRefs, "exhaustive_selected_slice_scope",
+        { missing: "user_governed_control_missing", conflicting: "conflicting_user_governed_controls",
+          passed: "exhaustive_selected_slice_constraints", unsupported: "unsupported_user_governed_constraints" }
+      ),
+      reversibility: candidate.reversibility !== "retirable_before_activation"
+        ? fail("candidate_reversibility_not_supported")
+        : controlBasisRefs.reversibilityRefs.length > 0 && !canonicalReversibilityRetained
+          ? fail("canonical_reversibility_redelivery_missing")
+        : classifyControl(controlBasisRefs.reversibilityRefs, "reversible",
+          { missing: "reversibility_control_missing", conflicting: "conflicting_reversibility_controls",
+            passed: "reversible_separate_trial_state", unsupported: "reversibility_not_supported" }),
+      consequence: basis.context.payload.consequence !== "low"
+        ? fail("context_consequence_not_low")
+        : controlBasisRefs.consequenceRefs.length > 0 && !canonicalConsequenceRetained
+          ? fail("canonical_consequence_redelivery_missing")
+        : classifyControl(controlBasisRefs.consequenceRefs, "low",
+          { missing: "consequence_control_missing", conflicting: "conflicting_consequence_controls",
+            passed: "low_consequence_synthetic_context", unsupported: "consequence_not_low" }),
       current_applicability: contextCompatible && contextChanges.length === 0
         ? pass("current_japanese_production_context_compatible") : fail("current_context_not_applicable"),
-      retention_basis: controls.retention.payload.value === "named_formal_run"
-        ? pass("named_formal_run_disposable_retention") : fail("unsupported_retention_basis"),
-      non_adaptation_boundary: candidate.purpose === "provisional_evaluative_trial"
-        && controls.trialPolicy.payload.value === "bounded_reversible_trial_no_durable_adaptation"
-        ? pass("bounded_zoey_trial_not_durable_adaptation") : fail("durable_adaptation_not_permitted")
+      retention_basis: classifyControl(controlBasisRefs.retentionBasisRefs, "named_formal_run",
+        { missing: "retention_control_missing", conflicting: "conflicting_retention_controls",
+          passed: "named_formal_run_disposable_retention", unsupported: "unsupported_retention_basis" }),
+      non_adaptation_boundary: candidate.purpose !== "provisional_evaluative_trial"
+        ? fail("candidate_not_provisional")
+        : classifyControl(controlBasisRefs.trialPolicyRefs,
+          "bounded_reversible_trial_no_durable_adaptation",
+          { missing: "trial_policy_control_missing", conflicting: "conflicting_trial_policy_controls",
+            passed: "bounded_zoey_trial_not_durable_adaptation",
+            unsupported: "durable_adaptation_not_permitted" })
     };
   }
 
   validActivationAssessmentClosure(assessment) {
-    if (assessment?.family !== "activation_assessment" || assessment.origin !== "sut"
+    if (!hasExactKeys(assessment, [
+      "reference", "family", "origin", "activationType", "activationBasisType",
+      "candidateRef", "bindingAssessmentRef", "activeScope", "overallStatus",
+      "comparisonRef", "recognitionObservationRef", "productionObservationRef",
+      "chronologyRef", "contextRef", "controlBasisRefs", "checkResults",
+      "materialBasisRefs", "statusOrigin", "interactionRef", "createdOrder",
+      "createdByTransitionRef"
+    ]) || assessment.family !== "activation_assessment" || assessment.origin !== "sut"
       || assessment.activationType !== "production_focused_candidate_activation"
       || assessment.activationBasisType !== "bound_candidate_specific_proposal_acceptance"
       || assessment.statusOrigin !== "sut_transition" || !hasExactKeys(assessment.checkResults, ACTIVATION_CHECK_NAMES)) {
@@ -1458,36 +1538,48 @@ export class RunState {
     const binding = this.records.get(assessment.bindingAssessmentRef);
     this.validateBindingAssessmentClosure(binding);
     const proposal = this.validateCandidateBoundProposal(binding.proposalRef);
-    const basis = this.resolveActivationCandidateBasis(candidate);
-    const material = assessment.materialBasisRefs.map((ref) => this.records.get(ref));
-    const controls = {
-      trialPolicy: material[7], userGoverned: material[8], consequence: material[9],
-      reversibility: material[10], retention: material[11]
-    };
-    for (const control of Object.values(controls)) this.validateFixtureControlFact(
-      control,
-      this.records.get(control.firstInteractionRef)
-    );
     const activationInteraction = this.records.get(assessment.interactionRef);
+    if (activationInteraction?.family !== "interaction_segment" || activationInteraction.origin !== "sut") {
+      throw new SutStateIntegrityError("Activation assessment interaction is malformed.");
+    }
+    const basis = this.resolveActivationCandidateBasis(candidate);
+    const participants = this.resolveActivationParticipants(
+      candidate, binding, basis, activationInteraction
+    );
+    const materialRefs = activationMaterialBasisRefs(participants);
     const contextChanges = activationInteraction.inputReferences.map((ref) => this.records.get(ref))
       .filter((fact) => fact?.role === "material_context_change");
     const expected = this.deriveActivationCheckResults({
-      candidate, proposal, binding, basis, controls, contextChanges
+      candidate, proposal, binding, basis, controlBasisRefs: participants.controlBasisRefs,
+      contextChanges
     });
     const relations = this.relations.filter((relation) => relation.fromRef === assessment.reference
       && relation.relationKind === "basis");
-    if (transition?.transitionKind !== "assess_production_focused_trial_activation"
+    const expectedPairs = activationParticipantRolePairs(participants);
+    if (transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
+      || transition.transitionKind !== "assess_production_focused_trial_activation"
+      || transition.interactionRef !== activationInteraction?.reference
       || transition.result !== "activation_assessed"
-      || !isDeepStrictEqual(transition.inputReferences, assessment.materialBasisRefs)
+      || !isDeepStrictEqual(transition.inputReferences, materialRefs)
+      || new Set(transition.inputReferences).size !== transition.inputReferences.length
       || !isDeepStrictEqual(transition.resultReferences, [assessment.reference])
-      || relations.length !== 12 || new Set(relations.map((relation) => `${relation.targetRole}:${relation.toRef}`)).size !== 12
+      || !isDeepStrictEqual(assessment.controlBasisRefs, participants.controlBasisRefs)
+      || !isDeepStrictEqual(assessment.materialBasisRefs, materialRefs)
+      || assessment.comparisonRef !== participants.comparisonRef
+      || assessment.recognitionObservationRef !== participants.recognitionObservationRef
+      || assessment.productionObservationRef !== participants.productionObservationRef
+      || assessment.chronologyRef !== participants.chronologyRef
+      || assessment.contextRef !== participants.contextRef
+      || relations.length !== expectedPairs.length
+      || !sameRoleReferencePairs(relations, expectedPairs)
       || relations.some((relation) => relation.assertedByRole !== "sut"
         || relation.effectiveOrder !== assessment.createdOrder
         || relation.createdOrder !== transition.createdOrder)
       || !isDeepStrictEqual(assessment.checkResults, expected)
       || assessment.overallStatus !== deriveActivationOverallStatus(expected)
       || !isDeepStrictEqual(assessment.activeScope, candidate.proposedScope)
-      || assessment.createdOrder >= transition.createdOrder) {
+      || assessment.createdOrder >= transition.createdOrder
+      || materialRefs.some((ref) => this.records.get(ref)?.createdOrder >= assessment.createdOrder)) {
       throw new SutStateIntegrityError("Activation assessment closure is malformed.");
     }
     return assessment;
@@ -1503,17 +1595,28 @@ export class RunState {
     const competingTrials = [...this.records.values()].filter((record) => (
       record.family === "active_trial" && record.candidateRef === trial?.candidateRef
     ));
-    if (trial?.family !== "active_trial" || trial.origin !== "sut"
+    if (!hasExactKeys(trial, [
+      "reference", "family", "origin", "trialType", "trialOrigin", "candidateRef",
+      "activationAssessmentRef", "activationBasisType", "activeScope", "currentStatus",
+      "lifecycleVersion", "correctionPath", "statusOrigin", "interactionRef", "createdOrder",
+      "createdByTransitionRef"
+    ]) || trial.family !== "active_trial" || trial.origin !== "sut"
       || trial.trialType !== "production_focused_practice" || trial.trialOrigin !== "zoey_derived_trial"
       || trial.currentStatus !== "active" || trial.lifecycleVersion !== 1
+      || trial.activationBasisType !== "bound_candidate_specific_proposal_acceptance"
       || trial.correctionPath !== "narrow_retire_supersede_or_clarify"
       || competingTrials.length !== 1 || competingTrials[0].reference !== trial.reference
       || trial.statusOrigin !== "sut_transition" || !isDeepStrictEqual(trial.activeScope, candidate.proposedScope)
       || candidate.lifecycleStatus !== "formed_non_active" || candidate.lifecycleVersion !== 1
       || assessment.overallStatus !== "sufficient"
-      || transition?.transitionKind !== "activate_production_focused_trial"
+      || Object.values(assessment.checkResults).some((result) => result.status !== "passed")
+      || trial.interactionRef !== assessment.interactionRef
+      || transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
+      || transition.transitionKind !== "activate_production_focused_trial"
+      || transition.interactionRef !== trial.interactionRef
       || transition.result !== "trial_activated"
       || !isDeepStrictEqual(transition.inputReferences, [candidate.reference, assessment.reference])
+      || new Set(transition.inputReferences).size !== 2
       || !isDeepStrictEqual(transition.resultReferences, [trial.reference])
       || ancestry.length !== 2
       || !ancestry.some((relation) => relation.toRef === candidate.reference && relation.targetRole === "trial_candidate")
@@ -2266,6 +2369,42 @@ function deriveActivationOverallStatus(checkResults) {
   if (results.some((result) => result.status === "failed")) return "insufficient";
   if (results.some((result) => result.status === "unresolved")) return "unresolved_conflict";
   return "sufficient";
+}
+
+function activationMaterialBasisRefs(participants) {
+  return uniqueReferences([
+    participants.candidateRef, participants.bindingAssessmentRef, participants.comparisonRef,
+    participants.recognitionObservationRef, participants.productionObservationRef,
+    participants.chronologyRef, participants.contextRef,
+    ...participants.controlBasisRefs.trialPolicyRefs,
+    ...participants.controlBasisRefs.userGovernedConstraintRefs,
+    ...participants.controlBasisRefs.consequenceRefs,
+    ...participants.controlBasisRefs.reversibilityRefs,
+    ...participants.controlBasisRefs.retentionBasisRefs
+  ]);
+}
+
+function activationParticipantRolePairs(participants) {
+  return [
+    [participants.candidateRef, "activation_candidate"],
+    [participants.bindingAssessmentRef, "proposal_response_binding"],
+    [participants.comparisonRef, "candidate_support_comparison"],
+    [participants.recognitionObservationRef, "current_recognition_evidence"],
+    [participants.productionObservationRef, "current_production_evidence"],
+    [participants.chronologyRef, "activation_chronology"],
+    [participants.contextRef, "activation_context"],
+    ...participants.controlBasisRefs.trialPolicyRefs.map((ref) => [ref, "trial_policy_control"]),
+    ...participants.controlBasisRefs.userGovernedConstraintRefs.map((ref) => [ref, "user_governed_control"]),
+    ...participants.controlBasisRefs.consequenceRefs.map((ref) => [ref, "consequence_control"]),
+    ...participants.controlBasisRefs.reversibilityRefs.map((ref) => [ref, "reversibility_control"]),
+    ...participants.controlBasisRefs.retentionBasisRefs.map((ref) => [ref, "retention_control"])
+  ];
+}
+
+function sameRoleReferencePairs(relations, expectedPairs) {
+  const actual = relations.map((relation) => `${relation.targetRole}:${relation.toRef}`).sort();
+  const expected = expectedPairs.map(([ref, role]) => `${role}:${ref}`).sort();
+  return isDeepStrictEqual(actual, expected);
 }
 
 function clone(value) {

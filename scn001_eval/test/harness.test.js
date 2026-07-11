@@ -451,6 +451,19 @@ test("branch delivery waits for exact processed realization then creates canonic
   assert.deepEqual(harness.processCurrentInteraction(runRef), []);
   assert.deepEqual(harness.emitAvailableOutputs(runRef), []);
   assert.doesNotMatch(JSON.stringify(snapshot), /fixtureRecordId|canonicalAnswer|activation_check/);
+  assert.equal(harness.deliverProposalAcceptanceIfEligible(runRef, acceptance).length, 1);
+  harness.processCurrentInteraction(runRef);
+  const replay = harness.captureInspectionSnapshot(runRef);
+  assert.equal(replay.records.filter((record) => record.family === "activation_assessment").length, 1);
+  assert.equal(replay.records.filter((record) => record.family === "active_trial").length, 1);
+  assert.equal(replay.records.filter((record) => (
+    record.transitionKind === "assess_production_focused_trial_activation"
+  )).length, 1);
+  assert.equal(replay.records.filter((record) => (
+    record.transitionKind === "activate_production_focused_trial"
+  )).length, 1);
+  harness.endRun(runRef);
+  assert.throws(() => harness.captureInspectionSnapshot(runRef), /Unknown or closed/);
 });
 
 test("acceptance branch validates complete C/A/P/S/F/R/E closure before ingress", () => {

@@ -186,6 +186,10 @@ function realizedProposalRun() {
 
 function activationReadyRun(overrides = {}) {
   const run = new RunState();
+  const calibration = calibrationInputs();
+  if (overrides.observationDay !== undefined) {
+    for (const observation of calibration) observation.occurrenceScenarioDay = overrides.observationDay;
+  }
   const consequence = fixtureControlInput({
     control: "consequence", value: overrides.consequence ?? "low", occurrenceOrder: 13
   });
@@ -193,8 +197,8 @@ function activationReadyRun(overrides = {}) {
     control: "reversibility", value: overrides.reversibility ?? "reversible", occurrenceOrder: 14
   });
   const inputs = [
-    chronologyInput({ scenarioDay: 0 }),
-    ...calibrationInputs(),
+    chronologyInput({ scenarioDay: overrides.chronologyDay ?? 0 }),
+    ...calibration,
     {
       sourceFactRef: sourceRef(), kind: "context_label", sourceActor: "fixture-driver",
       occurrenceOrder: 4, surfaceLabel: "text_simulated",
@@ -218,12 +222,29 @@ function activationReadyRun(overrides = {}) {
   run.assertSourceFactConsistency([realization]);
   run.ingest([realization]);
   run.processCurrentInteraction();
-  const acceptance = [
-    realization, userResponseInput(),
-    fixtureControlInput({ control: "evaluation_retention_basis", value: overrides.retention ?? "named_formal_run", occurrenceOrder: 11 }),
-    fixtureControlInput({ control: "user_governed_constraints", value: overrides.userControl ?? "exhaustive_selected_slice_scope", occurrenceOrder: 12 }),
-    consequence, reversibility
-  ];
+  const acceptance = [realization, userResponseInput()];
+  if (!overrides.omitRetention) acceptance.push(fixtureControlInput({
+    control: "evaluation_retention_basis", value: overrides.retention ?? "named_formal_run",
+    occurrenceOrder: 11
+  }));
+  if (!overrides.omitUserControl) acceptance.push(fixtureControlInput({
+    control: "user_governed_constraints",
+    value: overrides.userControl ?? "exhaustive_selected_slice_scope", occurrenceOrder: 12
+  }));
+  acceptance.push(consequence, reversibility);
+  if (overrides.conflictingUserControl) acceptance.push(fixtureControlInput({
+    control: "user_governed_constraints", value: "opt_out", occurrenceOrder: 15
+  }));
+  if (overrides.conflictingConsequence) acceptance.push(fixtureControlInput({
+    control: "consequence", value: "high", occurrenceOrder: 16
+  }));
+  if (overrides.conflictingReversibility) acceptance.push(fixtureControlInput({
+    control: "reversibility", value: "irreversible", occurrenceOrder: 17
+  }));
+  if (overrides.equalUserControl) acceptance.push(fixtureControlInput({
+    control: "user_governed_constraints", value: "exhaustive_selected_slice_scope",
+    occurrenceOrder: 18
+  }));
   run.assertSourceFactConsistency(acceptance);
   run.ingest(acceptance);
   run.processCurrentInteraction();
@@ -1718,5 +1739,138 @@ test("activation replay validates assessment and trial closure instead of trusti
       () => run.validActiveTrialClosure(trial),
       /Activation assessment|Active trial/
     );
+  }
+});
+
+test("missing and conflicting controls retain failed or unresolved assessments without activation", () => {
+  const cases = [
+    [{ omitUserControl: true }, "user_governed_constraints", "failed", "insufficient"],
+    [{ omitRetention: true }, "retention_basis", "failed", "insufficient"],
+    [{ conflictingUserControl: true }, "user_governed_constraints", "unresolved", "unresolved_conflict"],
+    [{ conflictingConsequence: true }, "consequence", "unresolved", "unresolved_conflict"],
+    [{ conflictingReversibility: true }, "reversibility", "unresolved", "unresolved_conflict"],
+    [{ equalUserControl: true }, "user_governed_constraints", "unresolved", "unresolved_conflict"]
+  ];
+  for (const [overrides, check, status, overall] of cases) {
+    const run = activationReadyRun(overrides);
+    const assessment = [...run.records.values()].find((record) => record.family === "activation_assessment");
+    assert.equal(assessment.checkResults[check].status, status);
+    assert.equal(assessment.overallStatus, overall);
+    assert.equal([...run.records.values()].some((record) => record.family === "active_trial"), false);
+    assert.equal(assessment.materialBasisRefs.length, new Set(assessment.materialBasisRefs).size);
+    run.validActivationAssessmentClosure(assessment);
+  }
+});
+
+test("valid old observations fail current authority and cannot create an active trial", () => {
+  const run = activationReadyRun({ observationDay: 1, chronologyDay: 2 });
+  const assessment = [...run.records.values()].find((record) => record.family === "activation_assessment");
+  assert.equal(assessment.checkResults.current_stale_basis.status, "failed");
+  assert.equal(assessment.checkResults.current_stale_basis.reason, "support_not_current_under_chronology");
+  assert.equal(assessment.overallStatus, "insufficient");
+  assert.equal([...run.records.values()].some((record) => record.family === "active_trial"), false);
+  run.validActivationAssessmentClosure(assessment);
+});
+
+test("activation assessment participant, transition, and relation attacks fail exact closure", () => {
+  const attacks = [
+    ({ assessment }) => { assessment.comparisonRef = createReference("state"); },
+    ({ assessment }) => { assessment.recognitionObservationRef = createReference("state"); },
+    ({ assessment }) => { assessment.chronologyRef = createReference("state"); },
+    ({ assessment }) => { assessment.materialBasisRefs.shift(); },
+    ({ assessment }) => { assessment.materialBasisRefs.push(createReference("state")); },
+    ({ assessment }) => { assessment.materialBasisRefs.push(assessment.materialBasisRefs[0]); },
+    ({ assessment }) => { assessment.controlBasisRefs.retentionBasisRefs = []; },
+    ({ transition }) => { transition.inputReferences.shift(); },
+    ({ transition }) => { transition.inputReferences.push(createReference("state")); },
+    ({ transition }) => { transition.origin = "fixture"; },
+    ({ transition }) => { transition.family = "other"; },
+    ({ transition }) => { transition.interactionRef = createReference("interaction"); },
+    ({ assessment }) => { assessment.interactionRef = createReference("interaction"); },
+    ({ run, assessment }) => { run.relations.find((r) => r.fromRef === assessment.reference).targetRole = "wrong"; },
+    ({ run, assessment }) => { run.relations.splice(run.relations.findIndex((r) => r.fromRef === assessment.reference), 1); },
+    ({ run, assessment }) => { run.relations.push({ ...structuredClone(run.relations.find((r) => r.fromRef === assessment.reference)), toRef: createReference("state") }); }
+  ];
+  for (const attack of attacks) {
+    const run = activationReadyRun();
+    const assessment = [...run.records.values()].find((record) => record.family === "activation_assessment");
+    const transition = run.records.get(assessment.createdByTransitionRef);
+    attack({ run, assessment, transition });
+    assert.throws(() => run.validActivationAssessmentClosure(assessment), /Activation|Binding/);
+  }
+});
+
+test("activation retained input mutation and provenance attacks fail integrity", () => {
+  const attacks = [
+    ({ observation }) => { observation.payload.occurrenceScenarioDay += 1; },
+    ({ chronology }) => { chronology.payload.scenarioDay += 1; },
+    ({ context }) => { context.payload.consequence = "high"; },
+    ({ control }) => { control.payload.value = "production_memory"; },
+    ({ control }) => { control.payload.control = "other"; },
+    ({ run, control }) => { run.relations.find((r) => r.fromRef === control.reference && r.relationKind === "source").createdOrder -= 1; },
+    ({ run, control }) => {
+      const interaction = [...run.records.values()].find((record) => record.family === "interaction_segment" && record.inputReferences.includes(control.reference) && record.reference !== control.firstInteractionRef);
+      run.relations.find((r) => r.fromRef === interaction.createdByTransitionRef && r.toRef === control.reference).createdOrder -= 1;
+    }
+  ];
+  for (const attack of attacks) {
+    const run = activationReadyRun();
+    const assessment = [...run.records.values()].find((record) => record.family === "activation_assessment");
+    const observation = run.records.get(assessment.recognitionObservationRef);
+    const chronology = run.records.get(assessment.chronologyRef);
+    const context = run.records.get(assessment.contextRef);
+    const control = run.records.get(assessment.controlBasisRefs.consequenceRefs[0]);
+    attack({ run, assessment, observation, chronology, context, control });
+    assert.throws(() => run.validActivationAssessmentClosure(assessment), /Activation|Binding/);
+  }
+});
+
+test("activation candidate and comparison lineage attacks fail exact closure", () => {
+  const attacks = [
+    ({ relation }) => { relation.assertedByRole = "fixture"; },
+    ({ relation }) => { relation.createdOrder -= 1; },
+    ({ relation }) => { relation.effectiveOrder -= 1; },
+    ({ run, candidate }) => { run.relations.splice(run.relations.findIndex((r) => r.fromRef === candidate.reference && r.relationKind === "support"), 1); },
+    ({ run, candidate }) => { run.relations.find((r) => r.fromRef === candidate.reference && r.relationKind === "support").toRef = createReference("state"); },
+    ({ comparisonTransition }) => { comparisonTransition.origin = "fixture"; },
+    ({ observationRelation }) => { observationRelation.semanticDimension = "other"; },
+    ({ observationRelation }) => { observationRelation.semanticTaskMode = "other"; },
+    ({ observationRelation }) => { observationRelation.createdOrder -= 1; },
+    ({ observation }) => { observation.payload.dimension = "other"; }
+  ];
+  for (const attack of attacks) {
+    const run = activationReadyRun();
+    const assessment = [...run.records.values()].find((record) => record.family === "activation_assessment");
+    const candidate = run.records.get(assessment.candidateRef);
+    const comparison = run.records.get(assessment.comparisonRef);
+    const observation = run.records.get(assessment.recognitionObservationRef);
+    const relation = run.relations.find((r) => r.fromRef === candidate.reference && r.targetRole === "comparison_input");
+    const observationRelation = run.relations.find((r) => r.fromRef === comparison.reference && r.targetRole === "recognition_observation");
+    const comparisonTransition = run.records.get(comparison.createdByTransitionRef);
+    attack({ run, assessment, candidate, comparison, observation, relation, observationRelation, comparisonTransition });
+    assert.throws(() => run.validActivationAssessmentClosure(assessment), /Activation/);
+  }
+});
+
+test("active-trial identity, transition, and ancestry attacks fail complete closure", () => {
+  const attacks = [
+    ({ trial }) => { trial.activationBasisType = "other"; },
+    ({ trial }) => { trial.interactionRef = createReference("interaction"); },
+    ({ transition }) => { transition.origin = "fixture"; },
+    ({ transition }) => { transition.family = "other"; },
+    ({ transition }) => { transition.interactionRef = createReference("interaction"); },
+    ({ transition }) => { transition.inputReferences.push(transition.inputReferences[0]); },
+    ({ ancestry }) => { ancestry.targetRole = "wrong"; },
+    ({ ancestry }) => { ancestry.assertedByRole = "fixture"; },
+    ({ ancestry }) => { ancestry.createdOrder -= 1; },
+    ({ run, trial, ancestry }) => { run.relations.push({ ...structuredClone(ancestry), toRef: trial.reference }); }
+  ];
+  for (const attack of attacks) {
+    const run = activationReadyRun();
+    const trial = [...run.records.values()].find((record) => record.family === "active_trial");
+    const transition = run.records.get(trial.createdByTransitionRef);
+    const ancestry = run.relations.find((r) => r.fromRef === trial.reference && r.relationKind === "transition_ancestry");
+    attack({ run, trial, transition, ancestry });
+    assert.throws(() => run.validActiveTrialClosure(trial), /Active trial|Activation/);
   }
 });
