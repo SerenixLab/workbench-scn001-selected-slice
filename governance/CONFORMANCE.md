@@ -71,7 +71,7 @@ Unless a row says otherwise:
 | `ENG-CONF-STATE-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Selection and realization recording consume revalidated proposal closure and preserve exact P/S/F/R/E inputs, order, typed bases, and relation evidence. | `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2` | Transition/ref/order/role assertions; missing/duplicate basis and transition attacks; exact valid replay; distinct-realization failure. Contract and negative modes. | `scn001_sut_core/src/runState.js`; package tests | Default | uncovered | merge-blocking; claim-blocking | Proposal realization mutation provenance is covered; response binding, activation, lifecycle, and outcome mutations remain absent. |
 | `ENG-HEALTH-ABSTRACTION-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Public boundary, harness, validation, fixture-projection, and run-state abstractions are non-throwaway. | `ADR-001 R1` | Bounded package/module responsibilities; manual justification review. | `README.md`; `scn001_sut_core/src/`; `scn001_eval/src/`; package `AGENTS.md` files | Local-recorded review | review-only | advisory or merge-blocking by condition | Abstraction justification is not captured by an automated check; future generalization could outrun concrete pressure. |
 | `ENG-HEALTH-API-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The SUT surface is unchanged; evaluation package root now exports only the formal one-argument harness constructor, with renderer/projector helpers and failure injection internal. | Rule entry | Exact package-root export test; constructor override rejection; internal-only SUT resolvers and evaluation mechanism-test seam. | `scn001_sut_core/index.js`; `scn001_eval/index.js`; package tests; `scripts/check-dependency-boundary.mjs` | Default | uncovered | merge-blocking; claim-blocking | Governing consumer/need review for future API additions remains manual. |
-| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The current correction closes binding-ingestion causal and input-basis closure plus exhaustive proposal-formation basis integrity without activation. | Rule entry | Focused-diff inspection against starting `HEAD` `6d81e43`; one primary purpose: close the remaining provenance exactness defects before activation. | Current working-tree diff; package tests; corrective record below | Fresh independent ChatGPT review of the corrected pushed diff is pending. | uncovered | advisory or merge-blocking by condition | The implementing task cannot independently review its own diff. |
+| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The current correction closes semantic resolution of complete proposal-formation and ingestion-transition participant sets without activation. | Rule entry | Focused-diff inspection against starting `HEAD` `96c4249`; one primary purpose: close the remaining transition-participant closure defect before activation. | Current working-tree diff; package tests; corrective record below | Fresh independent ChatGPT review of the corrected pushed diff is pending. | uncovered | advisory or merge-blocking by condition | The implementing task cannot independently review its own diff. |
 | `ENG-HEALTH-COMMENT-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No JavaScript implementation/test comment is present or used to justify behavior. Future trigger: adding, generating, or relying on a code comment. | Rule entry | Source inventory. | `rg` over `scn001_sut_core`, `scn001_eval`, `tests`, and `scripts` returned no JavaScript comment lines | Not applicable until trigger. | N/A | advisory or merge-blocking by condition | Governance prose is controlled as documentation/claims; code comments require review when introduced. |
 | `ENG-HEALTH-DEAD-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No dead, commented-out, prototype, experiment, or throwaway implementation artifact is present. Future trigger: introducing or promoting one. | Rule entry | Repository and source inventory; manual review. | Current package/source tree; no throwaway directory or commented-out implementation | Not applicable until trigger. | N/A | merge-blocking; promotion-blocking | Static gate does not comprehensively prove reachability; disposition must change if a prototype appears. |
 | `ENG-HEALTH-DEPENDENCY-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Evaluation declares a runtime dependency on the local SUT package and CI installs the workspace lock. | Rule entry | Local file dependency; lockfile; dependency-boundary static check; no external runtime dependency. | `package-lock.json`; `scn001_eval/package.json`; `scn001_sut_core/package.json`; `scripts/check-dependency-boundary.mjs`; `README.md` | Default | uncovered | merge-blocking; promotion-blocking | Dependency rationale/maintenance review is manual; future external dependencies require a new review record. |
@@ -455,6 +455,57 @@ per input. The validator supports both one-candidate and multi-candidate proposa
 formation. The evaluation acceptance branch retains its exact single selected
 proposal checkpoint and rejects any additional PT basis before response
 projection or SUT ingress.
+
+The directly affected rules are `ENG-BASE-001`, `ENG-CHANGE-001`,
+`ENG-CONF-CAPTURE-001`, `ENG-CONF-DEP-001`, `ENG-CONF-HARNESS-001`,
+`ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`, `ENG-CONF-PAYLOAD-002`,
+`ENG-CONF-REF-001`, `ENG-CONF-RUN-001`, `ENG-CONF-STATE-001`,
+`ENG-CONF-STATE-002`, `ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-FAILURE-001`,
+`ENG-HEALTH-TEST-001`, and `ENG-HEALTH-TEST-002`. Applicability, rule revisions,
+promotion mapping, active exceptions, and claim-boundary dispositions do not
+change.
+
+At completion, `ENG-HEALTH-CHANGE-001 = uncovered`. Fresh independent ChatGPT
+review of the corrected pushed diff is pending, and this implementing task does
+not self-attest a passing review. The candidate remains formed/non-active at
+lifecycle version 1. No activation assessment, activation check, active trial,
+focused-drill or later-use behavior, outcome, formal evaluation, scoring,
+milestone artifact, broader SCN-001 claim, or production-readiness claim is added.
+
+## Complete PT And IT Participant Resolution Corrective Increment
+
+An independent review of pushed commit
+`96c42490fe827f0f945ddd0bd3d956fdffd8eb06` confirmed exact ingestion causal
+order and basis equality plus exhaustive proposal-formation basis validation,
+but found that raw reference-set equality did not prove every PT and IT reference
+resolved to a semantically valid participant of the declared transition kind.
+Independent review outcome: **blocking / failed**. This record preserves and does
+not rewrite any earlier passing or failed review.
+
+The corrective increment based on that exact commit has one bounded purpose:
+
+```text
+close semantic resolution of complete PT and IT participant sets
+before activation
+```
+
+The shared proposal validator now resolves every unique PT input through one
+non-recursive production-candidate closure and every unique PT result through one
+candidate-bound proposal-result closure. Each candidate retains its complete
+formed/non-active production contract, candidate-formation transition, and
+selected-direction lineage. Each proposal is created by the exact PT, preserves
+one exact PT candidate, and has exact contemporaneous ancestry. PT input/result
+cardinality is equal, proposal candidate identities are unique, and their set
+exactly equals the candidate input set. One- and multi-candidate formation remain
+supported with the existing exhaustive PT basis set.
+
+Binding replay now resolves every I/IT input to a retained `input_fact`, including
+canonical redelivery and controls. I must occur exactly once in IT results. Every
+additional IT result must resolve to a fixture-initialized attributed assertion
+created by IT for I, with its exact initialized communication, semantic source,
+and contemporaneous source/basis relation closure. Duplicate, unresolved,
+unrelated, cross-transition, or cross-interaction results fail closed. The
+canonical acceptance interaction continues to have exactly `[I]` as IT results.
 
 The directly affected rules are `ENG-BASE-001`, `ENG-CHANGE-001`,
 `ENG-CONF-CAPTURE-001`, `ENG-CONF-DEP-001`, `ENG-CONF-HARNESS-001`,

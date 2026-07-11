@@ -906,6 +906,12 @@ test("binding replay closes interaction, assessment order, participant multiplic
     ({ run, assessment }) => { const interaction = run.records.get(assessment.interactionRef); const ingestion = run.records.get(interaction.createdByTransitionRef); run.relations.find((relation) => relation.fromRef === ingestion.reference && relation.relationKind === "basis").createdOrder -= 1; },
     ({ run, assessment }) => { const interaction = run.records.get(assessment.interactionRef); const ingestion = run.records.get(interaction.createdByTransitionRef); run.relations.find((relation) => relation.fromRef === ingestion.reference && relation.relationKind === "basis").effectiveOrder -= 1; },
     ({ run, assessment }) => { const interaction = run.records.get(assessment.interactionRef); const ingestion = run.records.get(interaction.createdByTransitionRef); run.relations.push({ ...structuredClone(run.relations.find((relation) => relation.fromRef === ingestion.reference && relation.relationKind === "basis")), toRef: createReference("state") }); },
+    ({ run, assessment }) => { const interaction = run.records.get(assessment.interactionRef); const ingestion = run.records.get(interaction.createdByTransitionRef); const unresolved = createReference("state"); interaction.inputReferences.push(unresolved); ingestion.inputReferences.push(unresolved); run.relations.push({ ...structuredClone(run.relations.find((relation) => relation.fromRef === ingestion.reference && relation.relationKind === "basis")), toRef: unresolved }); },
+    ({ run, assessment }) => { const interaction = run.records.get(assessment.interactionRef); const ingestion = run.records.get(interaction.createdByTransitionRef); interaction.inputReferences.push(assessment.reference); ingestion.inputReferences.push(assessment.reference); run.relations.push({ ...structuredClone(run.relations.find((relation) => relation.fromRef === ingestion.reference && relation.relationKind === "basis")), toRef: assessment.reference }); },
+    ({ run, assessment, transition }) => { const interaction = run.records.get(assessment.interactionRef); const ingestion = run.records.get(interaction.createdByTransitionRef); interaction.inputReferences.push(transition.reference); ingestion.inputReferences.push(transition.reference); run.relations.push({ ...structuredClone(run.relations.find((relation) => relation.fromRef === ingestion.reference && relation.relationKind === "basis")), toRef: transition.reference }); },
+    ({ run, assessment }) => { const interaction = run.records.get(assessment.interactionRef); run.records.get(interaction.createdByTransitionRef).resultReferences.push(interaction.reference); },
+    ({ run, assessment }) => { const interaction = run.records.get(assessment.interactionRef); run.records.get(interaction.createdByTransitionRef).resultReferences.push(createReference("state")); },
+    ({ run, assessment }) => { const interaction = run.records.get(assessment.interactionRef); run.records.get(interaction.createdByTransitionRef).resultReferences.push(assessment.reference); },
     ({ assessment }) => { assessment.createdOrder = 1; },
     ({ run, assessment }) => { const duplicate = structuredClone(assessment); duplicate.reference = createReference("state"); duplicate.proposalRef = createReference("state"); run.records.set(duplicate.reference, duplicate); },
     ({ run, assessment }) => { const duplicate = structuredClone(assessment); duplicate.reference = createReference("state"); duplicate.proposalRef = null; run.records.set(duplicate.reference, duplicate); },
@@ -1006,6 +1012,30 @@ test("binding assessment cannot be retargeted to a later exact F/U replay intera
     () => realized.run.assessProposalResponseBinding(interaction, facts),
     /[Bb]inding|B\/T\/P\/F\/U\/R/
   );
+});
+
+test("binding ingestion accepts a valid fixture-initialized assertion result", () => {
+  const realized = realizedProposalRun();
+  const response = userResponseInput();
+  const communication = communicationInput({
+    semanticStatusOrigin: "fixture_initialized",
+    context: "proposal_response"
+  });
+  const inputs = [realized.input, response, communication];
+  realized.run.assertSourceFactConsistency(inputs);
+  realized.run.ingest(inputs);
+  let interaction = realized.run.pendingInteractions.at(-1);
+  let facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
+  realized.run.assessProposalResponseBinding(interaction, facts);
+  const ingestion = realized.run.records.get(interaction.createdByTransitionRef);
+  assert.equal(ingestion.resultReferences.length, 2);
+  assert.equal(realized.run.records.get(ingestion.resultReferences[1]).family, "attributed_assertion");
+
+  realized.run.assertSourceFactConsistency(inputs);
+  realized.run.ingest(inputs);
+  interaction = realized.run.pendingInteractions.at(-1);
+  facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
+  assert.equal(realized.run.assessProposalResponseBinding(interaction, facts), undefined);
 });
 
 test("noncanonical response stays non-accepting and mismatch fidelity never becomes material match", () => {
@@ -1215,6 +1245,16 @@ test("multi-candidate proposal formation requires one exhaustive basis per input
   valid.proposals.forEach((proposal) => valid.run.validateCandidateBoundProposal(proposal.reference));
 
   for (const attack of [
+    ({ run, proposals, transition }) => { const unresolved = createReference("state"); transition.inputReferences[1] = unresolved; run.relations.find((relation) => relation.fromRef === transition.reference && relation.toRef === proposals[1].candidateRef && relation.targetRole === "proposal_candidate").toRef = unresolved; proposals[1].candidateRef = unresolved; },
+    ({ run, proposals, transition }) => { const comparison = [...run.records.values()].find((record) => record.family === "dimension_comparison"); const prior = proposals[1].candidateRef; transition.inputReferences[1] = comparison.reference; run.relations.find((relation) => relation.fromRef === transition.reference && relation.toRef === prior && relation.targetRole === "proposal_candidate").toRef = comparison.reference; proposals[1].candidateRef = comparison.reference; },
+    ({ run, proposals, transition }) => { const affordance = [...run.records.values()].find((record) => record.role === "affordance_fact"); const prior = proposals[1].candidateRef; transition.inputReferences[1] = affordance.reference; run.relations.find((relation) => relation.fromRef === transition.reference && relation.toRef === prior && relation.targetRole === "proposal_candidate").toRef = affordance.reference; proposals[1].candidateRef = affordance.reference; },
+    ({ transition }) => { transition.resultReferences[1] = createReference("state"); },
+    ({ run, transition }) => { transition.resultReferences[1] = [...run.records.values()].find((record) => record.family === "dimension_comparison").reference; },
+    ({ proposals }) => { proposals[1].createdByTransitionRef = createReference("transition"); },
+    ({ transition }) => { transition.resultReferences.pop(); },
+    ({ run, proposals, transition }) => { const extra = structuredClone(proposals[0]); extra.reference = createReference("state"); run.records.set(extra.reference, extra); transition.resultReferences.push(extra.reference); },
+    ({ proposals }) => { proposals[1].candidateRef = proposals[0].candidateRef; },
+    ({ proposals }) => { proposals[1].candidateRef = createReference("state"); },
     ({ run, transition }) => { run.relations.splice(run.relations.findIndex((relation) => relation.fromRef === transition.reference && relation.toRef === transition.inputReferences[1] && relation.targetRole === "proposal_candidate"), 1); },
     ({ run, transition }) => { const basis = run.relations.find((relation) => relation.fromRef === transition.reference && relation.toRef === transition.inputReferences[0] && relation.targetRole === "proposal_candidate"); run.relations.splice(run.relations.findIndex((relation) => relation.fromRef === transition.reference && relation.toRef === transition.inputReferences[1] && relation.targetRole === "proposal_candidate"), 1); run.relations.push(structuredClone(basis)); },
     ({ transition }) => { transition.inputReferences[1] = createReference("state"); }

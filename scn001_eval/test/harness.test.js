@@ -383,6 +383,11 @@ test("branch delivery waits for exact processed realization then creates canonic
   assert.equal(assessment.proposalRef, routed.requestedRef);
   assert.equal(assessment.realizationFactRefs.length, 1);
   assert.equal(assessment.userResponseRefs.length, 1);
+  const bindingInteraction = snapshot.records.find((record) => record.reference === assessment.interactionRef);
+  const acceptanceIngestion = snapshot.records.find((record) => (
+    record.reference === bindingInteraction.createdByTransitionRef
+  ));
+  assert.deepEqual(acceptanceIngestion.resultReferences, [bindingInteraction.reference]);
   assert.equal(snapshot.relations.filter((relation) => (
     relation.fromRef === assessment.reference && relation.relationKind === "binding"
   )).length, 3);
@@ -419,6 +424,10 @@ test("acceptance branch validates complete C/A/P/S/F/R/E closure before ingress"
     (s, x) => { const other = structuredClone(x.candidate); other.reference = "state_33333333-3333-3333-3333-333333333333"; s.records.push(other); x.proposalTransition.inputReferences.push(other.reference); },
     (s, x) => { const basis = s.relations.find((r) => r.fromRef === x.proposalTransition.reference && r.targetRole === "proposal_candidate"); x.proposalTransition.inputReferences.push("state_44444444-4444-4444-4444-444444444444"); s.relations.push(structuredClone(basis)); },
     (s, x) => { x.proposalTransition.inputReferences[0] = "state_55555555-5555-5555-5555-555555555555"; },
+    (s, x) => { const unresolved = "state_66666666-6666-6666-6666-666666666666"; x.proposalTransition.inputReferences[0] = unresolved; s.relations.find((r) => r.fromRef === x.proposalTransition.reference && r.targetRole === "proposal_candidate").toRef = unresolved; },
+    (s, x) => { const comparison = s.records.find((record) => record.family === "dimension_comparison"); x.proposalTransition.inputReferences[0] = comparison.reference; s.relations.find((r) => r.fromRef === x.proposalTransition.reference && r.targetRole === "proposal_candidate").toRef = comparison.reference; },
+    (s, x) => { x.proposalTransition.resultReferences[0] = "state_77777777-7777-7777-7777-777777777777"; },
+    (s, x) => { x.proposalTransition.resultReferences[0] = x.candidate.reference; },
     (s, x) => { x.candidateTransition.result = "malformed"; },
     (s, x) => { s.relations.splice(s.relations.findIndex((r) => r.fromRef === x.candidate.reference && r.targetRole === "selected_trial_direction"), 1); },
     (s, x) => { s.relations.find((r) => r.fromRef === x.candidate.reference && r.targetRole === "selected_trial_direction").createdOrder -= 1; },
