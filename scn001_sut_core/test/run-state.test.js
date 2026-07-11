@@ -811,6 +811,64 @@ test("wrong actor or response context remains raw evidence but cannot become bou
   }
 });
 
+test("canonical response attribution requires one exact typed source closure", () => {
+  const attacks = [
+    ({ run, response }) => { run.relations.splice(run.relations.findIndex((r) => r.fromRef === response.reference && r.relationKind === "source"), 1); },
+    ({ run, response }) => { run.relations.find((r) => r.fromRef === response.reference && r.relationKind === "source").toRef = createReference("actor"); },
+    ({ run, response }) => { run.relations.push(structuredClone(run.relations.find((r) => r.fromRef === response.reference && r.relationKind === "source"))); },
+    ({ run, response }) => { run.relations.find((r) => r.fromRef === response.reference && r.relationKind === "source").targetRole = "wrong"; },
+    ({ run, response }) => { run.relations.find((r) => r.fromRef === response.reference && r.relationKind === "source").assertedByRole = "fixture"; },
+    ({ run, response }) => { run.relations.find((r) => r.fromRef === response.reference && r.relationKind === "source").createdOrder = response.createdOrder; }
+  ];
+  for (const attack of attacks) {
+    const realized = realizedProposalRun();
+    const input = userResponseInput();
+    realized.run.assertSourceFactConsistency([realized.input, input]);
+    realized.run.ingest([realized.input, input]);
+    const interaction = realized.run.pendingInteractions.at(-1);
+    const response = interaction.inputReferences.map((ref) => realized.run.records.get(ref))
+      .find((record) => record.role === "user_response");
+    attack({ ...realized, response });
+    const facts = interaction.inputReferences.map((ref) => realized.run.records.get(ref));
+    realized.run.assessProposalResponseBinding(interaction, facts);
+    const assessment = [...realized.run.records.values()].find((record) => record.family === "binding_assessment");
+    assert.equal(assessment.bindingStatus, "unbound");
+    assert.equal(assessment.reason, "response_not_attributable_to_expected_user");
+  }
+});
+
+test("binding replay closes interaction, assessment order, participant multiplicity, status, and relations", () => {
+  const attacks = [
+    ({ run, assessment, transition }) => { const other = { reference: createReference("interaction"), family: "interaction_segment", origin: "sut", inputReferences: [], createdOrder: 1 }; run.records.set(other.reference, other); assessment.interactionRef = other.reference; transition.interactionRef = other.reference; },
+    ({ run, assessment }) => { run.records.get(assessment.interactionRef).inputReferences = assessment.realizationFactRefs; },
+    ({ run, assessment }) => { run.records.get(assessment.interactionRef).inputReferences = assessment.userResponseRefs; },
+    ({ assessment }) => { assessment.createdOrder = 1; },
+    ({ run, assessment }) => { const duplicate = structuredClone(assessment); duplicate.reference = createReference("state"); duplicate.proposalRef = createReference("state"); run.records.set(duplicate.reference, duplicate); },
+    ({ run, assessment }) => { const duplicate = structuredClone(assessment); duplicate.reference = createReference("state"); duplicate.proposalRef = null; run.records.set(duplicate.reference, duplicate); },
+    ({ assessment }) => { assessment.materialIntentStatus = "unknown"; },
+    ({ assessment }) => { assessment.proposalRef = createReference("state"); },
+    ({ assessment }) => { assessment.responseStatus = "ambiguous_or_non_accepting"; },
+    ({ run, assessment, transition }) => { run.relations.push({ ...run.relations.find((r) => r.fromRef === assessment.reference && r.targetRole === "actual_user_response"), toRef: createReference("state"), createdOrder: transition.createdOrder }); }
+  ];
+  for (const attack of attacks) {
+    const realized = realizedProposalRun();
+    const response = userResponseInput();
+    realized.run.assertSourceFactConsistency([realized.input, response]);
+    realized.run.ingest([realized.input, response]);
+    let interaction = realized.run.pendingInteractions.at(-1);
+    let facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
+    realized.run.assessProposalResponseBinding(interaction, facts);
+    const assessment = [...realized.run.records.values()].find((record) => record.family === "binding_assessment");
+    const transition = realized.run.records.get(assessment.createdByTransitionRef);
+    attack({ ...realized, assessment, transition });
+    realized.run.assertSourceFactConsistency([realized.input, response]);
+    realized.run.ingest([realized.input, response]);
+    interaction = realized.run.pendingInteractions.at(-1);
+    facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
+    assert.throws(() => realized.run.assessProposalResponseBinding(interaction, facts), /[Bb]inding|B\/T\/P\/F\/U\/R/);
+  }
+});
+
 test("binding replay validates exact transition, bases, and participant relations", () => {
   const attacks = [
     ({ assessment }) => { assessment.origin = "fixture"; },

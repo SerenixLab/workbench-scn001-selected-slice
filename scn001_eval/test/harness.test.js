@@ -397,6 +397,61 @@ test("branch delivery waits for exact processed realization then creates canonic
   ].includes(record.family)), false);
 });
 
+test("acceptance branch validates complete C/A/P/S/F/R/E closure before ingress", () => {
+  const attacks = [
+    (s, x) => { x.proposal.materialIntent = "corrupted"; },
+    (s, x) => { x.proposal.proposedScope.dimension = "other"; },
+    (s, x) => { s.relations.splice(s.relations.findIndex((r) => r.fromRef === x.proposal.reference && r.relationKind === "transition_ancestry"), 1); },
+    (s, x) => { s.relations.push({ ...s.relations.find((r) => r.fromRef === x.proposal.reference && r.relationKind === "transition_ancestry"), toRef: x.affordance.reference }); },
+    (s, x) => { x.proposalTransition.inputReferences[0] = x.affordance.reference; },
+    (s, x) => { x.candidateTransition.result = "malformed"; },
+    (s, x) => { s.relations.splice(s.relations.findIndex((r) => r.fromRef === x.candidate.reference && r.targetRole === "selected_trial_direction"), 1); },
+    (s, x) => { s.relations.find((r) => r.fromRef === x.candidate.reference && r.targetRole === "selected_trial_direction").createdOrder -= 1; },
+    (s, x) => { s.relations.push({ ...s.relations.find((r) => r.fromRef === x.candidate.reference && r.targetRole === "selected_trial_direction"), toRef: x.candidate.reference }); },
+    (s, x) => { x.selection.family = "other"; },
+    (s, x) => { x.selection.resultReferences.push(x.proposal.reference); },
+    (s, x) => { x.selection.interactionRef = x.realizationTransition.interactionRef; },
+    (s, x) => { x.selection.createdOrder = x.fact.createdOrder; },
+    (s, x) => { s.relations.splice(s.relations.findIndex((r) => r.fromRef === x.selection.reference && r.targetRole === "selected_proposal_intent"), 1); },
+    (s, x) => { s.relations.find((r) => r.fromRef === x.selection.reference && r.targetRole === "selected_proposal_intent").assertedByRole = "fixture"; },
+    (s, x) => { s.records.find((r) => r.reference === x.fact.firstInteractionRef).inputReferences = []; },
+    (s, x) => { x.realizationTransition.interactionRef = x.proposal.interactionRef; }
+  ];
+  for (const attack of attacks) {
+    const real = createSutBoundary();
+    let ingressCalls = 0;
+    let corrupt = false;
+    const boundary = Object.freeze({ ...real,
+      ingestSutVisibleInputs(...args) { ingressCalls += 1; return real.ingestSutVisibleInputs(...args); },
+      captureInspectionSnapshot(runRef) {
+        const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+        if (!corrupt) return snapshot;
+        const proposal = snapshot.records.find((r) => r.family === "proposal_intent");
+        const candidate = snapshot.records.find((r) => r.family === "trial_candidate");
+        const affordance = snapshot.records.find((r) => r.role === "affordance_fact");
+        const proposalTransition = snapshot.records.find((r) => r.reference === proposal.createdByTransitionRef);
+        const candidateTransition = snapshot.records.find((r) => r.reference === candidate.createdByTransitionRef);
+        const selection = snapshot.records.find((r) => r.transitionKind === "select_proposal_for_realization");
+        const fact = snapshot.records.find((r) => r.role === "simulator_realization");
+        const realizationTransition = snapshot.records.find((r) => r.transitionKind === "record_proposal_realization");
+        attack(snapshot, { proposal, candidate, affordance, proposalTransition, candidateTransition,
+          selection, fact, realizationTransition });
+        return snapshot;
+      }
+    });
+    const harness = createEvaluationHarness(boundary);
+    const runRef = harness.startRun();
+    harness.deliverFixtureRecords(runRef, productionProposalRecords());
+    harness.processCurrentInteraction(runRef);
+    harness.realizeAvailableOutputs(runRef);
+    harness.processCurrentInteraction(runRef);
+    const beforeAcceptanceIngress = ingressCalls;
+    corrupt = true;
+    assert.throws(() => harness.deliverProposalAcceptanceIfEligible(runRef, proposalAcceptanceRecords()));
+    assert.equal(ingressCalls, beforeAcceptanceIngress);
+  }
+});
+
 test("acceptance package validation rejects missing, extra, caller realization, or changed content", () => {
   const harness = createEvaluationHarness(createSutBoundary());
   const runRef = harness.startRun();

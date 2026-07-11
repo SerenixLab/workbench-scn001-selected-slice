@@ -185,6 +185,9 @@ function findEligibleRoutedRealizations(sutBoundary, runRef, transport) {
     const proposal = exactRecord(snapshot, record.requestedRef, "proposal");
     const candidate = exactRecord(snapshot, record.candidateRef, "candidate");
     const affordance = exactRecord(snapshot, candidate?.trialDirectionRef, "trial direction");
+    const candidateTransition = exactRecord(snapshot, candidate?.createdByTransitionRef, "candidate transition");
+    const proposalTransition = exactRecord(snapshot, proposal?.createdByTransitionRef, "proposal transition");
+    const proposalInteraction = exactRecord(snapshot, proposal?.interactionRef, "proposal interaction");
     const simulatorFact = exactRecord(snapshot, simulatorFactRef, "routed simulator fact");
     const transitions = snapshot.records.filter((item) => item.transitionKind === "record_proposal_realization"
       && (item.inputReferences?.includes(simulatorFactRef) || item.inputReferences?.includes(record.requestedRef)));
@@ -198,28 +201,88 @@ function findEligibleRoutedRealizations(sutBoundary, runRef, transport) {
       && relation.relationKind === "basis" && relation.targetRole === "simulator_realization_fact");
     const selectionBasis = snapshot.relations.filter((relation) => relation.fromRef === transition.reference
       && relation.relationKind === "basis" && relation.targetRole === "proposal_realization_selection");
+    const recordingBases = snapshot.relations.filter((relation) => relation.fromRef === transition.reference
+      && relation.relationKind === "basis");
     const directionBasis = snapshot.relations.filter((relation) => relation.fromRef === candidate.reference
       && relation.relationKind === "basis" && relation.targetRole === "selected_trial_direction");
+    const ancestry = snapshot.relations.filter((relation) => relation.fromRef === proposal.reference
+      && relation.relationKind === "transition_ancestry");
+    const copiedProposalEvidence = snapshot.relations.filter((relation) => relation.fromRef === proposal.reference
+      && ["basis", "support"].includes(relation.relationKind));
+    const selectionIntentBasis = snapshot.relations.filter((relation) => relation.fromRef === selection.reference
+      && relation.relationKind === "basis" && relation.targetRole === "selected_proposal_intent");
+    const selectionBases = snapshot.relations.filter((relation) => relation.fromRef === selection.reference
+      && relation.relationKind === "basis");
+    const factInteraction = exactRecord(snapshot, simulatorFact?.firstInteractionRef, "simulator interaction");
     const valid = proposal?.family === "proposal_intent" && proposal.origin === "sut"
+      && proposal.proposalType === "candidate_bound_trial_offer"
+      && proposal.materialIntent === "offer_scoped_trial_for_user_decision"
       && proposal.candidateRef === candidate?.reference
+      && proposal.candidateMaterialIntent === candidate?.materialIntent
+      && JSON.stringify(proposal.proposedScope) === JSON.stringify(candidate?.proposedScope)
+      && proposal.responseExpectation === "candidate_bound_trial_decision"
+      && proposal.statusOrigin === "sut_transition"
+      && proposalTransition?.family === "sut_transition_evidence" && proposalTransition.origin === "sut"
+      && proposalTransition.transitionKind === "form_candidate_bound_proposal_intent"
+      && proposalTransition.result === "proposal_intent_formed"
+      && JSON.stringify(proposalTransition.inputReferences) === JSON.stringify([candidate.reference])
+      && JSON.stringify(proposalTransition.resultReferences) === JSON.stringify([proposal.reference])
+      && proposalTransition.interactionRef === proposal.interactionRef
+      && proposalInteraction?.family === "interaction_segment" && proposalInteraction.origin === "sut"
+      && proposal.interactionRef === candidate.interactionRef
+      && proposal.createdOrder < proposalTransition.createdOrder
+      && proposalTransition.createdOrder > candidateTransition.createdOrder
+      && ancestry.length === 1 && ancestry[0].toRef === candidate.reference
+      && ancestry[0].targetRole === "candidate" && ancestry[0].assertedByRole === "sut"
+      && ancestry[0].effectiveOrder === proposal.createdOrder
+      && ancestry[0].createdOrder === proposalTransition.createdOrder
+      && copiedProposalEvidence.length === 0
+      && candidate?.family === "trial_candidate" && candidate.origin === "sut"
+      && candidate.candidateType === "production_focused_practice"
       && candidate?.materialIntent === "practice_spontaneous_production_for_target_dimension"
+      && candidate.candidateSource === "sut_transition"
+      && candidate.purpose === "provisional_evaluative_trial"
       && candidate?.lifecycleStatus === "formed_non_active" && candidate?.lifecycleVersion === 1
+      && candidate.statusOrigin === "sut_transition"
       && candidate?.proposedScope?.taskMode === "spontaneous_production"
       && JSON.stringify(candidate.proposedScope) === JSON.stringify(record.requestedScope)
-      && affordance?.role === "affordance_fact" && affordance?.payload?.direction === "TRIAL-PROD-FOCUS"
+      && candidateTransition?.family === "sut_transition_evidence" && candidateTransition.origin === "sut"
+      && candidateTransition.transitionKind === "form_or_withhold_production_focused_candidate"
+      && candidateTransition.result === "candidate_formed"
+      && candidateTransition.interactionRef === candidate.interactionRef
+      && candidateTransition.inputReferences?.includes(affordance.reference)
+      && candidateTransition.resultReferences?.includes(candidate.reference)
+      && candidate.createdOrder < candidateTransition.createdOrder
+      && affordance?.family === "input_fact" && affordance.origin === "fixture"
+      && affordance.role === "affordance_fact" && affordance?.payload?.direction === "TRIAL-PROD-FOCUS"
       && directionBasis.length === 1 && directionBasis[0].toRef === affordance.reference
       && directionBasis[0].assertedByRole === "sut"
       && directionBasis[0].effectiveOrder === candidate.createdOrder
+      && directionBasis[0].createdOrder === candidateTransition.createdOrder
       && simulatorFact?.family === "input_fact" && simulatorFact.origin === "simulator"
       && simulatorFact.role === "simulator_realization"
       && simulatorFact.payload.requestedRef === proposal.reference
       && simulatorFact.payload.realizedBehavior === record.realizedBehavior
       && simulatorFact.payload.fidelity === record.fidelity
       && simulatorFact.sourceFactRef === transport.projector.project(record).sourceFactRef
-      && selection?.transitionKind === "select_proposal_for_realization"
+      && factInteraction?.family === "interaction_segment"
+      && factInteraction.inputReferences?.includes(simulatorFact.reference)
+      && selection?.family === "sut_transition_evidence"
+      && selection.transitionKind === "select_proposal_for_realization"
       && selection.origin === "sut" && selection.result === "proposal_selected_for_realization"
       && JSON.stringify(selection.inputReferences) === JSON.stringify([proposal.reference])
-      && transition.origin === "sut" && transition.result === "proposal_realization_recorded"
+      && selection.resultReferences?.length === 0
+      && selection.interactionRef === proposal.interactionRef
+      && selection.createdOrder > proposalTransition.createdOrder && selection.createdOrder < simulatorFact.createdOrder
+      && selectionIntentBasis.length === 1 && selectionIntentBasis[0].toRef === proposal.reference
+      && selectionBases.length === 1
+      && selectionIntentBasis[0].assertedByRole === "sut"
+      && selectionIntentBasis[0].createdOrder === selection.createdOrder
+      && selectionIntentBasis[0].effectiveOrder === selection.createdOrder
+      && transition.family === "sut_transition_evidence" && transition.origin === "sut"
+      && transition.transitionKind === "record_proposal_realization"
+      && transition.interactionRef === factInteraction.reference
+      && transition.result === "proposal_realization_recorded"
       && JSON.stringify(transition.inputReferences) === JSON.stringify([simulatorFactRef, outputRef, proposal.reference])
       && transition.resultReferences?.length === 0 && transition.createdOrder > simulatorFact.createdOrder
       && realization.fromRef === simulatorFactRef && realization.toRef === proposal.reference
@@ -227,6 +290,7 @@ function findEligibleRoutedRealizations(sutBoundary, runRef, transport) {
       && realization.fromRef !== realization.toRef
       && realization.createdOrder === transition.createdOrder && realization.effectiveOrder === transition.createdOrder
       && factBasis.length === 1 && factBasis[0].toRef === simulatorFactRef
+      && recordingBases.length === 2
       && factBasis[0].assertedByRole === "sut" && factBasis[0].createdOrder === transition.createdOrder
       && factBasis[0].effectiveOrder === transition.createdOrder
       && selectionBasis.length === 1 && selectionBasis[0].toRef === outputRef
