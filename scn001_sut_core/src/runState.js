@@ -1250,6 +1250,7 @@ export class RunState {
       ...realizationClosures.map((closure) => [closure.transition.reference, "proposal_realization_evidence"])
     ];
     const interaction = this.records.get(assessment.interactionRef);
+    const ingestionTransition = this.records.get(interaction?.createdByTransitionRef);
     const participantRefs = [...assessment.realizationFactRefs, ...assessment.userResponseRefs];
     const representedProposals = new Set(realizationClosures.map((item) => item.proposal.reference));
     const expectedResponseStatus = responses.length === 1
@@ -1286,8 +1287,22 @@ export class RunState {
     if (transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
       || transition.result !== "binding_assessed" || transition.interactionRef !== assessment.interactionRef
       || interaction?.family !== "interaction_segment" || interaction.origin !== "sut"
+      || interaction.createdOrder >= assessment.createdOrder
+      || ingestionTransition?.family !== "sut_transition_evidence"
+      || ingestionTransition.origin !== "sut"
+      || ingestionTransition.transitionKind !== "ingest_sut_visible_inputs"
+      || ingestionTransition.interactionRef !== interaction.reference
+      || ingestionTransition.result !== "accepted"
+      || !ingestionTransition.resultReferences?.includes(interaction.reference)
+      || ingestionTransition.createdOrder <= interaction.createdOrder
+      || ingestionTransition.inputReferences?.length !== interaction.inputReferences?.length
+      || !sameReferenceSet(ingestionTransition.inputReferences, interaction.inputReferences)
+      || new Set(ingestionTransition.inputReferences).size !== ingestionTransition.inputReferences.length
+      || new Set(interaction.inputReferences).size !== interaction.inputReferences.length
       || participantRefs.some((reference) => !interaction.inputReferences?.includes(reference))
       || !sameReferenceSet(transition.inputReferences, expectedInputs)
+      || transition.inputReferences?.length !== expectedInputs.length
+      || new Set(transition.inputReferences).size !== transition.inputReferences.length
       || transition.resultReferences?.length !== 1 || transition.resultReferences[0] !== assessment.reference
       || assessment.createdByTransitionRef !== transition.reference
       || transition.createdOrder <= assessment.createdOrder
@@ -1335,6 +1350,11 @@ export class RunState {
       relation.fromRef === candidate.reference && relation.relationKind === "basis"
       && relation.targetRole === "selected_trial_direction"
     ));
+    const proposalCandidateBasis = this.relations.filter((relation) => (
+      relation.fromRef === proposalTransition?.reference
+      && relation.relationKind === "basis"
+      && relation.targetRole === "proposal_candidate"
+    ));
     const direction = this.records.get(candidate.trialDirectionRef);
     if (
       candidate.family !== "trial_candidate"
@@ -1359,7 +1379,14 @@ export class RunState {
       || proposalTransition.resultReferences[0] !== proposal.reference
       || proposalTransition.createdOrder <= candidateTransition.createdOrder
       || proposalTransition.createdOrder <= candidate.createdOrder
+      || proposal.createdOrder <= candidateTransition.createdOrder
+      || proposal.createdOrder <= candidate.createdOrder
       || proposal.createdOrder >= proposalTransition.createdOrder
+      || proposalCandidateBasis.length !== 1
+      || proposalCandidateBasis[0].toRef !== candidate.reference
+      || proposalCandidateBasis[0].assertedByRole !== "sut"
+      || proposalCandidateBasis[0].effectiveOrder !== proposalTransition.createdOrder
+      || proposalCandidateBasis[0].createdOrder !== proposalTransition.createdOrder
       || ancestry.length !== 1
       || ancestry[0].toRef !== candidate.reference
       || ancestry[0].assertedByRole !== "sut"

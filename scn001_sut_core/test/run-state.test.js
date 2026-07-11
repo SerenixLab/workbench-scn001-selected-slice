@@ -662,6 +662,36 @@ test("candidate-bound proposal integrity is revalidated before emission and real
     ({ run, proposalTransitionRef }) => {
       run.records.get(proposalTransitionRef).inputReferences[0] = createReference("state");
     },
+    ({ run, proposal, candidateTransitionRef }) => {
+      proposal.createdOrder = run.records.get(candidateTransitionRef).createdOrder - 1;
+      run.relations.find((relation) => relation.fromRef === proposal.reference
+        && relation.relationKind === "transition_ancestry").effectiveOrder = proposal.createdOrder;
+    },
+    ({ run, proposal, candidateTransitionRef }) => {
+      proposal.createdOrder = run.records.get(candidateTransitionRef).createdOrder;
+    },
+    ({ proposal, candidate }) => { proposal.createdOrder = candidate.createdOrder - 1; },
+    ({ run, proposalTransitionRef }) => { run.relations.splice(run.relations.findIndex((relation) => (
+      relation.fromRef === proposalTransitionRef && relation.targetRole === "proposal_candidate"
+    )), 1); },
+    ({ run, proposalTransitionRef }) => { run.relations.push(structuredClone(run.relations.find((relation) => (
+      relation.fromRef === proposalTransitionRef && relation.targetRole === "proposal_candidate"
+    )))); },
+    ({ run, proposalTransitionRef }) => { run.relations.find((relation) => (
+      relation.fromRef === proposalTransitionRef && relation.targetRole === "proposal_candidate"
+    )).toRef = createReference("state"); },
+    ({ run, proposalTransitionRef }) => { run.relations.find((relation) => (
+      relation.fromRef === proposalTransitionRef && relation.targetRole === "proposal_candidate"
+    )).targetRole = "wrong"; },
+    ({ run, proposalTransitionRef }) => { run.relations.find((relation) => (
+      relation.fromRef === proposalTransitionRef && relation.targetRole === "proposal_candidate"
+    )).assertedByRole = "fixture"; },
+    ({ run, proposalTransitionRef }) => { run.relations.find((relation) => (
+      relation.fromRef === proposalTransitionRef && relation.targetRole === "proposal_candidate"
+    )).createdOrder -= 1; },
+    ({ run, proposalTransitionRef }) => { run.relations.find((relation) => (
+      relation.fromRef === proposalTransitionRef && relation.targetRole === "proposal_candidate"
+    )).effectiveOrder -= 1; },
     ({ candidate }) => { candidate.lifecycleStatus = "active"; }
   ];
   for (const attack of attacks) {
@@ -842,6 +872,15 @@ test("binding replay closes interaction, assessment order, participant multiplic
     ({ run, assessment, transition }) => { const other = { reference: createReference("interaction"), family: "interaction_segment", origin: "sut", inputReferences: [], createdOrder: 1 }; run.records.set(other.reference, other); assessment.interactionRef = other.reference; transition.interactionRef = other.reference; },
     ({ run, assessment }) => { run.records.get(assessment.interactionRef).inputReferences = assessment.realizationFactRefs; },
     ({ run, assessment }) => { run.records.get(assessment.interactionRef).inputReferences = assessment.userResponseRefs; },
+    ({ run, assessment }) => { run.records.get(assessment.interactionRef).createdOrder = assessment.createdOrder + 1; },
+    ({ run, assessment }) => { run.records.get(assessment.interactionRef).createdByTransitionRef = createReference("transition"); },
+    ({ run, assessment }) => { run.records.get(run.records.get(assessment.interactionRef).createdByTransitionRef).transitionKind = "other"; },
+    ({ run, assessment }) => { run.records.get(run.records.get(assessment.interactionRef).createdByTransitionRef).origin = "fixture"; },
+    ({ run, assessment }) => { run.records.get(run.records.get(assessment.interactionRef).createdByTransitionRef).result = "other"; },
+    ({ run, assessment }) => { const interaction = run.records.get(assessment.interactionRef); run.records.get(interaction.createdByTransitionRef).inputReferences = assessment.realizationFactRefs; },
+    ({ run, assessment }) => { const interaction = run.records.get(assessment.interactionRef); run.records.get(interaction.createdByTransitionRef).inputReferences = assessment.userResponseRefs; },
+    ({ run, assessment }) => { const interaction = run.records.get(assessment.interactionRef); run.records.get(interaction.createdByTransitionRef).resultReferences = []; },
+    ({ run, assessment }) => { const interaction = run.records.get(assessment.interactionRef); interaction.inputReferences.push(createReference("state")); },
     ({ assessment }) => { assessment.createdOrder = 1; },
     ({ run, assessment }) => { const duplicate = structuredClone(assessment); duplicate.reference = createReference("state"); duplicate.proposalRef = createReference("state"); run.records.set(duplicate.reference, duplicate); },
     ({ run, assessment }) => { const duplicate = structuredClone(assessment); duplicate.reference = createReference("state"); duplicate.proposalRef = null; run.records.set(duplicate.reference, duplicate); },
@@ -877,6 +916,10 @@ test("binding replay validates exact transition, bases, and participant relation
     ({ assessment }) => { assessment.reason = "other"; },
     ({ run, transition }) => { run.records.delete(transition.reference); },
     ({ transition }) => { transition.inputReferences[0] = createReference("state"); },
+    ({ assessment, transition }) => { transition.inputReferences.push(assessment.userResponseRefs[0]); },
+    ({ assessment, transition }) => { transition.inputReferences.push(assessment.realizationFactRefs[0]); },
+    ({ assessment, transition }) => { transition.inputReferences.push(assessment.proposalRef); },
+    ({ run, assessment, transition }) => { const realizationRef = assessment.realizationFactRefs[0]; const closureTransition = [...run.records.values()].find((record) => record.transitionKind === "record_proposal_realization" && record.inputReferences?.includes(realizationRef)); transition.inputReferences.push(closureTransition.reference); },
     ({ run, transition }) => { run.relations.splice(run.relations.findIndex((r) => r.fromRef === transition.reference && r.targetRole === "proposal_realization_evidence"), 1); },
     ({ run, transition }) => { run.relations.splice(run.relations.findIndex((r) => r.fromRef === transition.reference && r.targetRole === "user_response_fact"), 1); },
     ({ run, assessment }) => { run.relations.splice(run.relations.findIndex((r) => r.fromRef === assessment.reference && r.targetRole === "candidate_bound_proposal_intent"), 1); },
@@ -914,6 +957,29 @@ test("binding replay validates exact transition, bases, and participant relation
     facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
     assert.throws(() => realized.run.assessProposalResponseBinding(interaction, facts), /[Bb]inding|B\/T\/P\/F\/U\/R/);
   }
+});
+
+test("binding assessment cannot be retargeted to a later exact F/U replay interaction", () => {
+  const realized = realizedProposalRun();
+  const response = userResponseInput();
+  realized.run.assertSourceFactConsistency([realized.input, response]);
+  realized.run.ingest([realized.input, response]);
+  let interaction = realized.run.pendingInteractions.at(-1);
+  let facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
+  realized.run.assessProposalResponseBinding(interaction, facts);
+  const assessment = [...realized.run.records.values()].find((record) => record.family === "binding_assessment");
+  const transition = realized.run.records.get(assessment.createdByTransitionRef);
+
+  realized.run.assertSourceFactConsistency([realized.input, response]);
+  realized.run.ingest([realized.input, response]);
+  interaction = realized.run.pendingInteractions.at(-1);
+  assessment.interactionRef = interaction.reference;
+  transition.interactionRef = interaction.reference;
+  facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
+  assert.throws(
+    () => realized.run.assessProposalResponseBinding(interaction, facts),
+    /[Bb]inding|B\/T\/P\/F\/U\/R/
+  );
 });
 
 test("noncanonical response stays non-accepting and mismatch fidelity never becomes material match", () => {

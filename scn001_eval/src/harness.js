@@ -209,6 +209,10 @@ function findEligibleRoutedRealizations(sutBoundary, runRef, transport) {
       && relation.relationKind === "transition_ancestry");
     const copiedProposalEvidence = snapshot.relations.filter((relation) => relation.fromRef === proposal.reference
       && ["basis", "support"].includes(relation.relationKind));
+    const proposalCandidateBasis = snapshot.relations.filter((relation) => (
+      relation.fromRef === proposalTransition?.reference && relation.relationKind === "basis"
+      && relation.targetRole === "proposal_candidate"
+    ));
     const selectionIntentBasis = snapshot.relations.filter((relation) => relation.fromRef === selection.reference
       && relation.relationKind === "basis" && relation.targetRole === "selected_proposal_intent");
     const selectionBases = snapshot.relations.filter((relation) => relation.fromRef === selection.reference
@@ -230,8 +234,15 @@ function findEligibleRoutedRealizations(sutBoundary, runRef, transport) {
       && proposalTransition.interactionRef === proposal.interactionRef
       && proposalInteraction?.family === "interaction_segment" && proposalInteraction.origin === "sut"
       && proposal.interactionRef === candidate.interactionRef
+      && candidate.createdOrder < candidateTransition.createdOrder
+      && candidateTransition.createdOrder < proposal.createdOrder
       && proposal.createdOrder < proposalTransition.createdOrder
       && proposalTransition.createdOrder > candidateTransition.createdOrder
+      && proposalCandidateBasis.length === 1
+      && proposalCandidateBasis[0].toRef === candidate.reference
+      && proposalCandidateBasis[0].assertedByRole === "sut"
+      && proposalCandidateBasis[0].effectiveOrder === proposalTransition.createdOrder
+      && proposalCandidateBasis[0].createdOrder === proposalTransition.createdOrder
       && ancestry.length === 1 && ancestry[0].toRef === candidate.reference
       && ancestry[0].targetRole === "candidate" && ancestry[0].assertedByRole === "sut"
       && ancestry[0].effectiveOrder === proposal.createdOrder
@@ -252,7 +263,6 @@ function findEligibleRoutedRealizations(sutBoundary, runRef, transport) {
       && candidateTransition.interactionRef === candidate.interactionRef
       && candidateTransition.inputReferences?.includes(affordance.reference)
       && candidateTransition.resultReferences?.includes(candidate.reference)
-      && candidate.createdOrder < candidateTransition.createdOrder
       && affordance?.family === "input_fact" && affordance.origin === "fixture"
       && affordance.role === "affordance_fact" && affordance?.payload?.direction === "TRIAL-PROD-FOCUS"
       && directionBasis.length === 1 && directionBasis[0].toRef === affordance.reference

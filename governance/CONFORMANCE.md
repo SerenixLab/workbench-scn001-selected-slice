@@ -71,7 +71,7 @@ Unless a row says otherwise:
 | `ENG-CONF-STATE-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Selection and realization recording consume revalidated proposal closure and preserve exact P/S/F/R/E inputs, order, typed bases, and relation evidence. | `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2` | Transition/ref/order/role assertions; missing/duplicate basis and transition attacks; exact valid replay; distinct-realization failure. Contract and negative modes. | `scn001_sut_core/src/runState.js`; package tests | Default | uncovered | merge-blocking; claim-blocking | Proposal realization mutation provenance is covered; response binding, activation, lifecycle, and outcome mutations remain absent. |
 | `ENG-HEALTH-ABSTRACTION-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Public boundary, harness, validation, fixture-projection, and run-state abstractions are non-throwaway. | `ADR-001 R1` | Bounded package/module responsibilities; manual justification review. | `README.md`; `scn001_sut_core/src/`; `scn001_eval/src/`; package `AGENTS.md` files | Local-recorded review | review-only | advisory or merge-blocking by condition | Abstraction justification is not captured by an automated check; future generalization could outrun concrete pressure. |
 | `ENG-HEALTH-API-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The SUT surface is unchanged; evaluation package root now exports only the formal one-argument harness constructor, with renderer/projector helpers and failure injection internal. | Rule entry | Exact package-root export test; constructor override rejection; internal-only SUT resolvers and evaluation mechanism-test seam. | `scn001_sut_core/index.js`; `scn001_eval/index.js`; package tests; `scripts/check-dependency-boundary.mjs` | Default | uncovered | merge-blocking; claim-blocking | Governing consumer/need review for future API additions remains manual. |
-| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The current correction closes exact branch checkpoint identity, response attribution, and binding-assessment closure integrity without activation. | Rule entry | Focused-diff inspection against starting `HEAD` `c3985aa`; one primary purpose: close branch-delivery and binding-integrity defects before activation. | Current working-tree diff; package tests; corrective record below | Fresh independent ChatGPT review of the corrected pushed diff is pending. | uncovered | advisory or merge-blocking by condition | The implementing task cannot independently review its own corrected diff. |
+| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The current correction closes candidate/proposal temporal and basis integrity plus binding interaction/ingestion provenance without activation. | Rule entry | Focused-diff inspection against starting `HEAD` `796f2a3`; one primary purpose: close the remaining temporal/provenance exactness defects before activation. | Current working-tree diff; package tests; corrective record below | Fresh independent ChatGPT review of the corrected pushed diff is pending. | uncovered | advisory or merge-blocking by condition | The implementing task cannot independently review its own diff. |
 | `ENG-HEALTH-COMMENT-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No JavaScript implementation/test comment is present or used to justify behavior. Future trigger: adding, generating, or relying on a code comment. | Rule entry | Source inventory. | `rg` over `scn001_sut_core`, `scn001_eval`, `tests`, and `scripts` returned no JavaScript comment lines | Not applicable until trigger. | N/A | advisory or merge-blocking by condition | Governance prose is controlled as documentation/claims; code comments require review when introduced. |
 | `ENG-HEALTH-DEAD-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No dead, commented-out, prototype, experiment, or throwaway implementation artifact is present. Future trigger: introducing or promoting one. | Rule entry | Repository and source inventory; manual review. | Current package/source tree; no throwaway directory or commented-out implementation | Not applicable until trigger. | N/A | merge-blocking; promotion-blocking | Static gate does not comprehensively prove reachability; disposition must change if a prototype appears. |
 | `ENG-HEALTH-DEPENDENCY-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Evaluation declares a runtime dependency on the local SUT package and CI installs the workspace lock. | Rule entry | Local file dependency; lockfile; dependency-boundary static check; no external runtime dependency. | `package-lock.json`; `scn001_eval/package.json`; `scn001_sut_core/package.json`; `scripts/check-dependency-boundary.mjs`; `README.md` | Default | uncovered | merge-blocking; promotion-blocking | Dependency rationale/maintenance review is manual; future external dependencies require a new review record. |
@@ -366,6 +366,58 @@ trial, focused-drill behavior, later-use behavior, outcome, formal evaluation,
 scoreability, completion eligibility, milestone completion, broader SCN-001
 success, or production-readiness claim is introduced. The candidate remains
 formed and non-active at lifecycle version 1, and activation remains absent.
+
+## Temporal And Interaction Provenance Corrective Increment
+
+An independent review of pushed commit
+`796f2a36fc3db27775a66c85f0a82e0a2bdf726f` found that the complete branch and
+binding correction still allowed proposal identity to predate candidate
+formation, allowed B/T to be retargeted to a later replay interaction containing
+the same F/U participants, and accepted duplicate binding-transition input refs
+through set-only equality. Independent review outcome: **blocking / failed**.
+This record preserves and does not rewrite any earlier passing or failed review.
+
+The corrective increment based on that exact commit has one bounded purpose:
+
+```text
+close candidate-to-proposal temporal ordering,
+proposal-transition candidate basis,
+and exact binding interaction/ingestion provenance
+before activation
+```
+
+The shared SUT candidate-bound proposal validator and evaluation acceptance
+checkpoint now require exact `C < CT < P < PT` ordering and one contemporaneous
+SUT-asserted `PT --basis[proposal_candidate]--> C` relation. Selection remains
+strictly after PT, and existing later realization ordering remains intact.
+Missing, duplicate, competing, malformed, or backdated proposal-candidate basis
+evidence fails closed, including before evaluation acceptance response projection
+or SUT ingress.
+
+Binding replay now requires `I < B < T` and resolves I's exact SUT ingestion
+transition. The ingestion transition must identify I, close over the exact unique
+interaction input set, contain every represented F/U participant, and preserve
+the required family, origin, kind, result, result reference, interaction identity,
+and order. B/T therefore cannot be retargeted to an earlier, unrelated, malformed,
+or later replay interaction. Binding-transition inputs require set equality,
+exact cardinality, and unique references, so duplicated F, U, P, or realization
+transition participants fail closed.
+
+The directly affected rules are `ENG-BASE-001`, `ENG-CHANGE-001`,
+`ENG-CONF-CAPTURE-001`, `ENG-CONF-DEP-001`, `ENG-CONF-HARNESS-001`,
+`ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`, `ENG-CONF-PAYLOAD-002`,
+`ENG-CONF-REF-001`, `ENG-CONF-RUN-001`, `ENG-CONF-STATE-001`,
+`ENG-CONF-STATE-002`, `ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-FAILURE-001`,
+`ENG-HEALTH-TEST-001`, and `ENG-HEALTH-TEST-002`. Applicability, rule revisions,
+promotion mapping, active exceptions, and claim-boundary dispositions do not
+change.
+
+At completion, `ENG-HEALTH-CHANGE-001 = uncovered`. Fresh independent ChatGPT
+review of the corrected pushed diff is pending, and this implementing task does
+not self-attest a passing review. The candidate remains formed/non-active at
+lifecycle version 1. No activation assessment, activation check, active trial,
+focused-drill or later-use behavior, outcome, formal evaluation, scoring,
+milestone artifact, broader SCN-001 claim, or production-readiness claim is added.
 
 ## Binding-Integrity Corrective Increment And Blocking Review Record
 
