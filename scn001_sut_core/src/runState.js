@@ -1251,6 +1251,9 @@ export class RunState {
     ];
     const interaction = this.records.get(assessment.interactionRef);
     const ingestionTransition = this.records.get(interaction?.createdByTransitionRef);
+    const ingestionBasis = this.relations.filter((relation) => (
+      relation.fromRef === ingestionTransition?.reference && relation.relationKind === "basis"
+    ));
     const participantRefs = [...assessment.realizationFactRefs, ...assessment.userResponseRefs];
     const representedProposals = new Set(realizationClosures.map((item) => item.proposal.reference));
     const expectedResponseStatus = responses.length === 1
@@ -1295,10 +1298,23 @@ export class RunState {
       || ingestionTransition.result !== "accepted"
       || !ingestionTransition.resultReferences?.includes(interaction.reference)
       || ingestionTransition.createdOrder <= interaction.createdOrder
+      || ingestionTransition.createdOrder >= assessment.createdOrder
       || ingestionTransition.inputReferences?.length !== interaction.inputReferences?.length
       || !sameReferenceSet(ingestionTransition.inputReferences, interaction.inputReferences)
       || new Set(ingestionTransition.inputReferences).size !== ingestionTransition.inputReferences.length
       || new Set(interaction.inputReferences).size !== interaction.inputReferences.length
+      || ingestionBasis.length !== ingestionTransition.inputReferences.length
+      || ingestionBasis.some((relation) => (
+        relation.targetRole !== "ingested_input"
+        || relation.assertedByRole !== "sut"
+        || relation.effectiveOrder !== ingestionTransition.createdOrder
+        || relation.createdOrder !== ingestionTransition.createdOrder
+      ))
+      || new Set(ingestionBasis.map((relation) => relation.toRef)).size !== ingestionBasis.length
+      || !sameReferenceSet(
+        ingestionBasis.map((relation) => relation.toRef),
+        ingestionTransition.inputReferences
+      )
       || participantRefs.some((reference) => !interaction.inputReferences?.includes(reference))
       || !sameReferenceSet(transition.inputReferences, expectedInputs)
       || transition.inputReferences?.length !== expectedInputs.length
@@ -1350,10 +1366,9 @@ export class RunState {
       relation.fromRef === candidate.reference && relation.relationKind === "basis"
       && relation.targetRole === "selected_trial_direction"
     ));
-    const proposalCandidateBasis = this.relations.filter((relation) => (
+    const proposalTransitionBasis = this.relations.filter((relation) => (
       relation.fromRef === proposalTransition?.reference
       && relation.relationKind === "basis"
-      && relation.targetRole === "proposal_candidate"
     ));
     const direction = this.records.get(candidate.trialDirectionRef);
     if (
@@ -1373,20 +1388,28 @@ export class RunState {
       || interaction.origin !== "sut"
       || proposalTransition.interactionRef !== proposal.interactionRef
       || proposal.interactionRef !== candidate.interactionRef
-      || proposalTransition.inputReferences?.length !== 1
-      || proposalTransition.inputReferences[0] !== candidate.reference
-      || proposalTransition.resultReferences?.length !== 1
-      || proposalTransition.resultReferences[0] !== proposal.reference
+      || !proposalTransition.inputReferences?.includes(candidate.reference)
+      || new Set(proposalTransition.inputReferences).size !== proposalTransition.inputReferences.length
+      || !proposalTransition.resultReferences?.includes(proposal.reference)
+      || new Set(proposalTransition.resultReferences).size !== proposalTransition.resultReferences.length
       || proposalTransition.createdOrder <= candidateTransition.createdOrder
       || proposalTransition.createdOrder <= candidate.createdOrder
       || proposal.createdOrder <= candidateTransition.createdOrder
       || proposal.createdOrder <= candidate.createdOrder
       || proposal.createdOrder >= proposalTransition.createdOrder
-      || proposalCandidateBasis.length !== 1
-      || proposalCandidateBasis[0].toRef !== candidate.reference
-      || proposalCandidateBasis[0].assertedByRole !== "sut"
-      || proposalCandidateBasis[0].effectiveOrder !== proposalTransition.createdOrder
-      || proposalCandidateBasis[0].createdOrder !== proposalTransition.createdOrder
+      || proposalTransitionBasis.length !== proposalTransition.inputReferences.length
+      || proposalTransitionBasis.some((relation) => (
+        relation.targetRole !== "proposal_candidate"
+        || relation.assertedByRole !== "sut"
+        || relation.effectiveOrder !== proposalTransition.createdOrder
+        || relation.createdOrder !== proposalTransition.createdOrder
+      ))
+      || new Set(proposalTransitionBasis.map((relation) => relation.toRef)).size
+        !== proposalTransitionBasis.length
+      || !sameReferenceSet(
+        proposalTransitionBasis.map((relation) => relation.toRef),
+        proposalTransition.inputReferences
+      )
       || ancestry.length !== 1
       || ancestry[0].toRef !== candidate.reference
       || ancestry[0].assertedByRole !== "sut"

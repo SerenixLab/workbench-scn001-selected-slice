@@ -211,7 +211,6 @@ function findEligibleRoutedRealizations(sutBoundary, runRef, transport) {
       && ["basis", "support"].includes(relation.relationKind));
     const proposalCandidateBasis = snapshot.relations.filter((relation) => (
       relation.fromRef === proposalTransition?.reference && relation.relationKind === "basis"
-      && relation.targetRole === "proposal_candidate"
     ));
     const selectionIntentBasis = snapshot.relations.filter((relation) => relation.fromRef === selection.reference
       && relation.relationKind === "basis" && relation.targetRole === "selected_proposal_intent");
@@ -240,6 +239,7 @@ function findEligibleRoutedRealizations(sutBoundary, runRef, transport) {
       && proposalTransition.createdOrder > candidateTransition.createdOrder
       && proposalCandidateBasis.length === 1
       && proposalCandidateBasis[0].toRef === candidate.reference
+      && proposalCandidateBasis[0].targetRole === "proposal_candidate"
       && proposalCandidateBasis[0].assertedByRole === "sut"
       && proposalCandidateBasis[0].effectiveOrder === proposalTransition.createdOrder
       && proposalCandidateBasis[0].createdOrder === proposalTransition.createdOrder
