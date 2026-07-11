@@ -83,6 +83,14 @@ function simulatorInput(requestedRef, overrides = {}) {
   };
 }
 
+function userResponseInput(overrides = {}) {
+  return {
+    sourceFactRef: sourceRef(), kind: "user_response", sourceActor: "synthetic-user-a",
+    occurrenceOrder: 2, content: "Yes, let's try that.", context: "proposal_response",
+    ...overrides
+  };
+}
+
 function calibrationInputs(recognitionCorrect = 4, productionCorrect = 1, overrides = {}) {
   const dimension = overrides.dimension ?? "particle_pattern_a";
   return [
@@ -728,6 +736,125 @@ test("exact realization replay reuses only a complete valid closure", () => {
     () => realized.run.recordProposalRealizations(replayInteraction, replayFacts),
     /P\/S\/F\/R\/E/
   );
+});
+
+test("response without a current realization creates one unbound raw-response assessment", () => {
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
+  const response = userResponseInput();
+  ingest(boundary, runRef, [response]);
+  assert.deepEqual(boundary.processCurrentInteraction(runRef), []);
+  const assessment = recordsOf(boundary, runRef, "binding_assessment")[0];
+  assert.equal(assessment.proposalRef, null);
+  assert.equal(assessment.bindingStatus, "unbound");
+  assert.equal(assessment.responseStatus, "accepted");
+  assert.equal(assessment.materialIntentStatus, "unknown");
+  assert.deepEqual(assessment.realizationFactRefs, []);
+  assert.equal(assessment.userResponseRefs.length, 1);
+});
+
+test("multiple current response participants create one ambiguous assessment without selection", () => {
+  for (const responses of [
+    [userResponseInput(), userResponseInput({ content: "No." })],
+    [userResponseInput({ content: "No." }), userResponseInput()]
+  ]) {
+    const boundary = createSutBoundary();
+    const runRef = boundary.startRun();
+    ingest(boundary, runRef, responses);
+    boundary.processCurrentInteraction(runRef);
+    const assessments = recordsOf(boundary, runRef, "binding_assessment");
+    assert.equal(assessments.length, 1);
+    assert.equal(assessments[0].bindingStatus, "ambiguous");
+    assert.equal(assessments[0].responseStatus, "ambiguous_or_non_accepting");
+    assert.equal(assessments[0].userResponseRefs.length, 2);
+  }
+});
+
+test("multiple current realization participants create one ambiguous assessment without selection", () => {
+  const realized = realizedProposalRun();
+  const secondRealization = simulatorInput(realized.proposal.reference);
+  const response = userResponseInput();
+  realized.run.assertSourceFactConsistency([realized.input, secondRealization, response]);
+  realized.run.ingest([realized.input, secondRealization, response]);
+  const interaction = realized.run.pendingInteractions.at(-1);
+  const facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
+  realized.run.assessProposalResponseBinding(interaction, facts);
+  const assessments = [...realized.run.records.values()].filter(
+    (record) => record.family === "binding_assessment"
+  );
+  assert.equal(assessments.length, 1);
+  assert.equal(assessments[0].bindingStatus, "ambiguous");
+  assert.equal(assessments[0].realizationFactRefs.length, 2);
+  assert.equal([...realized.run.records.values()].filter(
+    (record) => record.transitionKind === "record_proposal_realization"
+  ).length, 1);
+});
+
+test("noncanonical response stays non-accepting and mismatch fidelity never becomes material match", () => {
+  const noncanonical = realizedProposalRun();
+  const response = userResponseInput({ content: "Sure." });
+  noncanonical.run.assertSourceFactConsistency([noncanonical.input, response]);
+  noncanonical.run.ingest([noncanonical.input, response]);
+  let interaction = noncanonical.run.pendingInteractions.at(-1);
+  let facts = interaction.inputReferences.map((reference) => noncanonical.run.records.get(reference));
+  noncanonical.run.assessProposalResponseBinding(interaction, facts);
+  assert.equal([...noncanonical.run.records.values()].find(
+    (record) => record.family === "binding_assessment"
+  ).responseStatus, "ambiguous_or_non_accepting");
+
+  const mismatch = selectedProposalRun();
+  const mismatchInput = simulatorInput(mismatch.proposal.reference, { fidelity: "mismatch" });
+  mismatch.run.assertSourceFactConsistency([mismatchInput]);
+  mismatch.run.ingest([mismatchInput]);
+  mismatch.run.processCurrentInteraction();
+  const mismatchResponse = userResponseInput();
+  mismatch.run.assertSourceFactConsistency([mismatchInput, mismatchResponse]);
+  mismatch.run.ingest([mismatchInput, mismatchResponse]);
+  interaction = mismatch.run.pendingInteractions.at(-1);
+  facts = interaction.inputReferences.map((reference) => mismatch.run.records.get(reference));
+  mismatch.run.assessProposalResponseBinding(interaction, facts);
+  const assessment = [...mismatch.run.records.values()].find(
+    (record) => record.family === "binding_assessment"
+  );
+  assert.equal(assessment.bindingStatus, "bound");
+  assert.equal(assessment.responseStatus, "accepted");
+  assert.equal(assessment.materialIntentStatus, "mismatch");
+});
+
+test("binding replay reuses exact F/U identity while equal-content new U stays distinct", () => {
+  const realized = realizedProposalRun();
+  const response = userResponseInput();
+  realized.run.assertSourceFactConsistency([realized.input, response]);
+  realized.run.ingest([realized.input, response]);
+  let interaction = realized.run.pendingInteractions.at(-1);
+  let facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
+  realized.run.assessProposalResponseBinding(interaction, facts);
+  const first = [...realized.run.records.values()].find((record) => record.family === "binding_assessment");
+
+  realized.run.assertSourceFactConsistency([realized.input, response]);
+  realized.run.ingest([realized.input, response]);
+  interaction = realized.run.pendingInteractions.at(-1);
+  facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
+  assert.equal(realized.run.assessProposalResponseBinding(interaction, facts), undefined);
+  assert.equal([...realized.run.records.values()].filter(
+    (record) => record.family === "binding_assessment"
+  ).length, 1);
+
+  const later = userResponseInput();
+  realized.run.assertSourceFactConsistency([realized.input, later]);
+  realized.run.ingest([realized.input, later]);
+  interaction = realized.run.pendingInteractions.at(-1);
+  facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
+  realized.run.assessProposalResponseBinding(interaction, facts);
+  const assessments = [...realized.run.records.values()].filter(
+    (record) => record.family === "binding_assessment"
+  );
+  assert.equal(assessments.length, 2);
+  assert.notEqual(assessments[1].reference, first.reference);
+  assert.notEqual(assessments[1].userResponseRefs[0], first.userResponseRefs[0]);
+  assert.equal(realized.run.relations.some((relation) => (
+    relation.relationKind === "binding" && relation.fromRef === first.userResponseRefs[0]
+  )), false);
 });
 
 test("two current proposals create neither selection nor output in either result order", () => {

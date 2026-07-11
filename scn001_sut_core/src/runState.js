@@ -236,6 +236,10 @@ export class RunState {
       interaction,
       interactionFacts
     );
+    const bindingAssessmentTransitionRef = this.assessProposalResponseBinding(
+      interaction,
+      interactionFacts
+    );
     const semanticTransitionRefs = [
       attributionTransitionRef,
       temporalAssessmentTransitionRef,
@@ -243,7 +247,8 @@ export class RunState {
       candidateFormationTransitionRef,
       proposalIntentTransitionRef,
       proposalRealizationSelectionTransitionRef,
-      proposalRealizationTransitionRef
+      proposalRealizationTransitionRef,
+      bindingAssessmentTransitionRef
     ].filter(Boolean);
     const processingTransition = this.createTransition(
       "process_interaction_segment",
@@ -978,7 +983,7 @@ export class RunState {
     const facts = interactionFacts.filter((fact) => fact.role === "simulator_realization");
     if (facts.length === 0) return undefined;
     if (facts.length > 1) {
-      throw new SutStateIntegrityError("One interaction cannot record multiple proposal realizations.");
+      return undefined;
     }
     const fact = facts[0];
     const proposal = this.records.get(fact.payload.requestedRef);
@@ -1032,6 +1037,120 @@ export class RunState {
       createdOrder: transition.createdOrder,
       assertedByRole: "sut"
     });
+    return transition.reference;
+  }
+
+  assessProposalResponseBinding(interaction, interactionFacts) {
+    const responses = interactionFacts.filter((fact) => fact.role === "user_response");
+    if (responses.length === 0) return undefined;
+    const realizations = interactionFacts.filter((fact) => fact.role === "simulator_realization");
+    let proposal;
+    let closure;
+    let bindingStatus;
+    let materialIntentStatus;
+    let reason;
+
+    if (responses.length !== 1 || realizations.length > 1) {
+      bindingStatus = "ambiguous";
+      materialIntentStatus = "unknown";
+      reason = "multiple_current_binding_participants";
+    } else if (realizations.length === 0) {
+      bindingStatus = "unbound";
+      materialIntentStatus = "unknown";
+      reason = "no_current_surfaced_realization";
+    } else {
+      const realization = realizations[0];
+      proposal = this.records.get(realization.payload.requestedRef);
+      if (proposal?.family !== "proposal_intent") {
+        throw new SutStateIntegrityError("Current proposal-response binding target is unresolved.");
+      }
+      closure = this.resolveProposalRealizationClosure(proposal.reference);
+      if (!closure || closure.fact.reference !== realization.reference) {
+        throw new SutStateIntegrityError(
+          "Proposal-response binding requires the exact current P/S/F/R/E realization closure."
+        );
+      }
+      this.validateCandidateBoundProposal(proposal.reference);
+      bindingStatus = "bound";
+      materialIntentStatus = realization.payload.fidelity === "match" ? "match" : "mismatch";
+      reason = materialIntentStatus === "match"
+        ? "exact_candidate_bound_proposal_response"
+        : "surfaced_realization_material_mismatch";
+    }
+
+    const responseStatus = responses.length === 1 && classifyProposalResponse(responses[0].payload.content)
+      ? "accepted"
+      : "ambiguous_or_non_accepting";
+    const realizationFactRefs = realizations.map((fact) => fact.reference);
+    const userResponseRefs = responses.map((fact) => fact.reference);
+    const existing = this.findRecord((record) => (
+      record.family === "binding_assessment"
+      && record.proposalRef === (proposal?.reference ?? null)
+      && sameReferenceSet(record.realizationFactRefs, realizationFactRefs)
+      && sameReferenceSet(record.userResponseRefs, userResponseRefs)
+      && record.bindingStatus === bindingStatus
+      && record.responseStatus === responseStatus
+      && record.materialIntentStatus === materialIntentStatus
+    ));
+    if (existing) return undefined;
+
+    const assessment = {
+      reference: createReference("state"),
+      family: "binding_assessment",
+      origin: "sut",
+      bindingType: "candidate_bound_proposal_response",
+      proposalRef: proposal?.reference ?? null,
+      realizationFactRefs,
+      userResponseRefs,
+      bindingStatus,
+      responseStatus,
+      materialIntentStatus,
+      reason,
+      statusOrigin: "sut_transition",
+      interactionRef: interaction.reference,
+      createdOrder: this.allocateOrder()
+    };
+    const transitionInputs = uniqueReferences([
+      ...(proposal ? [proposal.reference] : []),
+      ...realizationFactRefs,
+      ...userResponseRefs,
+      ...(closure ? [closure.transition.reference] : [])
+    ]);
+    const transition = this.createTransition(
+      "assess_proposal_response_binding",
+      transitionInputs,
+      [assessment.reference],
+      interaction.reference
+    );
+    transition.result = "binding_assessed";
+    attachCreatingTransition([assessment], transition);
+    this.commitDerivedRecords([assessment], transition);
+
+    for (const response of responses) {
+      this.relations.push(bindingBasisRelation(
+        transition, response.reference, "user_response_fact"
+      ));
+    }
+    if (closure) {
+      this.relations.push(bindingBasisRelation(
+        transition, closure.transition.reference, "proposal_realization_evidence"
+      ));
+    }
+    if (proposal) {
+      this.relations.push(bindingRelation(
+        assessment, proposal.reference, "candidate_bound_proposal_intent", transition
+      ));
+    }
+    for (const realization of realizations) {
+      this.relations.push(bindingRelation(
+        assessment, realization.reference, "actual_surfaced_realization", transition
+      ));
+    }
+    for (const response of responses) {
+      this.relations.push(bindingRelation(
+        assessment, response.reference, "actual_user_response", transition
+      ));
+    }
     return transition.reference;
   }
 
@@ -1417,6 +1536,35 @@ function comparisonBasisRelation(comparison, reference, targetRole, taskMode, tr
     semanticDimension: comparison.targetDimension,
     semanticTaskMode: taskMode,
     effectiveOrder: comparison.createdOrder,
+    createdOrder: transition.createdOrder,
+    assertedByRole: "sut"
+  };
+}
+
+function classifyProposalResponse(content) {
+  return content.trim().replaceAll(/\s+/g, " ").toLocaleLowerCase("en-US")
+    === "yes, let's try that.";
+}
+
+function bindingBasisRelation(transition, toRef, targetRole) {
+  return {
+    relationKind: "basis",
+    fromRef: transition.reference,
+    toRef,
+    targetRole,
+    effectiveOrder: transition.createdOrder,
+    createdOrder: transition.createdOrder,
+    assertedByRole: "sut"
+  };
+}
+
+function bindingRelation(assessment, toRef, targetRole, transition) {
+  return {
+    relationKind: "binding",
+    fromRef: assessment.reference,
+    toRef,
+    targetRole,
+    effectiveOrder: assessment.createdOrder,
     createdOrder: transition.createdOrder,
     assertedByRole: "sut"
   };

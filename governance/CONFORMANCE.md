@@ -71,7 +71,7 @@ Unless a row says otherwise:
 | `ENG-CONF-STATE-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Selection and realization recording consume revalidated proposal closure and preserve exact P/S/F/R/E inputs, order, typed bases, and relation evidence. | `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2` | Transition/ref/order/role assertions; missing/duplicate basis and transition attacks; exact valid replay; distinct-realization failure. Contract and negative modes. | `scn001_sut_core/src/runState.js`; package tests | Default | uncovered | merge-blocking; claim-blocking | Proposal realization mutation provenance is covered; response binding, activation, lifecycle, and outcome mutations remain absent. |
 | `ENG-HEALTH-ABSTRACTION-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Public boundary, harness, validation, fixture-projection, and run-state abstractions are non-throwaway. | `ADR-001 R1` | Bounded package/module responsibilities; manual justification review. | `README.md`; `scn001_sut_core/src/`; `scn001_eval/src/`; package `AGENTS.md` files | Local-recorded review | review-only | advisory or merge-blocking by condition | Abstraction justification is not captured by an automated check; future generalization could outrun concrete pressure. |
 | `ENG-HEALTH-API-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The SUT surface is unchanged; evaluation package root now exports only the formal one-argument harness constructor, with renderer/projector helpers and failure injection internal. | Rule entry | Exact package-root export test; constructor override rejection; internal-only SUT resolvers and evaluation mechanism-test seam. | `scn001_sut_core/index.js`; `scn001_eval/index.js`; package tests; `scripts/check-dependency-boundary.mjs` | Default | uncovered | merge-blocking; claim-blocking | Governing consumer/need review for future API additions remains manual. |
-| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | This correction closes pre-emission candidate-bound integrity, exact realization closure validation, and the harness simulator/projector override seam before response binding. | Rule entry | Focused-diff inspection against starting `HEAD` `c469798`; one primary purpose: close realization-seam integrity and simulator-boundary bypasses. | Current working-tree diff; package tests; corrective record below | The passing independent ChatGPT review of realization-seam corrective commit `21186e5f3f683aa3e20e5f88576b5b6e936f59f7` is recorded below; the earlier failed realization-seam review remains preserved historically. | review-only | advisory or merge-blocking by condition | The bounded realization-seam corrective diff received qualifying independent review for this change; future non-throwaway semantic or boundary changes require fresh change-specific review. |
+| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The current increment adds branch-controlled raw proposal-acceptance delivery and exact SUT-owned proposal-response binding assessment without activation. | Rule entry | Focused-diff inspection against starting `HEAD` `08eebef`; one primary purpose: close the realized-proposal-to-binding seam. | Current working-tree diff; package tests; binding increment record below | Fresh independent ChatGPT review of the pushed binding diff is pending; the realization-seam review does not attest this change. | uncovered | advisory or merge-blocking by condition | The new binding diff has not received qualifying independent review and cannot self-attest this control. |
 | `ENG-HEALTH-COMMENT-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No JavaScript implementation/test comment is present or used to justify behavior. Future trigger: adding, generating, or relying on a code comment. | Rule entry | Source inventory. | `rg` over `scn001_sut_core`, `scn001_eval`, `tests`, and `scripts` returned no JavaScript comment lines | Not applicable until trigger. | N/A | advisory or merge-blocking by condition | Governance prose is controlled as documentation/claims; code comments require review when introduced. |
 | `ENG-HEALTH-DEAD-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No dead, commented-out, prototype, experiment, or throwaway implementation artifact is present. Future trigger: introducing or promoting one. | Rule entry | Repository and source inventory; manual review. | Current package/source tree; no throwaway directory or commented-out implementation | Not applicable until trigger. | N/A | merge-blocking; promotion-blocking | Static gate does not comprehensively prove reachability; disposition must change if a prototype appears. |
 | `ENG-HEALTH-DEPENDENCY-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Evaluation declares a runtime dependency on the local SUT package and CI installs the workspace lock. | Rule entry | Local file dependency; lockfile; dependency-boundary static check; no external runtime dependency. | `package-lock.json`; `scn001_eval/package.json`; `scn001_sut_core/package.json`; `scripts/check-dependency-boundary.mjs`; `README.md` | Default | uncovered | merge-blocking; promotion-blocking | Dependency rationale/maintenance review is manual; future external dependencies require a new review record. |
@@ -79,8 +79,8 @@ Unless a row says otherwise:
 | `ENG-HEALTH-GEN-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The projector generated new canonical snapshots, lock metadata, source closure, and checker content. | Rule entry | Transactional projector validation; local tests/gates; digest verification. Contract mode. | Projected `governance/` tree; `npm run check`; `governance/ZOEY_GOVERNANCE.lock` | Automated checks complete; qualifying independent ChatGPT generated-artifact review recorded below. | review-only | merge-blocking; promotion-blocking | Independent review found no manual divergence from the intended canonical projection; future generated-artifact changes require fresh independent review. |
 | `ENG-HEALTH-REPRO-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The repository defines local/CI quality, test, boundary, state, dependency, and governance gates. | Rule entry | Documented npm scripts; aggregate runner; CI invokes clean-install and aggregate gate. Contract mode. | `README.md`; `AGENTS.md`; `package.json`; `scripts/run-gates.mjs`; `.github/workflows/ci.yml`; `package-lock.json` | Default | uncovered | promotion-blocking; claim-blocking | Python availability is documented but not installed by CI explicitly; branch protection is unverified. |
 | `ENG-HEALTH-STRUCTURE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Top-level SUT/evaluation packages, governance, tests, and scripts have declared responsibilities. | Rule entry | Repository map and package guidance; manual ownership review. | `AGENTS.md`; `README.md`; `scn001_sut_core/AGENTS.md`; `scn001_eval/AGENTS.md`; package manifests | Local-recorded review | review-only | advisory or merge-blocking by condition | Responsibility review is manual; future shared/top-level areas require an index and guidance update. |
-| `ENG-HEALTH-TEST-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Regressions cover candidate-bound consumption, exact realization closure, formal harness contraction, full simulator-record validation, and all preserved seam behavior. | Rule entry | Positive, negative, contract, regression, replay, ambiguity, passivity, identity, and end-to-end modes cover attacks 1–44. | SUT/evaluation tests; conformance tests; `package.json` | Default | uncovered | merge-blocking; promotion-blocking | Current tests cover the bounded seam; response binding, activation, lifecycle, and formal evaluation remain future-triggered. |
-| `ENG-HEALTH-TEST-002` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Positive seam behavior uses public boundaries; direct `RunState` corruption is limited to otherwise unreachable retained-state closure attacks. | Rule entry | End-to-end formal harness tests; package-root API tests; direct internal corruption only for implementation-integrity regressions. | `scn001_sut_core/test/`; `scn001_eval/test/`; `tests/conformance/` | Default | uncovered | merge-blocking; claim-blocking | Fresh independent test-validity review is pending; these remain engineering tests, not formal behavioral evidence. |
+| `ENG-HEALTH-TEST-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Regressions cover branch-controlled response delivery, stable combined ingress, exact current-participant binding, negative/ambiguous binding, replay identity, and preserved non-activation behavior. | Rule entry | Positive formal-harness, negative direct-ingress, contract, replay, ambiguity, passivity, identity, and non-scope modes cover the bounded binding seam. | SUT/evaluation tests; conformance tests; `package.json` | Default | uncovered | merge-blocking; promotion-blocking | The bounded binding path is covered; activation, lifecycle, later use, outcome, and formal evaluation remain future-triggered. |
+| `ENG-HEALTH-TEST-002` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The canonical proposal/realization/branch/binding path uses the formal harness and declared SUT boundary; direct `RunState` use is limited to unreachable malformed-state and narrow participant/replay attacks. | Rule entry | End-to-end formal harness tests; package-root API tests; direct internal integrity and negative-participant tests. | `scn001_sut_core/test/`; `scn001_eval/test/`; `tests/conformance/` | Default | uncovered | merge-blocking; claim-blocking | Fresh independent test-validity review is pending; these remain engineering tests, not formal behavioral evidence. |
 | `ENG-HEALTH-TODO-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No TODO, FIXME, temporary-workaround, or deferred-work marker exists in non-throwaway implementation. Future trigger: adding any such marker. | Rule entry | Source inventory. | `rg` over implementation, tests, and scripts returned no marker | Not applicable until trigger. | N/A | merge-blocking; promotion-blocking | No dedicated TODO gate exists; the disposition must change when a marker is introduced. |
 
 ## ADR-009 R4 Revalidation Record
@@ -304,6 +304,97 @@ With this recorded review outcome, the current applicability/status counts are:
 * 34 applicable rules `uncovered`;
 * no applicable rule `revalidation-required`;
 * no rule claimed `enforced`.
+
+## Branch-Controlled Proposal Acceptance And Binding Increment
+
+The implementation change based on starting `HEAD`
+`08eebefa9530a6e9320e39a13a03a2e3266437c4` has one primary purpose:
+
+```text
+valid realized proposal
+    -> branch-controlled raw response delivery
+    -> exact SUT-owned binding assessment
+```
+
+The formal generic fixture path now rejects every `user_response` before fixture
+projection, source-reference allocation, or SUT ingress. A dedicated evaluation
+harness method accepts only the exact closed `P-USER-ACCEPT`, `FC-RET-001`,
+`FC-UGC-001`, `FC-CONSEQ-001`, and `FC-REV-001` record set. It delivers only
+when exactly one routed output has a full retained evaluation simulator record,
+matching requested and realized production-proposal material, the exact
+production-focused candidate and `TRIAL-PROD-FOCUS` affordance, and passive SUT
+inspection proves that the same simulator fact participates in the exact
+processed P/S/F/R/E realization closure. Zero eligible realizations deliver
+nothing and remain retryable; more than one fails closed without selection.
+
+Successful delivery reprojects the retained simulator record through the same
+run projector, preserving its opaque source identity, and ingests one batch with
+the canonical simulator fact, raw six-field user response, and four exact control
+facts. Existing fixture mappings preserve control identity. Delivery success is
+recorded by exact output/selection ref only after SUT ingress succeeds; replay is
+a stable frozen no-op, end-run clears transport state, and independent runs share
+none. Branch predicates and conclusions are not projected into SUT input.
+
+Normal SUT interaction processing now creates immutable `binding_assessment`
+records through `assess_proposal_response_binding`. Assessment identity uses the
+exact optional proposal ref, current realization-fact set, current user-response
+set, and separate binding, response, and material-fidelity statuses. The canonical
+path is `bound / accepted / match`. One response without a current realization is
+`unbound / accepted / unknown`; participant multiplicity creates one ambiguous
+assessment without first/latest selection; unsupported response text remains
+`ambiguous_or_non_accepting`; and realization fidelity mismatch cannot produce
+material `match`.
+
+Canonical binding begins only from the current interaction's redelivered F and U,
+uses F's `requestedRef`, revalidates the candidate-bound proposal, and requires
+the complete existing P/S/F/R/E closure with the exact current fact identity. The
+transition consumes exact P/F/U/R participants and contemporaneously relates to
+the realization evidence and raw response as narrow `basis` roles. Each bound
+assessment creates SUT-asserted contemporaneous binding relations to the exact
+proposal, actual surfaced realization, and actual user response. No response-to-
+candidate relation is created; candidate identity remains recoverable through
+proposal ancestry. Exact F/U replay creates neither a second assessment nor new
+binding relations, while a distinct equal-content U remains a distinct event and
+assessment.
+
+The four controls are retained interaction facts for later activation work but
+are not binding evidence. Candidate and proposal records remain unchanged; the
+candidate remains `trial_candidate / formed_non_active / lifecycleVersion 1`.
+No activation assessment, activation check, active trial, lifecycle transition,
+focused-drill behavior, outcome, formal evaluation record, scoring artifact,
+obligation classification, completion artifact, or broader claim is introduced.
+
+Rows reviewed for this increment are `ENG-BASE-001`, `ENG-CHANGE-001`,
+`ENG-CONF-CAPTURE-001`, `ENG-CONF-DEP-001`, `ENG-CONF-DEP-002`,
+`ENG-CONF-HARNESS-001`, `ENG-CONF-IMPORT-001`, `ENG-CONF-IMPORT-002`,
+`ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`, `ENG-CONF-PAYLOAD-001`,
+`ENG-CONF-PAYLOAD-002`, `ENG-CONF-PUBLIC-001`, `ENG-CONF-REF-001`,
+`ENG-CONF-ROLE-001`, `ENG-CONF-RUN-001`, `ENG-CONF-SIM-001`,
+`ENG-CONF-STATE-001`, `ENG-CONF-STATE-002`, `ENG-HEALTH-API-001`,
+`ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-FAILURE-001`, `ENG-HEALTH-TEST-001`,
+`ENG-HEALTH-TEST-002`, `ENG-CLAIM-001`, `ENG-CLAIM-002`,
+`ENG-CLAIM-WORKBENCH-001`, and `ENG-CONF-CLAIM-001`.
+
+Actual changed mechanisms and evidence affect the capture, dependency, harness,
+inspection, payload, reference, role, run, simulator, state, failure, and test
+rows named above. Applicability, rule revisions, promotion mapping, and active
+exceptions do not change. `ENG-HEALTH-CHANGE-001` changes from the prior
+change-specific `review-only` disposition to `uncovered`: the implementing Codex
+task cannot independently attest its own diff, and fresh independent ChatGPT
+review of the pushed binding diff is pending. The prior realization-seam review
+is not reused.
+
+At completion of this implementing task the current counts are 44 applicable and
+5 not applicable; 9 applicable rules are `review-only`, 35 are `uncovered`, none
+is `revalidation-required`, and no rule is claimed `enforced`.
+
+Residual risks include pending independent change and test-validity review,
+unverified protected required-check configuration, incomplete generic malformed-
+lineage attack coverage beyond this bounded closure, and all intentionally absent
+activation/later-use/outcome/formal-evaluation semantics. This record does not
+claim `DP-ACTIVATE-PROD`, `OBL-EVID-002`, `OBL-EVID-004`, formal campaign
+evidence, scoreability, completion eligibility, milestone completion, full
+`SCN-001`, or production readiness.
 
 ## Realization-Seam Integrity Corrective Increment And Blocking Review Record
 

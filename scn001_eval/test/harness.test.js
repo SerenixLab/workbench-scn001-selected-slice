@@ -240,6 +240,30 @@ function productionProposalRecords() {
   ];
 }
 
+function proposalAcceptanceRecords() {
+  const definitions = [
+    ["P-USER-ACCEPT", "user_response", "synthetic-user-a", {
+      content: "Yes, let's try that.", context: "proposal_response"
+    }],
+    ["FC-RET-001", "fixture_control_fact", "fixture-driver", {
+      control: "evaluation_retention_basis", value: "named_formal_run"
+    }],
+    ["FC-UGC-001", "fixture_control_fact", "fixture-driver", {
+      control: "user_governed_constraints", value: "exhaustive_selected_slice_scope"
+    }],
+    ["FC-CONSEQ-001", "fixture_control_fact", "fixture-driver", {
+      control: "consequence", value: "low"
+    }],
+    ["FC-REV-001", "fixture_control_fact", "fixture-driver", {
+      control: "reversibility", value: "reversible"
+    }]
+  ];
+  return definitions.map(([fixtureRecordId, role, sourceActor, data], index) => ({
+    fixtureRecordId, role, sourceActor, occurrenceOrder: index + 10, data,
+    oracleAnnotations: { branchEligible: true, expectedTransition: "activate" }
+  }));
+}
+
 test("simulator validates the closed request and deterministically preserves material meaning", () => {
   const request = {
     kind: "proposal_realization_request",
@@ -321,6 +345,69 @@ test("public proposal output routes once and SUT records exact realization witho
     "formal_evaluation_record", "scoring_artifact"
   ].includes(record.family)), false);
   assert.doesNotMatch(JSON.stringify(snapshot), /P-USER-ACCEPT/);
+});
+
+test("generic formal delivery rejects user responses before projection or SUT mutation", () => {
+  const harness = createEvaluationHarness(createSutBoundary());
+  const runRef = harness.startRun();
+  const before = harness.captureInspectionSnapshot(runRef);
+  assert.throws(
+    () => harness.deliverFixtureRecords(runRef, [proposalAcceptanceRecords()[0]]),
+    /cannot deliver user_response/
+  );
+  assert.deepEqual(harness.captureInspectionSnapshot(runRef), before);
+});
+
+test("branch delivery waits for exact processed realization then creates canonical binding", () => {
+  const harness = createEvaluationHarness(createSutBoundary());
+  const runRef = harness.startRun();
+  const acceptance = proposalAcceptanceRecords();
+  assert.deepEqual(harness.deliverProposalAcceptanceIfEligible(runRef, acceptance), []);
+  harness.deliverFixtureRecords(runRef, productionProposalRecords());
+  harness.processCurrentInteraction(runRef);
+  const routed = harness.realizeAvailableOutputs(runRef)[0];
+  assert.deepEqual(harness.deliverProposalAcceptanceIfEligible(runRef, acceptance), []);
+  harness.processCurrentInteraction(runRef);
+  const delivered = harness.deliverProposalAcceptanceIfEligible(runRef, acceptance);
+  assert.equal(delivered.length, 1);
+  assert.equal(delivered[0].outputRef, routed.requestedOutputRef);
+  const beforeReplay = harness.captureInspectionSnapshot(runRef);
+  assert.equal(harness.deliverProposalAcceptanceIfEligible(runRef, acceptance), delivered);
+  assert.deepEqual(harness.captureInspectionSnapshot(runRef), beforeReplay);
+  harness.processCurrentInteraction(runRef);
+  const snapshot = harness.captureInspectionSnapshot(runRef);
+  const assessment = snapshot.records.find((record) => record.family === "binding_assessment");
+  assert.equal(assessment.bindingStatus, "bound");
+  assert.equal(assessment.responseStatus, "accepted");
+  assert.equal(assessment.materialIntentStatus, "match");
+  assert.equal(assessment.proposalRef, routed.requestedRef);
+  assert.equal(assessment.realizationFactRefs.length, 1);
+  assert.equal(assessment.userResponseRefs.length, 1);
+  assert.equal(snapshot.relations.filter((relation) => (
+    relation.fromRef === assessment.reference && relation.relationKind === "binding"
+  )).length, 3);
+  const response = snapshot.records.find((record) => record.reference === assessment.userResponseRefs[0]);
+  assert.deepEqual(Object.keys(response.payload).sort(), [
+    "content", "context", "kind", "occurrenceOrder", "sourceActor", "sourceFactRef"
+  ].sort());
+  assert.equal(["proposalRef", "candidateRef", "realizationRef", "bindingStatus",
+    "branchPolicy", "activationIntent"].some((key) => key in response.payload), false);
+  assert.equal(snapshot.records.some((record) => [
+    "activation_assessment", "activation_check_result", "active_trial"
+  ].includes(record.family)), false);
+});
+
+test("acceptance package validation rejects missing, extra, caller realization, or changed content", () => {
+  const harness = createEvaluationHarness(createSutBoundary());
+  const runRef = harness.startRun();
+  const records = proposalAcceptanceRecords();
+  assert.throws(() => harness.deliverProposalAcceptanceIfEligible(runRef, records.slice(1)), /five-record/);
+  assert.throws(() => harness.deliverProposalAcceptanceIfEligible(runRef, [
+    ...records, { ...records[0], fixtureRecordId: "P-001R" }
+  ]), /five-record/);
+  const changed = structuredClone(records);
+  changed[0].data.content = "Sure.";
+  assert.throws(() => harness.deliverProposalAcceptanceIfEligible(runRef, changed), /package-local content/);
 });
 
 test("harness fails closed before routing multiple outputs", () => {
