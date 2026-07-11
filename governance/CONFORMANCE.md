@@ -71,7 +71,7 @@ Unless a row says otherwise:
 | `ENG-CONF-STATE-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Selection and realization recording consume revalidated proposal closure and preserve exact P/S/F/R/E inputs, order, typed bases, and relation evidence. | `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2` | Transition/ref/order/role assertions; missing/duplicate basis and transition attacks; exact valid replay; distinct-realization failure. Contract and negative modes. | `scn001_sut_core/src/runState.js`; package tests | Default | uncovered | merge-blocking; claim-blocking | Proposal realization mutation provenance is covered; response binding, activation, lifecycle, and outcome mutations remain absent. |
 | `ENG-HEALTH-ABSTRACTION-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Public boundary, harness, validation, fixture-projection, and run-state abstractions are non-throwaway. | `ADR-001 R1` | Bounded package/module responsibilities; manual justification review. | `README.md`; `scn001_sut_core/src/`; `scn001_eval/src/`; package `AGENTS.md` files | Local-recorded review | review-only | advisory or merge-blocking by condition | Abstraction justification is not captured by an automated check; future generalization could outrun concrete pressure. |
 | `ENG-HEALTH-API-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The SUT surface is unchanged; evaluation package root now exports only the formal one-argument harness constructor, with renderer/projector helpers and failure injection internal. | Rule entry | Exact package-root export test; constructor override rejection; internal-only SUT resolvers and evaluation mechanism-test seam. | `scn001_sut_core/index.js`; `scn001_eval/index.js`; package tests; `scripts/check-dependency-boundary.mjs` | Default | uncovered | merge-blocking; claim-blocking | Governing consumer/need review for future API additions remains manual. |
-| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The current correction closes semantic resolution of complete proposal-formation and ingestion-transition participant sets without activation. | Rule entry | Focused-diff inspection against starting `HEAD` `96c4249`; one primary purpose: close the remaining transition-participant closure defect before activation. | Current working-tree diff; package tests; corrective record below | Fresh independent ChatGPT review of the corrected pushed diff is pending. | uncovered | advisory or merge-blocking by condition | The implementing task cannot independently review its own diff. |
+| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The current correction closes semantic resolution of complete proposal-formation and ingestion-transition participant sets without activation. | Rule entry | Focused-diff inspection against starting `HEAD` `96c4249`; one primary purpose: close the remaining transition-participant closure defect before activation. | Current working-tree diff; package tests; corrective record and independent-review closure below | The passing independent ChatGPT review of PT/IT participant-resolution corrective commit `73f4b73c6f3db129e0a2acae405eafe9c579fd2d` is recorded below; prior failed reviews remain preserved historically. | review-only | advisory or merge-blocking by condition | The bounded PT/IT participant-resolution correction received qualifying independent review for this change; future non-throwaway semantic or boundary changes require fresh change-specific review. |
 | `ENG-HEALTH-COMMENT-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No JavaScript implementation/test comment is present or used to justify behavior. Future trigger: adding, generating, or relying on a code comment. | Rule entry | Source inventory. | `rg` over `scn001_sut_core`, `scn001_eval`, `tests`, and `scripts` returned no JavaScript comment lines | Not applicable until trigger. | N/A | advisory or merge-blocking by condition | Governance prose is controlled as documentation/claims; code comments require review when introduced. |
 | `ENG-HEALTH-DEAD-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No dead, commented-out, prototype, experiment, or throwaway implementation artifact is present. Future trigger: introducing or promoting one. | Rule entry | Repository and source inventory; manual review. | Current package/source tree; no throwaway directory or commented-out implementation | Not applicable until trigger. | N/A | merge-blocking; promotion-blocking | Static gate does not comprehensively prove reachability; disposition must change if a prototype appears. |
 | `ENG-HEALTH-DEPENDENCY-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Evaluation declares a runtime dependency on the local SUT package and CI installs the workspace lock. | Rule entry | Local file dependency; lockfile; dependency-boundary static check; no external runtime dependency. | `package-lock.json`; `scn001_eval/package.json`; `scn001_sut_core/package.json`; `scripts/check-dependency-boundary.mjs`; `README.md` | Default | uncovered | merge-blocking; promotion-blocking | Dependency rationale/maintenance review is manual; future external dependencies require a new review record. |
@@ -516,12 +516,73 @@ The directly affected rules are `ENG-BASE-001`, `ENG-CHANGE-001`,
 promotion mapping, active exceptions, and claim-boundary dispositions do not
 change.
 
-At completion, `ENG-HEALTH-CHANGE-001 = uncovered`. Fresh independent ChatGPT
-review of the corrected pushed diff is pending, and this implementing task does
-not self-attest a passing review. The candidate remains formed/non-active at
-lifecycle version 1. No activation assessment, activation check, active trial,
-focused-drill or later-use behavior, outcome, formal evaluation, scoring,
-milestone artifact, broader SCN-001 claim, or production-readiness claim is added.
+At completion of the implementing task, `ENG-HEALTH-CHANGE-001` was left `uncovered`: the implementing Codex task could not independently review its own corrected diff, and the complete PT/IT participant-resolution correction had not yet received a fresh qualifying independent review. No passing review of the corrected diff was claimed by the implementing task.
+
+At that point, status counts were 44 applicable and 5 not applicable; 9 applicable rules were `review-only`, 35 were `uncovered`, none was `revalidation-required`, and no rule was claimed `enforced`.
+
+The subsequent independent review outcome is recorded separately below. It preserves the failed review of `96c42490fe827f0f945ddd0bd3d956fdffd8eb06` and the implementing task's honest pending-review disposition.
+
+The subsequent review closes only the change-specific review condition for the bounded PT/IT participant-resolution correction. The candidate remains formed/non-active at lifecycle version 1. No activation assessment, activation check, active trial, focused-drill or later-use behavior, outcome, formal evaluation, scoring, milestone artifact, broader SCN-001 claim, or production-readiness claim is created.
+
+## Complete PT And IT Participant Resolution Independent Review Closure
+
+On 2026-07-11, an independent ChatGPT review examined PT/IT participant-resolution corrective commit `73f4b73c6f3db129e0a2acae405eafe9c579fd2d` against the failed independent review of `96c42490fe827f0f945ddd0bd3d956fdffd8eb06`, the accepted selected-slice candidate/proposal, evaluation-boundary and state-lineage contracts, and the applicable conformance obligations.
+
+The review inspected:
+
+* complete proposal-formation transition input resolution;
+* production-candidate family, origin, material, lifecycle, formation-transition and selected-direction closure;
+* complete proposal-formation transition result resolution;
+* exact proposal creating transition, candidate identity, material preservation, ancestry and copied-evidence prohibition;
+* one-to-one candidate/proposal mapping across one- and multi-candidate proposal-formation transitions;
+* exhaustive proposal-transition candidate-basis target, role, assertion and order closure;
+* evaluation-branch preservation of the exact single-candidate/single-proposal checkpoint;
+* complete binding-interaction and ingestion-transition input resolution;
+* canonical redelivery of retained input facts;
+* rejection of unresolved and non-input-fact ingestion participants;
+* exact interaction multiplicity inside ingestion-transition results;
+* semantic validation of additional fixture-initialized ingestion results;
+* canonical proposal-acceptance interaction result shape;
+* binding replay, participant identity and preserved non-activation behavior.
+
+The review confirms that raw reference-set equality is no longer treated as sufficient evidence of transition participation.
+
+For proposal formation, every unique PT input must independently resolve through the supported formed/non-active production-candidate closure. Candidate status cannot be manufactured by placing an arbitrary reference in `PT.inputReferences` and creating a matching `basis[proposal_candidate]` relation.
+
+Every unique PT result must independently resolve to a candidate-bound proposal created by that exact PT. The proposal must preserve one exact validated PT candidate, belong to the same interaction, follow candidate formation, precede PT, expose exact contemporaneous candidate ancestry and contain no copied candidate evidence.
+
+The complete PT requires equal unique input/result cardinality, exactly one proposal result per exact candidate input, unique proposal candidate identities, and equality between the proposal candidate-ref set and the PT candidate-input set. Unresolved or non-candidate inputs, unresolved or non-proposal results, cross-transition results, missing candidate results, duplicate results for one candidate and results bound to candidates absent from PT fail closed. Valid multi-candidate proposal formation remains supported without selection or arbitration.
+
+For binding ingestion, every unique `I.inputReferences` and `IT.inputReferences` participant must resolve to a retained `input_fact`. Canonical redelivered facts remain valid, while unresolved references, transitions, semantic-source records and SUT-derived state cannot masquerade as ingested inputs.
+
+The interaction must occur exactly once in the IT result set, and result references must be unique. Every additional result must resolve to the existing narrow fixture-initialized attributed-assertion contract for the same interaction and creating IT, with an exact initialized communication input, fixture semantic source, and contemporaneous typed source and initialized-communication basis relations. Duplicate, unresolved, unrelated, cross-transition and cross-interaction results fail closed.
+
+The canonical proposal-acceptance interaction continues to expose exactly `[I]` as the IT result set. Existing `I < IT < B < T` ordering, exact `basis[ingested_input]` closure, raw-response attribution, complete proposal-realization closure, participant-first binding multiplicity and exact binding replay remain preserved.
+
+The review also confirms that:
+
+* the harness does not choose among multiple proposal intents;
+* the simulator does not choose the proposal;
+* the formal acceptance branch remains restricted to one exact selected candidate/proposal checkpoint;
+* branch failure occurs before response projection or SUT ingress;
+* controls remain retained input facts but are not binding evidence;
+* canonical binding remains distinct from activation;
+* the candidate remains `formed_non_active` at lifecycle version 1;
+* no activation assessment or activation check is created;
+* no active trial or focused-drill behavior is created;
+* no formal evaluation, scoreability, completion-eligibility, milestone-completion, broader SCN-001 or production-readiness claim is created.
+
+Independent review outcome: **pass for PT/IT participant-resolution corrective commit `73f4b73c6f3db129e0a2acae405eafe9c579fd2d` under `ENG-HEALTH-CHANGE-001 R2`**.
+
+This passing review closes only the change-specific manual-review condition for the bounded PT/IT participant-resolution correction. It does not rewrite any earlier failed review as passing, does not establish automated enforcement, does not satisfy `ENG-HEALTH-TEST-002` independent test-validity review, and does not remove unrelated residual risks or unverified protected required-check configuration.
+
+With this recorded review outcome, the current applicability/status counts are:
+
+* 44 rules `applicable` and 5 `not-applicable`;
+* 10 applicable rules `review-only`;
+* 34 applicable rules `uncovered`;
+* no applicable rule `revalidation-required`;
+* no rule claimed `enforced`.
 
 ## Binding-Integrity Corrective Increment And Blocking Review Record
 
