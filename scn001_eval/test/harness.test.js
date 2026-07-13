@@ -444,7 +444,22 @@ test("branch delivery waits for exact processed realization then creates canonic
   assert.equal(snapshot.records.find((record) => record.reference === trial.candidateRef).lifecycleStatus, "formed_non_active");
   assert.equal(snapshot.relations.filter((relation) => (
     relation.fromRef === activation.reference && relation.relationKind === "basis"
-  )).length, 12);
+  )).length, 14);
+  const activationTransition = snapshot.records.find((record) => (
+    record.reference === activation.createdByTransitionRef
+  ));
+  assert.equal(activationTransition.inputReferences.length, 12);
+  for (const [key, roles] of [
+    ["consequenceRefs", ["candidate_consequence_control", "binding_consequence_control"]],
+    ["reversibilityRefs", ["candidate_reversibility_control", "binding_reversibility_control"]]
+  ]) {
+    const candidateRef = activation.controlBasisRefs.candidateInteraction[key][0];
+    assert.equal(candidateRef, activation.controlBasisRefs.bindingInteraction[key][0]);
+    for (const role of roles) assert.equal(snapshot.relations.some((relation) => (
+      relation.fromRef === activation.reference && relation.toRef === candidateRef
+        && relation.targetRole === role
+    )), true);
+  }
   assert.equal(snapshot.relations.filter((relation) => (
     relation.fromRef === trial.reference && relation.relationKind === "transition_ancestry"
   )).length, 2);

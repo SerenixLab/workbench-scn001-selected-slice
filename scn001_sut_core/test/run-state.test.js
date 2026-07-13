@@ -214,6 +214,17 @@ function activationReadyRun(overrides = {}) {
     consequence,
     reversibility
   ];
+  if (overrides.candidateUserControl) inputs.push(fixtureControlInput({
+    control: "user_governed_constraints", value: overrides.candidateUserControl,
+    occurrenceOrder: 20
+  }));
+  if (overrides.candidateRetention) inputs.push(fixtureControlInput({
+    control: "evaluation_retention_basis", value: overrides.candidateRetention,
+    occurrenceOrder: 21
+  }));
+  if (overrides.candidateUnknownControl) inputs.push(fixtureControlInput({
+    control: "undeclared_activation_control", value: "ignored", occurrenceOrder: 22
+  }));
   run.assertSourceFactConsistency(inputs);
   run.ingest(inputs);
   run.processCurrentInteraction();
@@ -231,7 +242,21 @@ function activationReadyRun(overrides = {}) {
     control: "user_governed_constraints",
     value: overrides.userControl ?? "exhaustive_selected_slice_scope", occurrenceOrder: 12
   }));
-  acceptance.push(consequence, reversibility);
+  acceptance.push(
+    overrides.distinctConsequenceRedelivery
+      ? fixtureControlInput({ control: "consequence", value: "low", occurrenceOrder: 13 })
+      : consequence,
+    overrides.distinctReversibilityRedelivery
+      ? fixtureControlInput({ control: "reversibility", value: "reversible", occurrenceOrder: 14 })
+      : reversibility
+  );
+  if (overrides.bindingTrialPolicy) acceptance.push(fixtureControlInput({
+    control: "trial_policy", value: overrides.bindingTrialPolicy, occurrenceOrder: 23
+  }));
+  if (overrides.materialContextChange) acceptance.push({
+    sourceFactRef: sourceRef(), kind: "material_context_change", sourceActor: "fixture-driver",
+    occurrenceOrder: 24, description: "practice context changed"
+  });
   if (overrides.conflictingUserControl) acceptance.push(fixtureControlInput({
     control: "user_governed_constraints", value: "opt_out", occurrenceOrder: 15
   }));
@@ -250,6 +275,7 @@ function activationReadyRun(overrides = {}) {
   }));
   run.assertSourceFactConsistency(acceptance);
   run.ingest(acceptance);
+  overrides.beforeFinalProcess?.(run);
   run.processCurrentInteraction();
   return run;
 }
@@ -294,12 +320,9 @@ function retargetAssessmentMaterialToCandidate(run, assessment, candidate) {
   const refs = [
     participants.candidateRef, participants.bindingAssessmentRef, participants.comparisonRef,
     participants.recognitionObservationRef, participants.productionObservationRef,
-    participants.chronologyRef, participants.contextRef,
-    ...participants.controlBasisRefs.trialPolicyRefs,
-    ...participants.controlBasisRefs.userGovernedConstraintRefs,
-    ...participants.controlBasisRefs.consequenceRefs,
-    ...participants.controlBasisRefs.reversibilityRefs,
-    ...participants.controlBasisRefs.retentionBasisRefs
+    participants.chronologyRef, participants.contextRef, ...participants.contextChangeRefs,
+    ...Object.values(participants.controlBasisRefs.candidateInteraction).flat(),
+    ...Object.values(participants.controlBasisRefs.bindingInteraction).flat()
   ];
   const roleRefs = new Map([
     ["activation_candidate", participants.candidateRef],
@@ -309,11 +332,13 @@ function retargetAssessmentMaterialToCandidate(run, assessment, candidate) {
     ["current_production_evidence", participants.productionObservationRef],
     ["activation_chronology", participants.chronologyRef],
     ["activation_context", participants.contextRef],
-    ["trial_policy_control", participants.controlBasisRefs.trialPolicyRefs[0]],
-    ["user_governed_control", participants.controlBasisRefs.userGovernedConstraintRefs[0]],
-    ["consequence_control", participants.controlBasisRefs.consequenceRefs[0]],
-    ["reversibility_control", participants.controlBasisRefs.reversibilityRefs[0]],
-    ["retention_control", participants.controlBasisRefs.retentionBasisRefs[0]]
+    ["candidate_trial_policy_control", participants.controlBasisRefs.candidateInteraction.trialPolicyRefs[0]],
+    ["candidate_consequence_control", participants.controlBasisRefs.candidateInteraction.consequenceRefs[0]],
+    ["candidate_reversibility_control", participants.controlBasisRefs.candidateInteraction.reversibilityRefs[0]],
+    ["binding_user_governed_control", participants.controlBasisRefs.bindingInteraction.userGovernedConstraintRefs[0]],
+    ["binding_consequence_control", participants.controlBasisRefs.bindingInteraction.consequenceRefs[0]],
+    ["binding_reversibility_control", participants.controlBasisRefs.bindingInteraction.reversibilityRefs[0]],
+    ["binding_retention_control", participants.controlBasisRefs.bindingInteraction.retentionBasisRefs[0]]
   ]);
   assessment.candidateRef = participants.candidateRef;
   assessment.comparisonRef = participants.comparisonRef;
@@ -322,9 +347,9 @@ function retargetAssessmentMaterialToCandidate(run, assessment, candidate) {
   assessment.chronologyRef = participants.chronologyRef;
   assessment.contextRef = participants.contextRef;
   assessment.controlBasisRefs = structuredClone(participants.controlBasisRefs);
-  assessment.materialBasisRefs = refs;
+  assessment.materialBasisRefs = [...new Set(refs)];
   assessment.activeScope = structuredClone(candidate.proposedScope);
-  run.records.get(assessment.createdByTransitionRef).inputReferences = [...refs];
+  run.records.get(assessment.createdByTransitionRef).inputReferences = [...new Set(refs)];
   for (const relation of run.relations.filter((item) => (
     item.fromRef === assessment.reference && item.relationKind === "basis"
   ))) relation.toRef = roleRefs.get(relation.targetRole);
@@ -1858,6 +1883,84 @@ test("missing and conflicting controls retain failed or unresolved assessments w
   }
 });
 
+test("co-applicable candidate and binding controls combine by exact identity", () => {
+  const cases = [
+    [{ candidateUserControl: "opt_out" }, "user_governed_constraints"],
+    [{ candidateRetention: "production_memory" }, "retention_basis"],
+    [{ bindingTrialPolicy: "durable_adaptation" }, "non_adaptation_boundary"],
+    [{ bindingTrialPolicy: "bounded_reversible_trial_no_durable_adaptation" },
+      "non_adaptation_boundary"]
+  ];
+  for (const [overrides, check] of cases) {
+    const run = activationReadyRun(overrides);
+    const assessment = [...run.records.values()].find(
+      (record) => record.family === "activation_assessment"
+    );
+    assert.equal(assessment.checkResults[check].status, "unresolved");
+    assert.equal(assessment.overallStatus, "unresolved_conflict");
+    assert.equal([...run.records.values()].some((record) => record.family === "active_trial"), false);
+    run.validActivationAssessmentClosure(assessment);
+  }
+});
+
+test("consequence and reversibility require exact redelivery and retain both logical roles", () => {
+  for (const [overrides, check] of [
+    [{ distinctConsequenceRedelivery: true }, "consequence"],
+    [{ distinctReversibilityRedelivery: true }, "reversibility"]
+  ]) {
+    const run = activationReadyRun(overrides);
+    const assessment = [...run.records.values()].find(
+      (record) => record.family === "activation_assessment"
+    );
+    assert.equal(assessment.checkResults[check].status, "failed");
+    assert.match(assessment.checkResults[check].reason, /identity_mismatch/);
+    const key = check === "consequence" ? "consequenceRefs" : "reversibilityRefs";
+    const candidateRef = assessment.controlBasisRefs.candidateInteraction[key][0];
+    const bindingRef = assessment.controlBasisRefs.bindingInteraction[key][0];
+    assert.notEqual(candidateRef, bindingRef);
+    assert.equal(assessment.materialBasisRefs.includes(candidateRef), true);
+    assert.equal(assessment.materialBasisRefs.includes(bindingRef), true);
+    assert.equal([...run.records.values()].some((record) => record.family === "active_trial"), false);
+    run.validActivationAssessmentClosure(assessment);
+  }
+
+  const run = activationReadyRun();
+  const assessment = [...run.records.values()].find(
+    (record) => record.family === "activation_assessment"
+  );
+  for (const [key, roles] of [
+    ["consequenceRefs", ["candidate_consequence_control", "binding_consequence_control"]],
+    ["reversibilityRefs", ["candidate_reversibility_control", "binding_reversibility_control"]]
+  ]) {
+    const candidateRef = assessment.controlBasisRefs.candidateInteraction[key][0];
+    const bindingRef = assessment.controlBasisRefs.bindingInteraction[key][0];
+    assert.equal(candidateRef, bindingRef);
+    for (const role of roles) assert.equal(run.relations.some((relation) => (
+      relation.fromRef === assessment.reference && relation.toRef === candidateRef
+        && relation.targetRole === role
+    )), true);
+  }
+});
+
+test("material context change is exact retained assessment basis", () => {
+  const run = activationReadyRun({ materialContextChange: true });
+  const assessment = [...run.records.values()].find(
+    (record) => record.family === "activation_assessment"
+  );
+  const contextChange = [...run.records.values()].find(
+    (record) => record.role === "material_context_change"
+  );
+  assert.equal(assessment.checkResults.current_applicability.status, "failed");
+  assert.equal(assessment.materialBasisRefs.includes(contextChange.reference), true);
+  const relationIndex = run.relations.findIndex((relation) => (
+    relation.fromRef === assessment.reference && relation.toRef === contextChange.reference
+      && relation.targetRole === "binding_material_context_change"
+  ));
+  assert.notEqual(relationIndex, -1);
+  run.relations.splice(relationIndex, 1);
+  assert.throws(() => run.validActivationAssessmentClosure(assessment), /Activation/);
+});
+
 test("valid old observations fail current authority and cannot create an active trial", () => {
   const run = activationReadyRun({ observationDay: 1, chronologyDay: 2 });
   const assessment = [...run.records.values()].find((record) => record.family === "activation_assessment");
@@ -1876,7 +1979,7 @@ test("activation assessment participant, transition, and relation attacks fail e
     ({ assessment }) => { assessment.materialBasisRefs.shift(); },
     ({ assessment }) => { assessment.materialBasisRefs.push(createReference("state")); },
     ({ assessment }) => { assessment.materialBasisRefs.push(assessment.materialBasisRefs[0]); },
-    ({ assessment }) => { assessment.controlBasisRefs.retentionBasisRefs = []; },
+    ({ assessment }) => { assessment.controlBasisRefs.bindingInteraction.retentionBasisRefs = []; },
     ({ transition }) => { transition.inputReferences.shift(); },
     ({ transition }) => { transition.inputReferences.push(createReference("state")); },
     ({ transition }) => { transition.origin = "fixture"; },
@@ -1885,6 +1988,9 @@ test("activation assessment participant, transition, and relation attacks fail e
     ({ assessment }) => { assessment.interactionRef = createReference("interaction"); },
     ({ run, assessment }) => { run.relations.find((r) => r.fromRef === assessment.reference).targetRole = "wrong"; },
     ({ run, assessment }) => { run.relations.splice(run.relations.findIndex((r) => r.fromRef === assessment.reference), 1); },
+    ({ run, assessment }) => { run.relations.splice(run.relations.findIndex((r) => (
+      r.fromRef === assessment.reference && r.targetRole === "binding_consequence_control"
+    )), 1); },
     ({ run, assessment }) => { run.relations.push({ ...structuredClone(run.relations.find((r) => r.fromRef === assessment.reference)), toRef: createReference("state") }); }
   ];
   for (const attack of attacks) {
@@ -1915,7 +2021,9 @@ test("activation retained input mutation and provenance attacks fail integrity",
     const observation = run.records.get(assessment.recognitionObservationRef);
     const chronology = run.records.get(assessment.chronologyRef);
     const context = run.records.get(assessment.contextRef);
-    const control = run.records.get(assessment.controlBasisRefs.consequenceRefs[0]);
+    const control = run.records.get(
+      assessment.controlBasisRefs.candidateInteraction.consequenceRefs[0]
+    );
     attack({ run, assessment, observation, chronology, context, control });
     assert.throws(() => run.validActivationAssessmentClosure(assessment), /Activation|Binding/);
   }
@@ -2098,17 +2206,86 @@ test("activation assessment and trial require the exact binding interaction and 
   }
 });
 
-test("activation assessment rejects a binding-interaction control it cannot represent", () => {
-  assert.throws(
-    () => activationReadyRun({ extraControl: true }),
-    /represent every exact binding-interaction control fact/
-  );
+test("unknown controls from either activation interaction fail closed before assessment mutation", () => {
+  for (const overrides of [{ candidateUnknownControl: true }, { extraControl: true }]) {
+    let run;
+    assert.throws(
+      () => activationReadyRun({ ...overrides, beforeFinalProcess: (value) => { run = value; } }),
+      /unknown co-applicable control fact/
+    );
+    assert.equal([...run.records.values()].some(
+      (record) => record.family === "activation_assessment" || record.family === "active_trial"
+    ), false);
+    assert.equal([...run.records.values()].some((record) => (
+      record.transitionKind === "assess_production_focused_trial_activation"
+        || record.transitionKind === "activate_production_focused_trial"
+    )), false);
+  }
+});
+
+test("activation methods reject fake transitions and wrong interactions before mutation", () => {
+  const attacks = [
+    (run, assessment, binding, interaction) => {
+      const real = run.records.get(binding.createdByTransitionRef);
+      const fake = { ...structuredClone(real), reference: createReference("transition") };
+      run.records.set(fake.reference, fake);
+      return () => run.assessProductionTrialActivation(
+        interaction,
+        interaction.inputReferences.map((ref) => run.records.get(ref)),
+        fake.reference
+      );
+    },
+    (run, assessment, binding, interaction) => {
+      const real = run.records.get(assessment.createdByTransitionRef);
+      const fake = { ...structuredClone(real), reference: createReference("transition") };
+      run.records.set(fake.reference, fake);
+      return () => run.activateProductionFocusedTrial(interaction, fake.reference);
+    },
+    (run, assessment) => {
+      const candidate = run.records.get(assessment.candidateRef);
+      const wrongInteraction = run.records.get(candidate.interactionRef);
+      return () => run.activateProductionFocusedTrial(
+        wrongInteraction, assessment.createdByTransitionRef
+      );
+    },
+    (run, assessment, binding) => {
+      const candidate = run.records.get(assessment.candidateRef);
+      const wrongInteraction = run.records.get(candidate.interactionRef);
+      return () => run.assessProductionTrialActivation(
+        wrongInteraction,
+        wrongInteraction.inputReferences.map((ref) => run.records.get(ref)),
+        binding.createdByTransitionRef
+      );
+    }
+  ];
+  for (const prepare of attacks) {
+    const run = activationReadyRun();
+    const assessment = [...run.records.values()].find(
+      (record) => record.family === "activation_assessment"
+    );
+    const binding = run.records.get(assessment.bindingAssessmentRef);
+    const interaction = run.records.get(binding.interactionRef);
+    const attack = prepare(run, assessment, binding, interaction);
+    const before = structuredClone({
+      nextOrder: run.nextOrder,
+      records: [...run.records.entries()],
+      relations: run.relations,
+      pendingInteractions: run.pendingInteractions
+    });
+    assert.throws(attack, /exact creating/);
+    assert.deepEqual({
+      nextOrder: run.nextOrder,
+      records: [...run.records.entries()],
+      relations: run.relations,
+      pendingInteractions: run.pendingInteractions
+    }, before);
+  }
 });
 
 test("activation-relevant facts require their exact semantic-source actors", () => {
   const cases = [
-    [(assessment) => assessment.controlBasisRefs.trialPolicyRefs[0], "synthetic-user-a"],
-    [(assessment) => assessment.controlBasisRefs.retentionBasisRefs[0], "fixture-scorer"],
+    [(assessment) => assessment.controlBasisRefs.candidateInteraction.trialPolicyRefs[0], "synthetic-user-a"],
+    [(assessment) => assessment.controlBasisRefs.bindingInteraction.retentionBasisRefs[0], "fixture-scorer"],
     [(assessment) => assessment.chronologyRef, "synthetic-user-a"],
     [(assessment) => assessment.contextRef, "simulated-dependency"],
     [(assessment) => assessment.recognitionObservationRef, "fixture-driver"],
@@ -2171,7 +2348,9 @@ test("activation retained facts require complete exact first-ingestion provenanc
   for (const attack of attacks) {
     const run = activationReadyRun();
     const assessment = [...run.records.values()].find((record) => record.family === "activation_assessment");
-    const control = run.records.get(assessment.controlBasisRefs.consequenceRefs[0]);
+    const control = run.records.get(
+      assessment.controlBasisRefs.candidateInteraction.consequenceRefs[0]
+    );
     const currentInteraction = run.records.get(assessment.interactionRef);
     const firstInteraction = run.records.get(control.firstInteractionRef);
     const firstIngestion = run.records.get(firstInteraction.createdByTransitionRef);

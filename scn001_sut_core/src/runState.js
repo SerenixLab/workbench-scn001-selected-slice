@@ -9,6 +9,14 @@ const ACTIVATION_CHECK_NAMES = Object.freeze([
   "reversibility", "consequence", "current_applicability", "retention_basis",
   "non_adaptation_boundary"
 ]);
+const ACTIVATION_CONTROL_TYPES = Object.freeze([
+  "trial_policy", "user_governed_constraints", "consequence", "reversibility",
+  "evaluation_retention_basis"
+]);
+const ACTIVATION_CONTROL_REF_KEYS = Object.freeze([
+  "trialPolicyRefs", "userGovernedConstraintRefs", "consequenceRefs",
+  "reversibilityRefs", "retentionBasisRefs"
+]);
 
 export class RunState {
   constructor() {
@@ -1196,9 +1204,7 @@ export class RunState {
 
   assessProductionTrialActivation(interaction, interactionFacts, bindingTransitionRef) {
     if (!bindingTransitionRef) return undefined;
-    const bindingTransition = this.records.get(bindingTransitionRef);
-    const binding = this.records.get(bindingTransition?.resultReferences?.[0]);
-    this.validateBindingAssessmentClosure(binding);
+    const binding = this.resolveActivationBindingTrigger(interaction, bindingTransitionRef);
     const positive = binding.bindingStatus === "bound" && binding.responseStatus === "accepted"
       && binding.materialIntentStatus === "match"
       && binding.reason === "exact_candidate_bound_proposal_response";
@@ -1214,10 +1220,9 @@ export class RunState {
     this.resolveActivationBindingContext(binding, interaction);
     const basis = this.resolveActivationCandidateBasis(candidate);
     const participants = this.resolveActivationParticipants(candidate, binding, basis, interaction);
-    const contextChanges = interactionFacts.filter((fact) => fact.role === "material_context_change");
     const checkResults = this.deriveActivationCheckResults({
       candidate, proposal, binding, basis, controlBasisRefs: participants.controlBasisRefs,
-      contextChanges
+      contextChangeRefs: participants.contextChangeRefs
     });
     const overallStatus = deriveActivationOverallStatus(checkResults);
     const materialRefs = activationMaterialBasisRefs(participants);
@@ -1268,9 +1273,7 @@ export class RunState {
 
   activateProductionFocusedTrial(interaction, assessmentTransitionRef) {
     if (!assessmentTransitionRef) return undefined;
-    const assessmentTransition = this.records.get(assessmentTransitionRef);
-    const assessment = this.records.get(assessmentTransition?.resultReferences?.[0]);
-    this.validActivationAssessmentClosure(assessment);
+    const assessment = this.resolveActiveTrialTrigger(interaction, assessmentTransitionRef);
     if (assessment.overallStatus !== "sufficient"
       || Object.values(assessment.checkResults).some((result) => result.status !== "passed")) {
       return undefined;
@@ -1312,6 +1315,44 @@ export class RunState {
       createdOrder: transition.createdOrder, assertedByRole: "sut"
     });
     return transition.reference;
+  }
+
+  resolveActivationBindingTrigger(interaction, bindingTransitionRef) {
+    const transition = this.records.get(bindingTransitionRef);
+    const binding = this.records.get(transition?.resultReferences?.[0]);
+    if (transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
+      || transition.transitionKind !== "assess_proposal_response_binding"
+      || transition.result !== "binding_assessed"
+      || !isDeepStrictEqual(transition.resultReferences, [binding?.reference])
+      || binding?.createdByTransitionRef !== bindingTransitionRef
+      || transition.interactionRef !== interaction?.reference
+      || binding?.interactionRef !== interaction?.reference) {
+      throw new SutStateIntegrityError(
+        "Activation assessment requires the exact creating binding transition and interaction."
+      );
+    }
+    this.validateBindingAssessmentClosure(binding);
+    return binding;
+  }
+
+  resolveActiveTrialTrigger(interaction, assessmentTransitionRef) {
+    const transition = this.records.get(assessmentTransitionRef);
+    const assessment = this.records.get(transition?.resultReferences?.[0]);
+    const binding = this.records.get(assessment?.bindingAssessmentRef);
+    if (transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
+      || transition.transitionKind !== "assess_production_focused_trial_activation"
+      || transition.result !== "activation_assessed"
+      || !isDeepStrictEqual(transition.resultReferences, [assessment?.reference])
+      || assessment?.createdByTransitionRef !== assessmentTransitionRef
+      || transition.interactionRef !== interaction?.reference
+      || assessment?.interactionRef !== interaction?.reference
+      || binding?.interactionRef !== interaction?.reference) {
+      throw new SutStateIntegrityError(
+        "Trial activation requires the exact creating assessment transition and binding interaction."
+      );
+    }
+    this.validActivationAssessmentClosure(assessment);
+    return assessment;
   }
 
   resolveActivationCandidateBasis(candidate) {
@@ -1482,39 +1523,35 @@ export class RunState {
   }
 
   resolveActivationParticipants(candidate, binding, basis, activationInteraction) {
-    for (const interaction of [basis.interaction, activationInteraction]) {
+    const controlInventory = (interaction) => {
+      const inventory = {
+        trialPolicyRefs: [], userGovernedConstraintRefs: [], consequenceRefs: [],
+        reversibilityRefs: [], retentionBasisRefs: []
+      };
       for (const fact of interaction.inputReferences.map((ref) => this.records.get(ref))
         .filter((record) => record?.role === "fixture_control_fact")) {
         this.validateRetainedInputFact(
           fact, "fixture", "fixture_control_fact", interaction, "fixture-driver"
         );
+        if (!ACTIVATION_CONTROL_TYPES.includes(fact.payload.control)) {
+          throw new SutStateIntegrityError(
+            "Activation assessment cannot classify an unknown co-applicable control fact."
+          );
+        }
+        inventory[activationControlRefKey(fact.payload.control)].push(fact.reference);
       }
-    }
-    const controlRefs = (interaction, control) => interaction.inputReferences
-      .map((ref) => this.records.get(ref))
-      .filter((fact) => fact?.role === "fixture_control_fact" && fact.payload.control === control)
-      .map((fact) => fact.reference);
-    const controlBasisRefs = {
-      trialPolicyRefs: controlRefs(basis.interaction, "trial_policy"),
-      userGovernedConstraintRefs: controlRefs(activationInteraction, "user_governed_constraints"),
-      consequenceRefs: controlRefs(activationInteraction, "consequence"),
-      reversibilityRefs: controlRefs(activationInteraction, "reversibility"),
-      retentionBasisRefs: controlRefs(activationInteraction, "evaluation_retention_basis")
+      return inventory;
     };
-    const currentControlRefs = activationInteraction.inputReferences
+    const controlBasisRefs = {
+      candidateInteraction: controlInventory(basis.interaction),
+      bindingInteraction: controlInventory(activationInteraction)
+    };
+    const contextChanges = activationInteraction.inputReferences
       .map((ref) => this.records.get(ref))
-      .filter((fact) => fact?.role === "fixture_control_fact")
-      .map((fact) => fact.reference);
-    const representedCurrentControlRefs = [
-      ...controlBasisRefs.userGovernedConstraintRefs,
-      ...controlBasisRefs.consequenceRefs,
-      ...controlBasisRefs.reversibilityRefs,
-      ...controlBasisRefs.retentionBasisRefs
-    ];
-    if (currentControlRefs.length !== representedCurrentControlRefs.length
-      || !sameReferenceSet(currentControlRefs, representedCurrentControlRefs)) {
-      throw new SutStateIntegrityError(
-        "Activation assessment must represent every exact binding-interaction control fact."
+      .filter((fact) => fact?.role === "material_context_change");
+    for (const fact of contextChanges) {
+      this.validateRetainedInputFact(
+        fact, "fixture", "material_context_change", activationInteraction, "fixture-driver"
       );
     }
     return {
@@ -1523,18 +1560,37 @@ export class RunState {
       recognitionObservationRef: basis.recognition.reference,
       productionObservationRef: basis.production.reference,
       chronologyRef: basis.chronology.reference, contextRef: basis.context.reference,
-      controlBasisRefs
+      contextChangeRefs: contextChanges.map((fact) => fact.reference), controlBasisRefs
     };
   }
 
-  deriveActivationCheckResults({ candidate, proposal, binding, basis, controlBasisRefs, contextChanges }) {
+  deriveActivationCheckResults({
+    candidate, proposal, binding, basis, controlBasisRefs, contextChangeRefs
+  }) {
     const pass = (reason) => ({ status: "passed", reason });
     const fail = (reason) => ({ status: "failed", reason });
     const unresolved = (reason) => ({ status: "unresolved", reason });
     const classifyControl = (refs, supportedValue, reasons) => {
-      if (refs.length === 0) return fail(reasons.missing);
-      if (refs.length > 1) return unresolved(reasons.conflicting);
-      return this.records.get(refs[0]).payload.value === supportedValue
+      const exactRefs = uniqueReferences(refs);
+      if (exactRefs.length === 0) return fail(reasons.missing);
+      if (exactRefs.length > 1) return unresolved(reasons.conflicting);
+      return this.records.get(exactRefs[0]).payload.value === supportedValue
+        ? pass(reasons.passed) : fail(reasons.unsupported);
+    };
+    const combinedControlRefs = (key) => [
+      ...controlBasisRefs.candidateInteraction[key],
+      ...controlBasisRefs.bindingInteraction[key]
+    ];
+    const classifyRedelivery = (key, supportedValue, reasons) => {
+      const candidateRefs = uniqueReferences(controlBasisRefs.candidateInteraction[key]);
+      const bindingRefs = uniqueReferences(controlBasisRefs.bindingInteraction[key]);
+      if (candidateRefs.length === 0) return fail(reasons.missingCandidate);
+      if (bindingRefs.length === 0) return fail(reasons.missingBinding);
+      if (candidateRefs.length > 1 || bindingRefs.length > 1) {
+        return unresolved(reasons.conflicting);
+      }
+      if (candidateRefs[0] !== bindingRefs[0]) return fail(reasons.identityMismatch);
+      return this.records.get(candidateRefs[0]).payload.value === supportedValue
         ? pass(reasons.passed) : fail(reasons.unsupported);
     };
     const current = basis.recognition.payload.occurrenceScenarioDay === basis.chronology.payload.scenarioDay
@@ -1543,14 +1599,6 @@ export class RunState {
       && basis.production.firstInteractionRef === candidate.interactionRef;
     const contextCompatible = basis.context.payload.activity === "japanese_practice"
       && basis.context.payload.taskMode === "spontaneous_production";
-    const priorControlRefs = (control) => basis.interaction.inputReferences
-      .map((ref) => this.records.get(ref))
-      .filter((fact) => fact?.role === "fixture_control_fact" && fact.payload.control === control)
-      .map((fact) => fact.reference);
-    const canonicalConsequenceRetained = priorControlRefs("consequence").length === 1
-      && controlBasisRefs.consequenceRefs.includes(priorControlRefs("consequence")[0]);
-    const canonicalReversibilityRetained = priorControlRefs("reversibility").length === 1
-      && controlBasisRefs.reversibilityRefs.includes(priorControlRefs("reversibility")[0]);
     return {
       scope: isDeepStrictEqual(proposal.proposedScope, candidate.proposedScope)
         && candidate.proposedScope.taskMode === "spontaneous_production"
@@ -1560,32 +1608,34 @@ export class RunState {
       current_stale_basis: current
         ? pass("current_calibration_support") : fail("support_not_current_under_chronology"),
       user_governed_constraints: classifyControl(
-        controlBasisRefs.userGovernedConstraintRefs, "exhaustive_selected_slice_scope",
+        combinedControlRefs("userGovernedConstraintRefs"), "exhaustive_selected_slice_scope",
         { missing: "user_governed_control_missing", conflicting: "conflicting_user_governed_controls",
           passed: "exhaustive_selected_slice_constraints", unsupported: "unsupported_user_governed_constraints" }
       ),
       reversibility: candidate.reversibility !== "retirable_before_activation"
         ? fail("candidate_reversibility_not_supported")
-        : controlBasisRefs.reversibilityRefs.length > 0 && !canonicalReversibilityRetained
-          ? fail("canonical_reversibility_redelivery_missing")
-        : classifyControl(controlBasisRefs.reversibilityRefs, "reversible",
-          { missing: "reversibility_control_missing", conflicting: "conflicting_reversibility_controls",
+        : classifyRedelivery("reversibilityRefs", "reversible",
+          { missingCandidate: "candidate_reversibility_control_missing",
+            missingBinding: "canonical_reversibility_redelivery_missing",
+            conflicting: "conflicting_reversibility_controls",
+            identityMismatch: "canonical_reversibility_redelivery_identity_mismatch",
             passed: "reversible_separate_trial_state", unsupported: "reversibility_not_supported" }),
       consequence: basis.context.payload.consequence !== "low"
         ? fail("context_consequence_not_low")
-        : controlBasisRefs.consequenceRefs.length > 0 && !canonicalConsequenceRetained
-          ? fail("canonical_consequence_redelivery_missing")
-        : classifyControl(controlBasisRefs.consequenceRefs, "low",
-          { missing: "consequence_control_missing", conflicting: "conflicting_consequence_controls",
+        : classifyRedelivery("consequenceRefs", "low",
+          { missingCandidate: "candidate_consequence_control_missing",
+            missingBinding: "canonical_consequence_redelivery_missing",
+            conflicting: "conflicting_consequence_controls",
+            identityMismatch: "canonical_consequence_redelivery_identity_mismatch",
             passed: "low_consequence_synthetic_context", unsupported: "consequence_not_low" }),
-      current_applicability: contextCompatible && contextChanges.length === 0
+      current_applicability: contextCompatible && contextChangeRefs.length === 0
         ? pass("current_japanese_production_context_compatible") : fail("current_context_not_applicable"),
-      retention_basis: classifyControl(controlBasisRefs.retentionBasisRefs, "named_formal_run",
+      retention_basis: classifyControl(combinedControlRefs("retentionBasisRefs"), "named_formal_run",
         { missing: "retention_control_missing", conflicting: "conflicting_retention_controls",
           passed: "named_formal_run_disposable_retention", unsupported: "unsupported_retention_basis" }),
       non_adaptation_boundary: candidate.purpose !== "provisional_evaluative_trial"
         ? fail("candidate_not_provisional")
-        : classifyControl(controlBasisRefs.trialPolicyRefs,
+        : classifyControl(combinedControlRefs("trialPolicyRefs"),
           "bounded_reversible_trial_no_durable_adaptation",
           { missing: "trial_policy_control_missing", conflicting: "conflicting_trial_policy_controls",
             passed: "bounded_zoey_trial_not_durable_adaptation",
@@ -1631,11 +1681,9 @@ export class RunState {
       candidate, binding, basis, activationInteraction
     );
     const materialRefs = activationMaterialBasisRefs(participants);
-    const contextChanges = activationInteraction.inputReferences.map((ref) => this.records.get(ref))
-      .filter((fact) => fact?.role === "material_context_change");
     const expected = this.deriveActivationCheckResults({
       candidate, proposal, binding, basis, controlBasisRefs: participants.controlBasisRefs,
-      contextChanges
+      contextChangeRefs: participants.contextChangeRefs
     });
     const relations = this.relations.filter((relation) => relation.fromRef === assessment.reference
       && relation.relationKind === "basis");
@@ -2465,12 +2513,8 @@ function activationMaterialBasisRefs(participants) {
   return uniqueReferences([
     participants.candidateRef, participants.bindingAssessmentRef, participants.comparisonRef,
     participants.recognitionObservationRef, participants.productionObservationRef,
-    participants.chronologyRef, participants.contextRef,
-    ...participants.controlBasisRefs.trialPolicyRefs,
-    ...participants.controlBasisRefs.userGovernedConstraintRefs,
-    ...participants.controlBasisRefs.consequenceRefs,
-    ...participants.controlBasisRefs.reversibilityRefs,
-    ...participants.controlBasisRefs.retentionBasisRefs
+    participants.chronologyRef, participants.contextRef, ...participants.contextChangeRefs,
+    ...activationControlBasisRefs(participants.controlBasisRefs)
   ]);
 }
 
@@ -2483,11 +2527,44 @@ function activationParticipantRolePairs(participants) {
     [participants.productionObservationRef, "current_production_evidence"],
     [participants.chronologyRef, "activation_chronology"],
     [participants.contextRef, "activation_context"],
-    ...participants.controlBasisRefs.trialPolicyRefs.map((ref) => [ref, "trial_policy_control"]),
-    ...participants.controlBasisRefs.userGovernedConstraintRefs.map((ref) => [ref, "user_governed_control"]),
-    ...participants.controlBasisRefs.consequenceRefs.map((ref) => [ref, "consequence_control"]),
-    ...participants.controlBasisRefs.reversibilityRefs.map((ref) => [ref, "reversibility_control"]),
-    ...participants.controlBasisRefs.retentionBasisRefs.map((ref) => [ref, "retention_control"])
+    ...participants.contextChangeRefs.map((ref) => [ref, "binding_material_context_change"]),
+    ...activationControlRolePairs(
+      participants.controlBasisRefs.candidateInteraction, "candidate"
+    ),
+    ...activationControlRolePairs(
+      participants.controlBasisRefs.bindingInteraction, "binding"
+    )
+  ];
+}
+
+function activationControlRefKey(control) {
+  return {
+    trial_policy: "trialPolicyRefs",
+    user_governed_constraints: "userGovernedConstraintRefs",
+    consequence: "consequenceRefs",
+    reversibility: "reversibilityRefs",
+    evaluation_retention_basis: "retentionBasisRefs"
+  }[control];
+}
+
+function activationControlBasisRefs(controlBasisRefs) {
+  if (!hasExactKeys(controlBasisRefs, ["candidateInteraction", "bindingInteraction"])
+    || !hasExactKeys(controlBasisRefs.candidateInteraction, ACTIVATION_CONTROL_REF_KEYS)
+    || !hasExactKeys(controlBasisRefs.bindingInteraction, ACTIVATION_CONTROL_REF_KEYS)) {
+    throw new SutStateIntegrityError("Activation control-basis inventory is malformed.");
+  }
+  return ["candidateInteraction", "bindingInteraction"].flatMap((region) => (
+    ACTIVATION_CONTROL_REF_KEYS.flatMap((key) => controlBasisRefs[region][key])
+  ));
+}
+
+function activationControlRolePairs(inventory, prefix) {
+  return [
+    ...inventory.trialPolicyRefs.map((ref) => [ref, `${prefix}_trial_policy_control`]),
+    ...inventory.userGovernedConstraintRefs.map((ref) => [ref, `${prefix}_user_governed_control`]),
+    ...inventory.consequenceRefs.map((ref) => [ref, `${prefix}_consequence_control`]),
+    ...inventory.reversibilityRefs.map((ref) => [ref, `${prefix}_reversibility_control`]),
+    ...inventory.retentionBasisRefs.map((ref) => [ref, `${prefix}_retention_control`])
   ];
 }
 
