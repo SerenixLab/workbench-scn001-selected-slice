@@ -1665,7 +1665,9 @@ export class RunState {
     if (competingAssessments.length !== 1 || competingAssessments[0].reference !== assessment.reference) {
       throw new SutStateIntegrityError("Activation assessment identity is duplicated or competing.");
     }
-    const transition = this.records.get(assessment.createdByTransitionRef);
+    const transition = this.resolveUniqueCreatingTransition(
+      assessment, "Activation assessment"
+    );
     const binding = this.records.get(assessment.bindingAssessmentRef);
     this.validateBindingAssessmentClosure(binding);
     const proposal = this.validateCandidateBoundProposal(binding.proposalRef);
@@ -1720,7 +1722,7 @@ export class RunState {
   }
 
   validActiveTrialClosure(trial) {
-    const transition = this.records.get(trial?.createdByTransitionRef);
+    const transition = this.resolveUniqueCreatingTransition(trial, "Active trial");
     const candidate = this.records.get(trial?.candidateRef);
     const assessment = this.records.get(trial?.activationAssessmentRef);
     this.validActivationAssessmentClosure(assessment);
@@ -1836,12 +1838,9 @@ export class RunState {
       || assessment.statusOrigin !== "sut_transition") {
       throw new SutStateIntegrityError("Binding assessment identity is malformed.");
     }
-    const transitions = [...this.records.values()].filter((record) =>
-      record.transitionKind === "assess_proposal_response_binding"
-      && (record.resultReferences?.includes(assessment.reference)
-        || record.reference === assessment.createdByTransitionRef));
-    if (transitions.length !== 1) throw new SutStateIntegrityError("Binding assessment requires exactly one transition.");
-    const transition = transitions[0];
+    const transition = this.resolveUniqueCreatingTransition(
+      assessment, "Binding assessment"
+    );
     const responses = assessment.userResponseRefs.map((reference) => this.records.get(reference));
     if (responses.some((response) => response?.family !== "input_fact"
       || response.origin !== "fixture" || response.role !== "user_response")) {
@@ -2307,6 +2306,19 @@ export class RunState {
 
   findRecord(predicate) {
     return [...this.records.values()].find(predicate);
+  }
+
+  resolveUniqueCreatingTransition(record, label) {
+    const claimants = [...this.records.values()].filter((candidate) => (
+      candidate.reference === record?.createdByTransitionRef
+      || candidate.resultReferences?.includes(record?.reference)
+    ));
+    if (claimants.length !== 1) {
+      throw new SutStateIntegrityError(
+        `${label} requires exactly one retained creating transition.`
+      );
+    }
+    return claimants[0];
   }
 
   allocateOrder() {

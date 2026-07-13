@@ -280,6 +280,44 @@ function activationReadyRun(overrides = {}) {
   return run;
 }
 
+function activationAssessmentOnlyRun() {
+  const run = activationReadyRun();
+  const trial = [...run.records.values()].find((record) => record.family === "active_trial");
+  const transition = run.records.get(trial.createdByTransitionRef);
+  run.records.delete(trial.reference);
+  run.records.delete(transition.reference);
+  run.relations = run.relations.filter((relation) => relation.fromRef !== trial.reference);
+  for (const record of run.records.values()) {
+    if (record.transitionKind === "process_interaction_segment") {
+      record.resultReferences = record.resultReferences.filter(
+        (reference) => reference !== transition.reference
+      );
+    }
+  }
+  return run;
+}
+
+function cloneRetainedTransition(run, transition, overrides = {}) {
+  const clone = {
+    ...structuredClone(transition),
+    reference: createReference("transition"),
+    ...overrides
+  };
+  run.records.set(clone.reference, clone);
+  return clone;
+}
+
+function retainedMutationSnapshot(run) {
+  return structuredClone({
+    nextOrder: run.nextOrder,
+    records: [...run.records.entries()],
+    relations: run.relations,
+    actorReferences: [...run.actorReferences.entries()],
+    sourceFactBindings: [...run.sourceFactBindings.entries()],
+    pendingInteractions: run.pendingInteractions
+  });
+}
+
 function appendEqualScopeCandidate(run) {
   const existingRefs = new Set([...run.records.values()]
     .filter((record) => record.family === "trial_candidate")
@@ -1823,6 +1861,10 @@ test("activation assessment derives nine checks and a separate active trial from
   assert.equal(assessment.overallStatus, "sufficient");
   assert.equal(trial.activationAssessmentRef, assessment.reference);
   assert.equal(run.records.get(trial.candidateRef).lifecycleStatus, "formed_non_active");
+  for (const record of [assessment, trial]) assert.equal([...run.records.values()].filter(
+    (candidate) => candidate.reference === record.createdByTransitionRef
+      || candidate.resultReferences?.includes(record.reference)
+  ).length, 1);
   run.validActivationAssessmentClosure(assessment);
   run.validActiveTrialClosure(trial);
 });
@@ -1999,6 +2041,73 @@ test("activation assessment participant, transition, and relation attacks fail e
     const transition = run.records.get(assessment.createdByTransitionRef);
     attack({ run, assessment, transition });
     assert.throws(() => run.validActivationAssessmentClosure(assessment), /Activation|Binding/);
+  }
+});
+
+test("activation assessment rejects duplicate creating-transition claims across pointer rewrites", () => {
+  for (const rewritePointer of [false, true]) {
+    const run = activationReadyRun();
+    const assessment = [...run.records.values()].find(
+      (record) => record.family === "activation_assessment"
+    );
+    const original = run.records.get(assessment.createdByTransitionRef);
+    const clone = cloneRetainedTransition(run, original);
+    if (rewritePointer) assessment.createdByTransitionRef = clone.reference;
+    assert.throws(
+      () => run.validActivationAssessmentClosure(assessment),
+      /Activation assessment requires exactly one retained creating transition/
+    );
+  }
+});
+
+test("active trial rejects duplicate creating-transition claims across pointer rewrites", () => {
+  for (const rewritePointer of [false, true]) {
+    const run = activationReadyRun();
+    const trial = [...run.records.values()].find((record) => record.family === "active_trial");
+    const original = run.records.get(trial.createdByTransitionRef);
+    const clone = cloneRetainedTransition(run, original);
+    if (rewritePointer) trial.createdByTransitionRef = clone.reference;
+    assert.throws(
+      () => run.validActiveTrialClosure(trial),
+      /Active trial requires exactly one retained creating transition/
+    );
+  }
+});
+
+test("malformed or partial transition claims cannot hide behind the canonical creator", () => {
+  const variants = [
+    (clone) => { clone.transitionKind = "other"; },
+    (clone) => { clone.origin = "fixture"; },
+    (clone) => { clone.interactionRef = createReference("interaction"); },
+    (clone) => { clone.inputReferences = []; },
+    (clone) => { clone.result = "other"; },
+    (clone) => { clone.family = "other"; }
+  ];
+  for (const family of ["activation_assessment", "active_trial"]) {
+    for (const mutate of variants) {
+      const run = activationReadyRun();
+      const record = [...run.records.values()].find((item) => item.family === family);
+      const clone = cloneRetainedTransition(run, run.records.get(record.createdByTransitionRef));
+      mutate(clone);
+      assert.throws(
+        () => family === "activation_assessment"
+          ? run.validActivationAssessmentClosure(record)
+          : run.validActiveTrialClosure(record),
+        /requires exactly one retained creating transition/
+      );
+    }
+    const run = activationReadyRun();
+    const record = [...run.records.values()].find((item) => item.family === family);
+    const partial = {
+      reference: createReference("transition"), resultReferences: [record.reference]
+    };
+    run.records.set(partial.reference, partial);
+    assert.throws(
+      () => family === "activation_assessment"
+        ? run.validActivationAssessmentClosure(record)
+        : run.validActiveTrialClosure(record),
+      /requires exactly one retained creating transition/
+    );
   }
 });
 
@@ -2280,6 +2389,73 @@ test("activation methods reject fake transitions and wrong interactions before m
       pendingInteractions: run.pendingInteractions
     }, before);
   }
+});
+
+test("competing creator evidence fails activation replay before retained mutation", () => {
+  const cases = [
+    (run, assessment, trial, binding, interaction) => {
+      const clone = cloneRetainedTransition(
+        run, run.records.get(assessment.createdByTransitionRef)
+      );
+      assessment.createdByTransitionRef = clone.reference;
+      return () => run.assessProductionTrialActivation(
+        interaction,
+        interaction.inputReferences.map((ref) => run.records.get(ref)),
+        binding.createdByTransitionRef
+      );
+    },
+    (run, assessment, trial, binding, interaction) => {
+      const clone = cloneRetainedTransition(run, run.records.get(trial.createdByTransitionRef));
+      trial.createdByTransitionRef = clone.reference;
+      return () => run.activateProductionFocusedTrial(
+        interaction, assessment.createdByTransitionRef
+      );
+    },
+    (run, assessment, trial, binding, interaction) => {
+      cloneRetainedTransition(run, run.records.get(binding.createdByTransitionRef), {
+        transitionKind: "other"
+      });
+      return () => run.assessProductionTrialActivation(
+        interaction,
+        interaction.inputReferences.map((ref) => run.records.get(ref)),
+        binding.createdByTransitionRef
+      );
+    }
+  ];
+  for (const prepare of cases) {
+    const run = activationReadyRun();
+    const assessment = [...run.records.values()].find(
+      (record) => record.family === "activation_assessment"
+    );
+    const trial = [...run.records.values()].find((record) => record.family === "active_trial");
+    const binding = run.records.get(assessment.bindingAssessmentRef);
+    const interaction = run.records.get(binding.interactionRef);
+    const replay = prepare(run, assessment, trial, binding, interaction);
+    const before = retainedMutationSnapshot(run);
+    assert.throws(replay, /requires exactly one retained creating transition/);
+    assert.deepEqual(retainedMutationSnapshot(run), before);
+  }
+});
+
+test("a cloned assessment transition cannot create an active trial", () => {
+  const run = activationAssessmentOnlyRun();
+  const assessment = [...run.records.values()].find(
+    (record) => record.family === "activation_assessment"
+  );
+  const interaction = run.records.get(assessment.interactionRef);
+  const clone = cloneRetainedTransition(
+    run, run.records.get(assessment.createdByTransitionRef)
+  );
+  assessment.createdByTransitionRef = clone.reference;
+  const before = retainedMutationSnapshot(run);
+  assert.throws(
+    () => run.activateProductionFocusedTrial(interaction, clone.reference),
+    /Activation assessment requires exactly one retained creating transition/
+  );
+  assert.deepEqual(retainedMutationSnapshot(run), before);
+  assert.equal(
+    [...run.records.values()].some((record) => record.family === "active_trial"), false
+  );
 });
 
 test("activation-relevant facts require their exact semantic-source actors", () => {

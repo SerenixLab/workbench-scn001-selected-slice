@@ -449,6 +449,10 @@ test("branch delivery waits for exact processed realization then creates canonic
     record.reference === activation.createdByTransitionRef
   ));
   assert.equal(activationTransition.inputReferences.length, 12);
+  for (const record of [activation, trial]) assert.equal(snapshot.records.filter(
+    (candidate) => candidate.reference === record.createdByTransitionRef
+      || candidate.resultReferences?.includes(record.reference)
+  ).length, 1);
   for (const [key, roles] of [
     ["consequenceRefs", ["candidate_consequence_control", "binding_consequence_control"]],
     ["reversibilityRefs", ["candidate_reversibility_control", "binding_reversibility_control"]]
@@ -477,6 +481,24 @@ test("branch delivery waits for exact processed realization then creates canonic
   assert.equal(replay.records.filter((record) => (
     record.transitionKind === "activate_production_focused_trial"
   )).length, 1);
+  for (const family of ["activation_assessment", "active_trial"]) {
+    const record = replay.records.find((candidate) => candidate.family === family);
+    assert.equal(replay.records.filter((candidate) => (
+      candidate.reference === record.createdByTransitionRef
+        || candidate.resultReferences?.includes(record.reference)
+    )).length, 1);
+  }
+  const replayActivation = replay.records.find(
+    (record) => record.family === "activation_assessment"
+  );
+  const replayTrial = replay.records.find((record) => record.family === "active_trial");
+  assert.equal(replay.relations.filter((relation) => (
+    relation.fromRef === replayActivation.reference && relation.relationKind === "basis"
+  )).length, 14);
+  assert.equal(replay.relations.filter((relation) => (
+    relation.fromRef === replayTrial.reference
+      && relation.relationKind === "transition_ancestry"
+  )).length, 2);
   harness.endRun(runRef);
   assert.throws(() => harness.captureInspectionSnapshot(runRef), /Unknown or closed/);
 });
