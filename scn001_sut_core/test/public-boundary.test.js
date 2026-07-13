@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import * as sutPackage from "../index.js";
 import { createSutBoundary, SUT_PUBLIC_BOUNDARY_METHODS } from "../index.js";
 
 test("the public boundary exposes only non-answer-selecting lifecycle, ingress, output, and inspection operations", () => {
   const boundary = createSutBoundary();
 
+  assert.deepEqual(Object.keys(sutPackage).sort(), [
+    "SUT_PUBLIC_BOUNDARY_METHODS", "createSutBoundary"
+  ]);
   assert.deepEqual(Object.keys(boundary).sort(), [...SUT_PUBLIC_BOUNDARY_METHODS].sort());
   for (const method of SUT_PUBLIC_BOUNDARY_METHODS) {
     assert.doesNotMatch(method, /(decision|expected|transition)/i);
