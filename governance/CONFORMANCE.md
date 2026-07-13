@@ -71,7 +71,7 @@ Unless a row says otherwise:
 | `ENG-CONF-STATE-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Activation and active-trial creation consume one exact lineage/control chain and require exactly one retained creating transition for binding, assessment, and trial before reuse or mutation. | `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2` | Exact transition/ref/order/role assertions; clone, pointer-rewrite, malformed/partial claimant, fake-trigger, no-mutation, substitution, provenance, replay, and ancestry attacks. Contract and negative modes. | `scn001_sut_core/src/runState.js`; package tests | Default | uncovered | merge-blocking; claim-blocking | The bounded production activation mutation is covered; later-use applicability, behavior, outcome, and later lifecycle mutations remain absent. |
 | `ENG-HEALTH-ABSTRACTION-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Public boundary, harness, validation, fixture-projection, and run-state abstractions are non-throwaway. | `ADR-001 R1` | Bounded package/module responsibilities; manual justification review. | `README.md`; `scn001_sut_core/src/`; `scn001_eval/src/`; package `AGENTS.md` files | Local-recorded review | review-only | advisory or merge-blocking by condition | Abstraction justification is not captured by an automated check; future generalization could outrun concrete pressure. |
 | `ENG-HEALTH-API-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The SUT surface is unchanged; evaluation package root now exports only the formal one-argument harness constructor, with renderer/projector helpers and failure injection internal. | Rule entry | Exact package-root export test; constructor override rejection; internal-only SUT resolvers and evaluation mechanism-test seam. | `scn001_sut_core/index.js`; `scn001_eval/index.js`; package tests; `scripts/check-dependency-boundary.mjs` | Default | uncovered | merge-blocking; claim-blocking | Governing consumer/need review for future API additions remains manual. |
-| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The current corrective increment closes only activation-assessment/active-trial creating-transition ambiguity and the adjacent binding-claimant filter gap. | Rule entry | Focused-diff inspection against starting `HEAD` `f8acef66d76fced72ef37e7195463faf36e9fa61`; shared retained-state creator-claimant resolution and exact clone/pointer-rewrite replay closure. | Current corrective commit and diff; SUT/evaluation tests; corrective and independent-review records below | Passing independent ChatGPT review of corrective commit `2317589031cef4ea1a457b78ef25158960efeee5` is recorded below; the failed review of `f8acef66d76fced72ef37e7195463faf36e9fa61` and all earlier review history remain preserved. | review-only | advisory or merge-blocking by condition | The bounded creating-transition uniqueness correction received qualifying independent review for this change. Future non-throwaway semantic, mutation, replay, or transition-identity changes require fresh change-specific review. |
+| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The current documentation increment synchronizes the README with the accepted implementation through the separate active production trial and identifies focused drill as the next frontier. | Rule entry | Focused README and claim-boundary diff against starting `HEAD` `15824900c2c9c64ef513d3d2229931fcaf166bff`; historical implementation and review records remain unchanged. | Current documentation commit and diff; `README.md`; documentation addendum below | Fresh independent review of the pushed documentation synchronization commit is pending; the implementing task does not self-attest a passing review. | uncovered | advisory or merge-blocking by condition | The bounded documentation correction has not yet received qualifying independent review. Historical passing and failed reviews remain scoped to their recorded commits. |
 | `ENG-HEALTH-COMMENT-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No JavaScript implementation/test comment is present or used to justify behavior. Future trigger: adding, generating, or relying on a code comment. | Rule entry | Source inventory. | `rg` over `scn001_sut_core`, `scn001_eval`, `tests`, and `scripts` returned no JavaScript comment lines | Not applicable until trigger. | N/A | advisory or merge-blocking by condition | Governance prose is controlled as documentation/claims; code comments require review when introduced. |
 | `ENG-HEALTH-DEAD-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No dead, commented-out, prototype, experiment, or throwaway implementation artifact is present. Future trigger: introducing or promoting one. | Rule entry | Repository and source inventory; manual review. | Current package/source tree; no throwaway directory or commented-out implementation | Not applicable until trigger. | N/A | merge-blocking; promotion-blocking | Static gate does not comprehensively prove reachability; disposition must change if a prototype appears. |
 | `ENG-HEALTH-DEPENDENCY-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Evaluation declares a runtime dependency on the local SUT package and CI installs the workspace lock. | Rule entry | Local file dependency; lockfile; dependency-boundary static check; no external runtime dependency. | `package-lock.json`; `scn001_eval/package.json`; `scn001_sut_core/package.json`; `scripts/check-dependency-boundary.mjs`; `README.md` | Default | uncovered | merge-blocking; promotion-blocking | Dependency rationale/maintenance review is manual; future external dependencies require a new review record. |
@@ -1309,3 +1309,40 @@ With this recorded review outcome, the current applicability/status counts are:
 * 34 applicable rules `uncovered`;
 * no applicable rule `revalidation-required`;
 * no rule claimed `enforced`.
+
+## README Truth Synchronization Addendum
+
+The documentation change based on starting `HEAD`
+`15824900c2c9c64ef513d3d2229931fcaf166bff` has one primary purpose: synchronize
+the README with the accepted Step-6 implementation and its current semantic
+frontier.
+
+The README now describes the implemented bounded chain from raw run-local facts
+through attribution, temporal assessment, dimension comparison, formed/non-active
+candidate, candidate-bound proposal, proposal realization, exact proposal-response
+binding, nine-check activation assessment, and separate active production trial.
+It identifies focused-drill behavior after `CP-PROD-ACTIVE` as the next frontier
+instead of presenting proposal or activation as absent or next.
+
+The repository role, scenario-provisional architecture claim, governance-lock
+reference, package direction, and durable extraction boundary remain unchanged.
+The README explicitly keeps focused drill, direct correction, delayed correction,
+later-use applicability, outcomes, explanations, formal evaluation, scoring,
+milestone acceptance, broader `SCN-001` acceptance, and production readiness
+outside the implemented or claimed boundary.
+
+The affected rules are `ENG-BASE-001`, `ENG-BASE-REPO-001`, `ENG-CHANGE-001`,
+`ENG-CLAIM-001`, `ENG-CLAIM-002`, `ENG-CLAIM-WORKBENCH-001`,
+`ENG-CONF-CLAIM-001`, and `ENG-HEALTH-CHANGE-001`. Applicability, rule revisions,
+promotion mappings, evidence identities outside the README, active exceptions,
+and all historical reviews remain unchanged.
+
+At completion of the implementing task, `ENG-HEALTH-CHANGE-001 = uncovered`.
+Fresh independent review of the pushed documentation synchronization commit is
+pending, and this task does not self-attest a passing review. Current counts are
+44 applicable and 5 not applicable; 9 applicable rules are `review-only`, 35 are
+`uncovered`, none is `revalidation-required`, and no rule is claimed `enforced`.
+
+This documentation correction creates no implementation behavior, formal
+evaluation artifact, compatibility claim, scoring artifact, milestone-completion
+claim, broader `SCN-001` claim, or production-readiness claim.

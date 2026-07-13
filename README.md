@@ -30,7 +30,23 @@ scn001_eval -> @zoey/scn001-sut-core public package export
 scn001_sut_core -> no evaluation dependency
 ```
 
-`scn001_sut_core` provides the minimum run lifecycle, closed SUT-visible input ingress, run-scoped fact/transition/relation retention, and passive inspection surfaces. Its implemented semantic segment derives attributed current-user assertions, `>90`-scenario-day temporal eligibility, and dimension-scoped recognition/spontaneous-production score comparisons from raw communications, observations, and chronology. An explicitly retained comparison plus a declared fixed affordance can now form one immutable, non-active production-focused trial candidate; unsupported, equal, missing, or invalid support records a separate non-activation disposition. It does not create global or current-skill facts, proposals, active trials, behavior outputs, or outcomes. `scn001_eval` owns allowlist projection from evaluation records and a harness that calls only that public SUT boundary.
+`scn001_sut_core` provides the minimum run lifecycle, closed SUT-visible input ingress, run-scoped fact/transition/relation retention, and passive inspection surfaces. Its implemented bounded chain is:
+
+```text
+raw run-local facts
+-> attribution and temporal assessment
+-> dimension comparison
+-> formed/non-active production candidate
+-> candidate-bound proposal
+-> proposal realization
+-> exact proposal-response binding
+-> nine-check activation assessment
+-> separate active production trial
+```
+
+The candidate remains immutable, `formed_non_active`, and distinct from the active trial. Proposal intent, SUT selection, simulated realization, raw user response, binding assessment, activation assessment, and active-trial state retain separate identities and exact typed local closure. Unsupported, equal, missing, invalid, or conflicting support/control states remain inspectable without silently creating an active trial. `scn001_eval` owns allowlist projection from evaluation records and a harness that calls only the declared public SUT boundary.
+
+The implemented chain stops at `CP-PROD-ACTIVE`. It does not implement focused-drill behavior, direct correction, delayed-correction trials, later-use applicability, outcomes, explanations, formal evaluation, or scoring.
 
 This is engineering conformance infrastructure. It is not a formal evaluation record, behavioral-compatibility claim, milestone acceptance, or `SCN-001` pass.
 
@@ -61,6 +77,7 @@ This workbench does not claim:
 - permanent evaluation architecture;
 - full `SCN-001` pass;
 - milestone acceptance;
+- broader `SCN-001` acceptance;
 - production readiness.
 
 ## Extraction Rule
@@ -69,17 +86,15 @@ Milestone success, code maturity, age, reuse, or repository renaming does not in
 
 Durable system-project extraction is blocked pending `REPO-001` or an equivalent accepted responsibility-boundary decision.
 
-## Initial Implementation Order
+## Current Semantic Frontier
 
-Build the minimum boundary spine together with concrete selected-slice pressure. Do not build a generic Zoey platform first.
+The boundary spine and production activation chain are implemented through `CP-PROD-ACTIVE`. The next bounded semantic frontier is focused-drill behavior from that retained active trial.
 
-Initial sequence:
+Future increments must continue from the existing exact candidate/proposal/binding/activation closure:
 
-1. mechanically enforce `scn001_eval -> scn001_sut_core` only;
-2. create the smallest closed SUT ingress needed by the first fixture facts;
-3. create run-scoped state identity, ordering, and reference primitives required by accepted selected-slice decisions;
-4. implement the first concrete transition segment;
-5. add passive inspection for state and evidence actually produced;
-6. extend output and simulator seams only when the next concrete transition requires them.
+1. preserve the formed/non-active candidate as distinct from the active trial;
+2. use the retained active production trial as the bounded basis for focused-drill behavior;
+3. keep direct correction, delayed-correction trials, and later-use applicability as later, separate semantic families;
+4. extend output and simulator seams only when the next concrete transition requires them.
 
-The next bounded increment should introduce the distinct proposal/activation decision only after defining its current-context, temporal, consequence, and reversibility inputs. Candidate existence must remain insufficient for activation, and the current non-active candidate must remain behaviorally inert.
+Focused-drill behavior is not implemented by this README update. No current artifact establishes behavioral compatibility, formal evidence, scoring, milestone acceptance, broader `SCN-001` acceptance, or production readiness.
