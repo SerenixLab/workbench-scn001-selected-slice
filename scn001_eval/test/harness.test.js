@@ -466,6 +466,42 @@ test("branch delivery waits for exact processed realization then creates canonic
   assert.throws(() => harness.captureInspectionSnapshot(runRef), /Unknown or closed/);
 });
 
+test("activation assessment and active trial identities are isolated across independent runs", () => {
+  const boundary = createSutBoundary();
+  const harness = createEvaluationHarness(boundary);
+  const activate = () => {
+    const runRef = harness.startRun();
+    harness.deliverFixtureRecords(runRef, productionProposalRecords());
+    harness.processCurrentInteraction(runRef);
+    harness.realizeAvailableOutputs(runRef);
+    harness.processCurrentInteraction(runRef);
+    harness.deliverProposalAcceptanceIfEligible(runRef, proposalAcceptanceRecords());
+    harness.processCurrentInteraction(runRef);
+    const snapshot = harness.captureInspectionSnapshot(runRef);
+    return {
+      runRef,
+      assessment: snapshot.records.find((record) => record.family === "activation_assessment"),
+      trial: snapshot.records.find((record) => record.family === "active_trial")
+    };
+  };
+  const first = activate();
+  harness.endRun(first.runRef);
+  const second = activate();
+  assert.notEqual(second.assessment.reference, first.assessment.reference);
+  assert.notEqual(second.trial.reference, first.trial.reference);
+  assert.equal(harness.captureInspectionSnapshot(second.runRef).records.some((record) => (
+    record.reference === first.assessment.reference || record.reference === first.trial.reference
+  )), false);
+  assert.throws(
+    () => boundary.inspectRecord(second.runRef, first.assessment.reference),
+    /Unknown or closed/
+  );
+  assert.throws(
+    () => boundary.inspectRecord(second.runRef, first.trial.reference),
+    /Unknown or closed/
+  );
+});
+
 test("acceptance branch validates complete C/A/P/S/F/R/E closure before ingress", () => {
   const attacks = [
     (s, x) => { x.proposal.materialIntent = "corrupted"; },
@@ -556,7 +592,7 @@ test("acceptance package validation rejects missing, extra, caller realization, 
 test("acceptance package rejects wrong actors and order before source allocation or SUT mutation", () => {
   for (const mutate of [
     (records) => { records[0].sourceActor = "fixture-driver"; },
-    (records) => { records[0].sourceActor = "simulated_dependency"; },
+    (records) => { records[0].sourceActor = "simulated-dependency"; },
     (records) => { records[1].sourceActor = "synthetic-user-a"; },
     (records) => { records[4].occurrenceOrder = 99; }
   ]) {

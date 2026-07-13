@@ -1211,6 +1211,7 @@ export class RunState {
     const proposal = this.validateCandidateBoundProposal(binding.proposalRef);
     const candidateClosure = this.validateProductionCandidateClosure(proposal.candidateRef);
     const candidate = candidateClosure.candidate;
+    this.resolveActivationBindingContext(binding, interaction);
     const basis = this.resolveActivationCandidateBasis(candidate);
     const participants = this.resolveActivationParticipants(candidate, binding, basis, interaction);
     const contextChanges = interactionFacts.filter((fact) => fact.role === "material_context_change");
@@ -1344,8 +1345,12 @@ export class RunState {
     if (chronologyFacts.length !== 1 || contexts.length !== 1) {
       throw new SutStateIntegrityError("Activation requires exact chronology and context participants.");
     }
-    this.validateRetainedInputFact(chronologyFacts[0], "fixture", "chronology_fact", interaction);
-    this.validateRetainedInputFact(contexts[0], "fixture", "context_label", interaction);
+    this.validateRetainedInputFact(
+      chronologyFacts[0], "fixture", "chronology_fact", interaction, "fixture-driver"
+    );
+    this.validateRetainedInputFact(
+      contexts[0], "fixture", "context_label", interaction, "fixture-driver"
+    );
     return { interaction, comparison, recognition, production, chronology: chronologyFacts[0], context: contexts[0] };
   }
 
@@ -1381,35 +1386,64 @@ export class RunState {
       throw new SutStateIntegrityError("Activation comparison observation closure is malformed.");
     }
     this.validateRetainedInputFact(
-      observation, "fixture", "task_observation", this.records.get(comparison.interactionRef)
+      observation, "fixture", "task_observation", this.records.get(comparison.interactionRef),
+      "fixture-scorer"
     );
     return observation;
   }
 
-  validateRetainedInputFact(fact, origin, role, interaction) {
+  validateRetainedInputFact(fact, origin, role, interaction, expectedSourceActor) {
     const binding = this.sourceFactBindings.get(fact?.sourceFactRef);
-    const actor = this.records.get(fact.sourceActorRef);
-    const ingestion = this.records.get(interaction.createdByTransitionRef);
-    const firstInteraction = this.records.get(fact.firstInteractionRef);
+    const actor = this.records.get(fact?.sourceActorRef);
+    const ingestion = this.records.get(interaction?.createdByTransitionRef);
+    const firstInteraction = this.records.get(fact?.firstInteractionRef);
     const firstIngestion = this.records.get(firstInteraction?.createdByTransitionRef);
     const source = this.relations.filter((relation) => relation.fromRef === fact.reference
       && relation.relationKind === "source");
     const basis = this.relations.filter((relation) => relation.fromRef === ingestion?.reference
       && relation.toRef === fact.reference && relation.relationKind === "basis");
+    const firstBasis = this.relations.filter((relation) => (
+      relation.fromRef === firstIngestion?.reference
+      && relation.toRef === fact.reference
+      && relation.relationKind === "basis"
+    ));
+    const containingInteractions = [...this.records.values()]
+      .filter((record) => record.family === "interaction_segment"
+        && record.inputReferences?.includes(fact.reference))
+      .sort(byCreatedOrder);
     if (fact?.family !== "input_fact" || fact.origin !== origin || fact.role !== role
       || binding?.inputFactRef !== fact.reference
       || !isDeepStrictEqual(binding.semanticMeaning, sourceFactMeaning(fact.payload))
       || actor?.family !== "semantic_source" || actor.origin !== origin
+      || fact.payload.sourceActor !== expectedSourceActor
+      || actor.sourceActor !== expectedSourceActor
       || actor.sourceActor !== fact.payload.sourceActor || actor.reference !== fact.sourceActorRef
       || source.length !== 1 || source[0].toRef !== actor.reference
       || source[0].targetRole !== "semantic_source" || source[0].assertedByRole !== "sut"
       || source[0].effectiveOrder !== fact.createdOrder
       || source[0].createdOrder !== firstIngestion?.createdOrder
-      || interaction?.family !== "interaction_segment" || !interaction.inputReferences.includes(fact.reference)
+      || actor.createdOrder >= fact.createdOrder
+      || firstInteraction?.family !== "interaction_segment" || firstInteraction.origin !== "sut"
+      || containingInteractions.length === 0
+      || containingInteractions[0].reference !== firstInteraction.reference
+      || firstInteraction.inputReferences.filter((ref) => ref === fact.reference).length !== 1
+      || firstIngestion?.family !== "sut_transition_evidence" || firstIngestion.origin !== "sut"
+      || firstIngestion.transitionKind !== "ingest_sut_visible_inputs"
+      || firstIngestion.interactionRef !== firstInteraction.reference
+      || firstIngestion.inputReferences?.filter((ref) => ref === fact.reference).length !== 1
+      || firstIngestion.resultReferences?.filter((ref) => ref === firstInteraction.reference).length !== 1
+      || firstBasis.length !== 1 || firstBasis[0].targetRole !== "ingested_input"
+      || firstBasis[0].assertedByRole !== "sut"
+      || firstBasis[0].effectiveOrder !== firstIngestion.createdOrder
+      || firstBasis[0].createdOrder !== firstIngestion.createdOrder
+      || fact.createdOrder >= firstInteraction.createdOrder
+      || firstInteraction.createdOrder >= firstIngestion.createdOrder
+      || interaction?.family !== "interaction_segment" || interaction.origin !== "sut"
+      || interaction.inputReferences.filter((ref) => ref === fact.reference).length !== 1
       || ingestion?.family !== "sut_transition_evidence" || ingestion.origin !== "sut"
       || ingestion.transitionKind !== "ingest_sut_visible_inputs"
       || ingestion.interactionRef !== interaction.reference
-      || !ingestion.inputReferences.includes(fact.reference)
+      || ingestion.inputReferences.filter((ref) => ref === fact.reference).length !== 1
       || basis.length !== 1 || basis[0].targetRole !== "ingested_input"
       || basis[0].assertedByRole !== "sut" || basis[0].effectiveOrder !== ingestion.createdOrder
       || basis[0].createdOrder !== ingestion.createdOrder) {
@@ -1417,11 +1451,43 @@ export class RunState {
     }
   }
 
+  resolveActivationBindingContext(binding, activationInteraction) {
+    const bindingInteraction = this.records.get(binding.interactionRef);
+    const bindingTransition = this.records.get(binding.createdByTransitionRef);
+    const ingestion = this.records.get(bindingInteraction?.createdByTransitionRef);
+    const realizationRefs = binding.realizationFactRefs ?? [];
+    const responseRefs = binding.userResponseRefs ?? [];
+    const realization = this.records.get(realizationRefs[0]);
+    const response = this.records.get(responseRefs[0]);
+    if (bindingInteraction?.family !== "interaction_segment" || bindingInteraction.origin !== "sut"
+      || activationInteraction?.reference !== bindingInteraction.reference
+      || realizationRefs.length !== 1 || responseRefs.length !== 1
+      || bindingInteraction.inputReferences.filter((ref) => ref === realization?.reference).length !== 1
+      || bindingInteraction.inputReferences.filter((ref) => ref === response?.reference).length !== 1
+      || ingestion?.family !== "sut_transition_evidence" || ingestion.origin !== "sut"
+      || ingestion.transitionKind !== "ingest_sut_visible_inputs"
+      || ingestion.interactionRef !== bindingInteraction.reference
+      || bindingInteraction.createdOrder >= ingestion.createdOrder
+      || ingestion.createdOrder >= binding.createdOrder
+      || binding.createdOrder >= bindingTransition?.createdOrder) {
+      throw new SutStateIntegrityError("Activation must retain the exact binding interaction closure.");
+    }
+    this.validateRetainedInputFact(
+      realization, "simulator", "simulator_realization", bindingInteraction, "simulated-dependency"
+    );
+    this.validateRetainedInputFact(
+      response, "fixture", "user_response", bindingInteraction, "synthetic-user-a"
+    );
+    return { bindingInteraction, ingestion, bindingTransition, realization, response };
+  }
+
   resolveActivationParticipants(candidate, binding, basis, activationInteraction) {
     for (const interaction of [basis.interaction, activationInteraction]) {
       for (const fact of interaction.inputReferences.map((ref) => this.records.get(ref))
         .filter((record) => record?.role === "fixture_control_fact")) {
-        this.validateRetainedInputFact(fact, "fixture", "fixture_control_fact", interaction);
+        this.validateRetainedInputFact(
+          fact, "fixture", "fixture_control_fact", interaction, "fixture-driver"
+        );
       }
     }
     const controlRefs = (interaction, control) => interaction.inputReferences
@@ -1435,6 +1501,22 @@ export class RunState {
       reversibilityRefs: controlRefs(activationInteraction, "reversibility"),
       retentionBasisRefs: controlRefs(activationInteraction, "evaluation_retention_basis")
     };
+    const currentControlRefs = activationInteraction.inputReferences
+      .map((ref) => this.records.get(ref))
+      .filter((fact) => fact?.role === "fixture_control_fact")
+      .map((fact) => fact.reference);
+    const representedCurrentControlRefs = [
+      ...controlBasisRefs.userGovernedConstraintRefs,
+      ...controlBasisRefs.consequenceRefs,
+      ...controlBasisRefs.reversibilityRefs,
+      ...controlBasisRefs.retentionBasisRefs
+    ];
+    if (currentControlRefs.length !== representedCurrentControlRefs.length
+      || !sameReferenceSet(currentControlRefs, representedCurrentControlRefs)) {
+      throw new SutStateIntegrityError(
+        "Activation assessment must represent every exact binding-interaction control fact."
+      );
+    }
     return {
       candidateRef: candidate.reference, bindingAssessmentRef: binding.reference,
       comparisonRef: basis.comparison.reference,
@@ -1534,14 +1616,16 @@ export class RunState {
       throw new SutStateIntegrityError("Activation assessment identity is duplicated or competing.");
     }
     const transition = this.records.get(assessment.createdByTransitionRef);
-    const candidate = this.records.get(assessment.candidateRef);
     const binding = this.records.get(assessment.bindingAssessmentRef);
     this.validateBindingAssessmentClosure(binding);
     const proposal = this.validateCandidateBoundProposal(binding.proposalRef);
+    const candidateClosure = this.validateProductionCandidateClosure(proposal.candidateRef);
+    const candidate = candidateClosure.candidate;
     const activationInteraction = this.records.get(assessment.interactionRef);
     if (activationInteraction?.family !== "interaction_segment" || activationInteraction.origin !== "sut") {
       throw new SutStateIntegrityError("Activation assessment interaction is malformed.");
     }
+    const bindingContext = this.resolveActivationBindingContext(binding, activationInteraction);
     const basis = this.resolveActivationCandidateBasis(candidate);
     const participants = this.resolveActivationParticipants(
       candidate, binding, basis, activationInteraction
@@ -1570,6 +1654,7 @@ export class RunState {
       || assessment.productionObservationRef !== participants.productionObservationRef
       || assessment.chronologyRef !== participants.chronologyRef
       || assessment.contextRef !== participants.contextRef
+      || assessment.candidateRef !== proposal.candidateRef
       || relations.length !== expectedPairs.length
       || !sameRoleReferencePairs(relations, expectedPairs)
       || relations.some((relation) => relation.assertedByRole !== "sut"
@@ -1578,6 +1663,7 @@ export class RunState {
       || !isDeepStrictEqual(assessment.checkResults, expected)
       || assessment.overallStatus !== deriveActivationOverallStatus(expected)
       || !isDeepStrictEqual(assessment.activeScope, candidate.proposedScope)
+      || bindingContext.bindingTransition.createdOrder >= assessment.createdOrder
       || assessment.createdOrder >= transition.createdOrder
       || materialRefs.some((ref) => this.records.get(ref)?.createdOrder >= assessment.createdOrder)) {
       throw new SutStateIntegrityError("Activation assessment closure is malformed.");
@@ -1590,6 +1676,7 @@ export class RunState {
     const candidate = this.records.get(trial?.candidateRef);
     const assessment = this.records.get(trial?.activationAssessmentRef);
     this.validActivationAssessmentClosure(assessment);
+    const assessmentTransition = this.records.get(assessment?.createdByTransitionRef);
     const ancestry = this.relations.filter((relation) => relation.fromRef === trial?.reference
       && relation.relationKind === "transition_ancestry");
     const competingTrials = [...this.records.values()].filter((record) => (
@@ -1607,6 +1694,7 @@ export class RunState {
       || trial.correctionPath !== "narrow_retire_supersede_or_clarify"
       || competingTrials.length !== 1 || competingTrials[0].reference !== trial.reference
       || trial.statusOrigin !== "sut_transition" || !isDeepStrictEqual(trial.activeScope, candidate.proposedScope)
+      || trial.candidateRef !== assessment.candidateRef
       || candidate.lifecycleStatus !== "formed_non_active" || candidate.lifecycleVersion !== 1
       || assessment.overallStatus !== "sufficient"
       || Object.values(assessment.checkResults).some((result) => result.status !== "passed")
@@ -1623,7 +1711,9 @@ export class RunState {
       || !ancestry.some((relation) => relation.toRef === assessment.reference && relation.targetRole === "activation_assessment")
       || ancestry.some((relation) => relation.assertedByRole !== "sut"
         || relation.effectiveOrder !== trial.createdOrder || relation.createdOrder !== transition.createdOrder)
-      || assessment.createdOrder >= trial.createdOrder || trial.createdOrder >= transition.createdOrder) {
+      || assessment.createdOrder >= assessmentTransition.createdOrder
+      || assessmentTransition.createdOrder >= trial.createdOrder
+      || trial.createdOrder >= transition.createdOrder) {
       throw new SutStateIntegrityError("Active trial closure is malformed.");
     }
     return trial;

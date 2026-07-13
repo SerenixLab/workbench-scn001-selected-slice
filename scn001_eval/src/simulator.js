@@ -30,7 +30,7 @@ export function realizeProposalOutput(output, occurrenceOrder = 1) {
   return Object.freeze({
     simulatorRecordId: `simulator_${randomUUID()}`,
     role: "simulated_realization_fact",
-    sourceActor: "simulated_dependency",
+    sourceActor: "simulated-dependency",
     occurrenceOrder,
     requestedOutputRef: output.outputRef,
     requestedRef: output.requestedRef,

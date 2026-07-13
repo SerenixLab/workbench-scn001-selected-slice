@@ -81,7 +81,7 @@ function assertSimulatorRecord(record) {
     record.role !== "simulated_realization_fact"
     || typeof record.simulatorRecordId !== "string"
     || record.simulatorRecordId.length === 0
-    || record.sourceActor !== "simulated_dependency"
+    || record.sourceActor !== "simulated-dependency"
     || !Number.isSafeInteger(record.occurrenceOrder)
     || record.occurrenceOrder < 1
     || typeof record.realizedBehavior !== "string"

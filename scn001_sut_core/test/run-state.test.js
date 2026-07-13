@@ -78,7 +78,7 @@ function stateReferenceInput(stateRef, overrides = {}) {
 function simulatorInput(requestedRef, overrides = {}) {
   return {
     sourceFactRef: sourceRef(), kind: "simulator_realization",
-    sourceActor: "simulated_dependency", occurrenceOrder: 1, requestedRef,
+    sourceActor: "simulated-dependency", occurrenceOrder: 1, requestedRef,
     realizedBehavior: "Would you like to try it?", fidelity: "match", ...overrides
   };
 }
@@ -245,10 +245,106 @@ function activationReadyRun(overrides = {}) {
     control: "user_governed_constraints", value: "exhaustive_selected_slice_scope",
     occurrenceOrder: 18
   }));
+  if (overrides.extraControl) acceptance.push(fixtureControlInput({
+    control: "undeclared_activation_control", value: "ignored", occurrenceOrder: 19
+  }));
   run.assertSourceFactConsistency(acceptance);
   run.ingest(acceptance);
   run.processCurrentInteraction();
   return run;
+}
+
+function appendEqualScopeCandidate(run) {
+  const existingRefs = new Set([...run.records.values()]
+    .filter((record) => record.family === "trial_candidate")
+    .map((record) => record.reference));
+  const inputs = [
+    chronologyInput(),
+    ...calibrationInputs(),
+    {
+      sourceFactRef: sourceRef(), kind: "context_label", sourceActor: "fixture-driver",
+      occurrenceOrder: 4, surfaceLabel: "text_simulated", activity: "japanese_practice",
+      taskMode: "spontaneous_production", consequence: "low"
+    },
+    affordanceInput(),
+    fixtureControlInput({
+      control: "trial_policy", value: "bounded_reversible_trial_no_durable_adaptation",
+      occurrenceOrder: 6
+    }),
+    fixtureControlInput({ control: "consequence", value: "low", occurrenceOrder: 13 }),
+    fixtureControlInput({ control: "reversibility", value: "reversible", occurrenceOrder: 14 })
+  ];
+  run.assertSourceFactConsistency(inputs);
+  run.ingest(inputs);
+  run.processCurrentInteraction();
+  const candidate = [...run.records.values()].find((record) => (
+    record.family === "trial_candidate" && !existingRefs.has(record.reference)
+  ));
+  run.validateProductionCandidateClosure(candidate.reference);
+  return candidate;
+}
+
+function retargetAssessmentMaterialToCandidate(run, assessment, candidate) {
+  const binding = run.records.get(assessment.bindingAssessmentRef);
+  const activationInteraction = run.records.get(binding.interactionRef);
+  const basis = run.resolveActivationCandidateBasis(candidate);
+  const participants = run.resolveActivationParticipants(
+    candidate, binding, basis, activationInteraction
+  );
+  const refs = [
+    participants.candidateRef, participants.bindingAssessmentRef, participants.comparisonRef,
+    participants.recognitionObservationRef, participants.productionObservationRef,
+    participants.chronologyRef, participants.contextRef,
+    ...participants.controlBasisRefs.trialPolicyRefs,
+    ...participants.controlBasisRefs.userGovernedConstraintRefs,
+    ...participants.controlBasisRefs.consequenceRefs,
+    ...participants.controlBasisRefs.reversibilityRefs,
+    ...participants.controlBasisRefs.retentionBasisRefs
+  ];
+  const roleRefs = new Map([
+    ["activation_candidate", participants.candidateRef],
+    ["proposal_response_binding", participants.bindingAssessmentRef],
+    ["candidate_support_comparison", participants.comparisonRef],
+    ["current_recognition_evidence", participants.recognitionObservationRef],
+    ["current_production_evidence", participants.productionObservationRef],
+    ["activation_chronology", participants.chronologyRef],
+    ["activation_context", participants.contextRef],
+    ["trial_policy_control", participants.controlBasisRefs.trialPolicyRefs[0]],
+    ["user_governed_control", participants.controlBasisRefs.userGovernedConstraintRefs[0]],
+    ["consequence_control", participants.controlBasisRefs.consequenceRefs[0]],
+    ["reversibility_control", participants.controlBasisRefs.reversibilityRefs[0]],
+    ["retention_control", participants.controlBasisRefs.retentionBasisRefs[0]]
+  ]);
+  assessment.candidateRef = participants.candidateRef;
+  assessment.comparisonRef = participants.comparisonRef;
+  assessment.recognitionObservationRef = participants.recognitionObservationRef;
+  assessment.productionObservationRef = participants.productionObservationRef;
+  assessment.chronologyRef = participants.chronologyRef;
+  assessment.contextRef = participants.contextRef;
+  assessment.controlBasisRefs = structuredClone(participants.controlBasisRefs);
+  assessment.materialBasisRefs = refs;
+  assessment.activeScope = structuredClone(candidate.proposedScope);
+  run.records.get(assessment.createdByTransitionRef).inputReferences = [...refs];
+  for (const relation of run.relations.filter((item) => (
+    item.fromRef === assessment.reference && item.relationKind === "basis"
+  ))) relation.toRef = roleRefs.get(relation.targetRole);
+}
+
+function retargetFactToWrongActor(run, fact, sourceActor) {
+  const originalActor = run.records.get(fact.sourceActorRef);
+  const actor = {
+    reference: createReference("source"), family: "semantic_source", origin: fact.origin,
+    sourceActor, createdOrder: originalActor.createdOrder
+  };
+  run.records.set(actor.reference, actor);
+  fact.payload.sourceActor = sourceActor;
+  fact.sourceActorRef = actor.reference;
+  const meaning = structuredClone(fact.payload);
+  delete meaning.sourceFactRef;
+  run.sourceFactBindings.get(fact.sourceFactRef).semanticMeaning = meaning;
+  run.relations.find((relation) => (
+    relation.fromRef === fact.reference && relation.relationKind === "source"
+  )).toRef = actor.reference;
 }
 
 test("rejected payload and changed source-identity content have no semantic side effect", () => {
@@ -897,7 +993,7 @@ test("an unprocessed current realization participant fails closed instead of bei
 test("wrong actor or response context remains raw evidence but cannot become bound", () => {
   for (const overrides of [
     { sourceActor: "fixture-driver" },
-    { sourceActor: "simulated_dependency" },
+    { sourceActor: "simulated-dependency" },
     { context: "focused_drill" }
   ]) {
     const realized = realizedProposalRun();
@@ -1872,5 +1968,217 @@ test("active-trial identity, transition, and ancestry attacks fail complete clos
     const ancestry = run.relations.find((r) => r.fromRef === trial.reference && r.relationKind === "transition_ancestry");
     attack({ run, trial, transition, ancestry });
     assert.throws(() => run.validActiveTrialClosure(trial), /Active trial|Activation/);
+  }
+});
+
+test("activation candidate is the exact candidate reached through binding proposal ancestry", () => {
+  {
+    const run = activationReadyRun();
+    const assessment = [...run.records.values()].find((record) => record.family === "activation_assessment");
+    const original = run.records.get(assessment.candidateRef);
+    const substitute = appendEqualScopeCandidate(run);
+    assert.notEqual(substitute.reference, original.reference);
+    assert.deepEqual(substitute.proposedScope, original.proposedScope);
+    assert.equal(substitute.lifecycleStatus, "formed_non_active");
+    assert.equal(original.lifecycleStatus, "formed_non_active");
+    assessment.candidateRef = substitute.reference;
+    assert.throws(
+      () => run.validActivationAssessmentClosure(assessment),
+      /Activation assessment closure/
+    );
+  }
+
+  {
+    const run = activationReadyRun();
+    const assessment = [...run.records.values()].find((record) => record.family === "activation_assessment");
+    const binding = run.records.get(assessment.bindingAssessmentRef);
+    const proposal = run.validateCandidateBoundProposal(binding.proposalRef);
+    const substitute = appendEqualScopeCandidate(run);
+    assert.deepEqual(substitute.proposedScope, proposal.proposedScope);
+    retargetAssessmentMaterialToCandidate(run, assessment, substitute);
+    assert.equal(assessment.comparisonRef, substitute.supportComparisonRef);
+    assert.throws(
+      () => run.validActivationAssessmentClosure(assessment),
+      /Activation assessment closure/
+    );
+  }
+});
+
+test("active trial cannot consistently substitute another equal-scope candidate", () => {
+  const run = activationReadyRun();
+  const trial = [...run.records.values()].find((record) => record.family === "active_trial");
+  const assessment = run.records.get(trial.activationAssessmentRef);
+  const substitute = appendEqualScopeCandidate(run);
+  const transition = run.records.get(trial.createdByTransitionRef);
+  const candidateAncestry = run.relations.find((relation) => (
+    relation.fromRef === trial.reference && relation.targetRole === "trial_candidate"
+  ));
+  assert.deepEqual(substitute.proposedScope, trial.activeScope);
+  trial.candidateRef = substitute.reference;
+  transition.inputReferences[0] = substitute.reference;
+  candidateAncestry.toRef = substitute.reference;
+  assert.equal(assessment.candidateRef === substitute.reference, false);
+  assert.throws(() => run.validActiveTrialClosure(trial), /Active trial closure/);
+});
+
+test("activation assessment and trial require the exact binding interaction and ingestion order", () => {
+  const attacks = [
+    ({ run, assessment, assessmentTransition }) => {
+      const input = fixtureControlInput({ control: "evaluation_retention_basis" });
+      run.assertSourceFactConsistency([input]);
+      run.ingest([input]);
+      const later = run.pendingInteractions.at(-1);
+      assessment.interactionRef = later.reference;
+      assessmentTransition.interactionRef = later.reference;
+    },
+    ({ run, binding, assessment, trial, assessmentTransition, trialTransition }) => {
+      const bindingInteraction = run.records.get(binding.interactionRef);
+      const inputs = bindingInteraction.inputReferences.map((ref) => (
+        structuredClone(run.records.get(ref).payload)
+      ));
+      run.assertSourceFactConsistency(inputs);
+      run.ingest(inputs);
+      const later = run.pendingInteractions.at(-1);
+      assessment.interactionRef = later.reference;
+      trial.interactionRef = later.reference;
+      assessmentTransition.interactionRef = later.reference;
+      trialTransition.interactionRef = later.reference;
+    },
+    ({ run, assessment, assessmentTransition }) => {
+      const candidate = run.records.get(assessment.candidateRef);
+      assessment.interactionRef = candidate.interactionRef;
+      assessmentTransition.interactionRef = candidate.interactionRef;
+    },
+    ({ run, binding, assessment, assessmentTransition }) => {
+      const bindingInteraction = run.records.get(binding.interactionRef);
+      const inputs = bindingInteraction.inputReferences
+        .map((ref) => run.records.get(ref))
+        .filter((fact) => fact.reference !== binding.userResponseRefs[0])
+        .map((fact) => structuredClone(fact.payload));
+      run.assertSourceFactConsistency(inputs);
+      run.ingest(inputs);
+      const later = run.pendingInteractions.at(-1);
+      assessment.interactionRef = later.reference;
+      assessmentTransition.interactionRef = later.reference;
+    },
+    ({ run, binding, assessment, assessmentTransition }) => {
+      const bindingInteraction = run.records.get(binding.interactionRef);
+      const inputs = bindingInteraction.inputReferences
+        .map((ref) => run.records.get(ref))
+        .filter((fact) => fact.reference !== binding.realizationFactRefs[0])
+        .map((fact) => structuredClone(fact.payload));
+      run.assertSourceFactConsistency(inputs);
+      run.ingest(inputs);
+      const later = run.pendingInteractions.at(-1);
+      assessment.interactionRef = later.reference;
+      assessmentTransition.interactionRef = later.reference;
+    },
+    ({ run, binding, assessment }) => {
+      const ingestion = run.records.get(
+        run.records.get(binding.interactionRef).createdByTransitionRef
+      );
+      assessment.createdOrder = ingestion.createdOrder - 1;
+    },
+    ({ run, binding, assessmentTransition }) => {
+      const ingestion = run.records.get(
+        run.records.get(binding.interactionRef).createdByTransitionRef
+      );
+      assessmentTransition.createdOrder = ingestion.createdOrder - 1;
+    }
+  ];
+  for (const attack of attacks) {
+    const run = activationReadyRun();
+    const assessment = [...run.records.values()].find((record) => record.family === "activation_assessment");
+    const trial = [...run.records.values()].find((record) => record.family === "active_trial");
+    const binding = run.records.get(assessment.bindingAssessmentRef);
+    const assessmentTransition = run.records.get(assessment.createdByTransitionRef);
+    const trialTransition = run.records.get(trial.createdByTransitionRef);
+    attack({ run, binding, assessment, trial, assessmentTransition, trialTransition });
+    assert.throws(() => run.validActiveTrialClosure(trial), /Activation|Active trial/);
+  }
+});
+
+test("activation assessment rejects a binding-interaction control it cannot represent", () => {
+  assert.throws(
+    () => activationReadyRun({ extraControl: true }),
+    /represent every exact binding-interaction control fact/
+  );
+});
+
+test("activation-relevant facts require their exact semantic-source actors", () => {
+  const cases = [
+    [(assessment) => assessment.controlBasisRefs.trialPolicyRefs[0], "synthetic-user-a"],
+    [(assessment) => assessment.controlBasisRefs.retentionBasisRefs[0], "fixture-scorer"],
+    [(assessment) => assessment.chronologyRef, "synthetic-user-a"],
+    [(assessment) => assessment.contextRef, "simulated-dependency"],
+    [(assessment) => assessment.recognitionObservationRef, "fixture-driver"],
+    [(assessment) => assessment.productionObservationRef, "synthetic-user-a"],
+    [(assessment, binding) => binding.userResponseRefs[0], "fixture-driver"],
+    [(assessment, binding) => binding.realizationFactRefs[0], "fixture-driver"]
+  ];
+  for (const [select, wrongActor] of cases) {
+    const run = activationReadyRun();
+    const assessment = [...run.records.values()].find((record) => record.family === "activation_assessment");
+    const binding = run.records.get(assessment.bindingAssessmentRef);
+    const fact = run.records.get(select(assessment, binding));
+    retargetFactToWrongActor(run, fact, wrongActor);
+    assert.equal(run.records.get(fact.sourceActorRef).sourceActor, fact.payload.sourceActor);
+    assert.equal(run.relations.filter((relation) => (
+      relation.fromRef === fact.reference && relation.relationKind === "source"
+    )).length, 1);
+    assert.throws(
+      () => run.validActivationAssessmentClosure(assessment),
+      /Activation retained input-fact closure|Binding assessment/
+    );
+  }
+});
+
+test("activation retained facts require complete exact first-ingestion provenance", () => {
+  const attacks = [
+    ({ control, currentInteraction }) => { control.firstInteractionRef = currentInteraction.reference; },
+    ({ firstInteraction, control }) => {
+      firstInteraction.inputReferences = firstInteraction.inputReferences
+        .filter((ref) => ref !== control.reference);
+    },
+    ({ firstIngestion, control }) => {
+      firstIngestion.inputReferences = firstIngestion.inputReferences
+        .filter((ref) => ref !== control.reference);
+    },
+    ({ run, firstIngestion, control }) => {
+      run.relations.splice(run.relations.findIndex((relation) => (
+        relation.fromRef === firstIngestion.reference && relation.toRef === control.reference
+          && relation.targetRole === "ingested_input"
+      )), 1);
+    },
+    ({ run, firstIngestion, control, assessment }) => {
+      run.relations.find((relation) => (
+        relation.fromRef === firstIngestion.reference && relation.toRef === control.reference
+          && relation.targetRole === "ingested_input"
+      )).toRef = assessment.chronologyRef;
+    },
+    ({ run, control, currentInteraction }) => {
+      control.firstInteractionRef = currentInteraction.reference;
+      const currentIngestion = run.records.get(currentInteraction.createdByTransitionRef);
+      run.relations.find((relation) => (
+        relation.fromRef === control.reference && relation.relationKind === "source"
+      )).createdOrder = currentIngestion.createdOrder;
+    },
+    ({ control, firstIngestion }) => { control.createdOrder = firstIngestion.createdOrder + 1; },
+    ({ run, control }) => {
+      run.records.get(control.sourceActorRef).createdOrder = control.createdOrder + 1;
+    }
+  ];
+  for (const attack of attacks) {
+    const run = activationReadyRun();
+    const assessment = [...run.records.values()].find((record) => record.family === "activation_assessment");
+    const control = run.records.get(assessment.controlBasisRefs.consequenceRefs[0]);
+    const currentInteraction = run.records.get(assessment.interactionRef);
+    const firstInteraction = run.records.get(control.firstInteractionRef);
+    const firstIngestion = run.records.get(firstInteraction.createdByTransitionRef);
+    attack({ run, assessment, control, currentInteraction, firstInteraction, firstIngestion });
+    assert.throws(
+      () => run.validActivationAssessmentClosure(assessment),
+      /Activation retained input-fact closure/
+    );
   }
 });
