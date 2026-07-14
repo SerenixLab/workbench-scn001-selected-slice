@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 import { createSutBoundary } from "../index.js";
+import { validateFocusedDrillInstructionClosure } from "../src/focusedDrill.js";
 import { RunState, createReference } from "../src/runState.js";
 
 function sourceRef() {
@@ -2211,6 +2212,7 @@ test("activation retained input mutation and provenance attacks fail integrity",
     ({ context }) => { context.payload.consequence = "high"; },
     ({ control }) => { control.payload.value = "production_memory"; },
     ({ control }) => { control.payload.control = "other"; },
+    ({ control }) => { control.payload.sourceFactRef = sourceRef(); },
     ({ run, control }) => { run.relations.find((r) => r.fromRef === control.reference && r.relationKind === "source").createdOrder -= 1; },
     ({ run, control }) => {
       const interaction = [...run.records.values()].find((record) => record.family === "interaction_segment" && record.inputReferences.includes(control.reference) && record.reference !== control.firstInteractionRef);
@@ -2867,6 +2869,228 @@ test("focused-drill closure attacks fail before allocating or repairing retained
       /requires one exact active production trial/
     );
     assert.deepEqual(retainedMutationSnapshot(run), before);
+  }
+});
+
+test("every focused-drill family requires the complete active-trial foundation", () => {
+  const attacks = [
+    ({ run, activeTrial }) => {
+      run.relations.splice(run.relations.findIndex((relation) => (
+        relation.fromRef === activeTrial.reference
+        && relation.targetRole === "trial_candidate"
+      )), 1);
+    },
+    ({ run, activeTrial }) => {
+      run.relations.splice(run.relations.findIndex((relation) => (
+        relation.fromRef === activeTrial.reference
+        && relation.targetRole === "activation_assessment"
+      )), 1);
+    },
+    ({ run, activeTrial }) => {
+      cloneRetainedTransition(run, run.records.get(activeTrial.createdByTransitionRef));
+    },
+    ({ run, activeTrial }) => {
+      run.records.get(activeTrial.activationAssessmentRef).overallStatus = "insufficient";
+    },
+    ({ run, activeTrial }) => {
+      const candidate = run.records.get(activeTrial.candidateRef);
+      const substitute = { ...structuredClone(candidate), reference: createReference("state") };
+      run.records.set(substitute.reference, substitute);
+      activeTrial.candidateRef = substitute.reference;
+    },
+    ({ run, activeTrial }) => {
+      activeTrial.interactionRef = run.records.get(activeTrial.candidateRef).interactionRef;
+    },
+    ({ run, activeTrial }) => {
+      run.records.get(activeTrial.createdByTransitionRef).createdOrder = activeTrial.createdOrder;
+    }
+  ];
+  for (const attack of attacks) {
+    const completed = focusedDrillOutcomeRun();
+    attack(completed);
+    const validators = [
+      () => validateFocusedDrillInstructionClosure({
+        records: completed.run.records,
+        relations: completed.run.relations,
+        sourceFactBindings: completed.run.sourceFactBindings,
+        instruction: completed.instruction,
+        validateActiveTrial: (trial) => completed.run.validActiveTrialClosure(trial)
+      }),
+      () => completed.run.validateFocusedDrillDispositionClosure(completed.disposition),
+      () => completed.run.resolveFocusedDrillRealizationClosure(
+        completed.disposition.reference, completed.fact.reference
+      ),
+      () => completed.run.validateFocusedDrillOutcomeClosure(completed.outcome)
+    ];
+    for (const validate of validators) {
+      const before = retainedMutationSnapshot(completed.run);
+      assert.throws(validate);
+      assert.deepEqual(retainedMutationSnapshot(completed.run), before);
+    }
+  }
+});
+
+test("focused-drill realization cannot be retargeted beyond exact first ingestion", () => {
+  const attacks = [
+    ({ realizationTransition, laterInteraction }) => {
+      realizationTransition.interactionRef = laterInteraction.reference;
+    },
+    ({ run, realizationTransition, realizationRelation, laterInteraction, laterIngestion }) => {
+      realizationTransition.interactionRef = laterInteraction.reference;
+      realizationTransition.createdOrder = laterIngestion.createdOrder + 1;
+      realizationRelation.createdOrder = realizationTransition.createdOrder;
+      realizationRelation.effectiveOrder = realizationTransition.createdOrder;
+      for (const relation of run.relations.filter((item) => (
+        item.fromRef === realizationTransition.reference && item.relationKind === "basis"
+      ))) {
+        relation.createdOrder = realizationTransition.createdOrder;
+        relation.effectiveOrder = realizationTransition.createdOrder;
+      }
+    },
+    ({ run, fact, firstInteraction, laterIngestion }) => {
+      firstInteraction.createdByTransitionRef = laterIngestion.reference;
+      run.relations.find((relation) => (
+        relation.fromRef === fact.reference && relation.relationKind === "source"
+      )).createdOrder = laterIngestion.createdOrder;
+    },
+    ({ realizationTransition, laterInteraction }) => {
+      realizationTransition.createdOrder = laterInteraction.createdOrder;
+    },
+    ({ run, fact, firstInteraction, firstIngestion, laterInteraction, laterIngestion,
+      realizationTransition, realizationRelation }) => {
+      fact.firstInteractionRef = laterInteraction.reference;
+      firstInteraction.inputReferences = [];
+      firstIngestion.inputReferences = [];
+      run.relations = run.relations.filter((relation) => !(
+        relation.fromRef === firstIngestion.reference
+        && relation.toRef === fact.reference
+        && relation.relationKind === "basis"
+      ));
+      run.relations.find((relation) => (
+        relation.fromRef === fact.reference && relation.relationKind === "source"
+      )).createdOrder = laterIngestion.createdOrder;
+      realizationTransition.interactionRef = laterInteraction.reference;
+      realizationTransition.createdOrder = laterIngestion.createdOrder + 1;
+      realizationRelation.createdOrder = realizationTransition.createdOrder;
+      realizationRelation.effectiveOrder = realizationTransition.createdOrder;
+      for (const relation of run.relations.filter((item) => (
+        item.fromRef === realizationTransition.reference && item.relationKind === "basis"
+      ))) {
+        relation.createdOrder = realizationTransition.createdOrder;
+        relation.effectiveOrder = realizationTransition.createdOrder;
+      }
+    },
+    ({ run, firstInteraction, firstIngestion }) => {
+      const clone = cloneRetainedTransition(run, firstIngestion);
+      firstInteraction.createdByTransitionRef = clone.reference;
+      for (const relation of run.relations.filter((item) => (
+        item.fromRef === firstIngestion.reference && item.relationKind === "basis"
+      ))) {
+        run.relations.push({ ...structuredClone(relation), fromRef: clone.reference });
+      }
+    }
+  ];
+  for (const [attackIndex, attack] of attacks.entries()) {
+    const realized = focusedDrillRealizedRun();
+    realized.run.assertSourceFactConsistency([realized.input]);
+    realized.run.ingest([realized.input]);
+    const laterInteraction = realized.run.pendingInteractions[0];
+    const laterIngestion = realized.run.records.get(laterInteraction.createdByTransitionRef);
+    const firstInteraction = realized.run.records.get(realized.fact.firstInteractionRef);
+    const firstIngestion = realized.run.records.get(firstInteraction.createdByTransitionRef);
+    const realizationRelation = realized.run.relations.find((relation) => (
+      relation.relationKind === "realization"
+      && relation.fromRef === realized.fact.reference
+      && relation.toRef === realized.disposition.reference
+    ));
+    attack({
+      ...realized,
+      laterInteraction,
+      laterIngestion,
+      firstInteraction,
+      firstIngestion,
+      realizationRelation
+    });
+    const before = retainedMutationSnapshot(realized.run);
+    assert.throws(() => realized.run.resolveFocusedDrillRealizationClosure(
+      realized.disposition.reference, realized.fact.reference
+    ), undefined, `realization attack ${attackIndex + 1} must fail`);
+    assert.deepEqual(retainedMutationSnapshot(realized.run), before);
+  }
+});
+
+test("focused-drill outcome requires its exact unique ingestion evidence", () => {
+  const attacks = [
+    ({ run, outcome }) => {
+      outcome.outcomeIngestionTransitionRef = createReference("transition");
+    },
+    ({ run, outcome, interaction, ingestion }) => {
+      const fake = cloneRetainedTransition(run, ingestion, {
+        inputReferences: [], resultReferences: [interaction.reference]
+      });
+      outcome.outcomeIngestionTransitionRef = fake.reference;
+      interaction.createdByTransitionRef = fake.reference;
+    },
+    ({ run, outcome, interaction, ingestion, outcomeTransition, ingestionRelation }) => {
+      const fake = cloneRetainedTransition(run, ingestion, { inputReferences: [] });
+      run.records.delete(ingestion.reference);
+      outcome.outcomeIngestionTransitionRef = fake.reference;
+      interaction.createdByTransitionRef = fake.reference;
+      outcomeTransition.inputReferences = outcomeTransition.inputReferences.map(
+        (reference) => reference === ingestion.reference ? fake.reference : reference
+      );
+      ingestionRelation.toRef = fake.reference;
+    },
+    ({ run, outcome, interaction, ingestion }) => {
+      const clone = cloneRetainedTransition(run, ingestion);
+      outcome.outcomeIngestionTransitionRef = clone.reference;
+      interaction.createdByTransitionRef = clone.reference;
+    },
+    ({ outcome }) => {
+      outcome.outcomeIngestionTransitionRef = createReference("transition");
+    },
+    ({ run, ingestion }) => {
+      run.relations.splice(run.relations.findIndex((relation) => (
+        relation.fromRef === ingestion.reference && relation.relationKind === "basis"
+      )), 1);
+    },
+    ({ run, ingestion }) => {
+      const relation = run.relations.find((item) => (
+        item.fromRef === ingestion.reference && item.relationKind === "basis"
+      ));
+      run.relations.push(structuredClone(relation));
+    },
+    ({ run, ingestion, outcome }) => {
+      run.relations.find((item) => (
+        item.fromRef === ingestion.reference && item.relationKind === "basis"
+      )).toRef = outcome.reference;
+    },
+    ({ ingestion }) => {
+      ingestion.inputReferences = ingestion.inputReferences.slice(1);
+    },
+    ({ ingestion }) => {
+      ingestion.resultReferences = [];
+    }
+  ];
+  for (const attack of attacks) {
+    const completed = focusedDrillOutcomeRun();
+    const interaction = completed.run.records.get(completed.outcome.interactionRef);
+    const ingestion = completed.run.records.get(interaction.createdByTransitionRef);
+    const outcomeTransition = completed.run.records.get(
+      completed.outcome.createdByTransitionRef
+    );
+    const ingestionRelation = completed.run.relations.find((relation) => (
+      relation.fromRef === completed.outcome.reference
+      && relation.targetRole === "outcome_ingestion"
+    ));
+    attack({
+      ...completed, interaction, ingestion, outcomeTransition, ingestionRelation
+    });
+    const before = retainedMutationSnapshot(completed.run);
+    assert.throws(
+      () => completed.run.validateFocusedDrillOutcomeClosure(completed.outcome)
+    );
+    assert.deepEqual(retainedMutationSnapshot(completed.run), before);
   }
 });
 

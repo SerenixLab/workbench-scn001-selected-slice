@@ -31,7 +31,10 @@ export function validateRetainedInputFact({
       && record.inputReferences?.includes(fact.reference))
     .sort(byCreatedOrder);
   if (fact?.family !== "input_fact" || fact.origin !== origin || fact.role !== role
+    || fact.payload?.sourceFactRef !== fact.sourceFactRef
     || binding?.inputFactRef !== fact.reference
+    || binding.firstInteractionRef !== fact.firstInteractionRef
+    || binding.firstIngestionTransitionRef !== firstIngestion?.reference
     || !isDeepStrictEqual(binding.semanticMeaning, sourceFactMeaning(fact.payload))
     || actor?.family !== "semantic_source" || actor.origin !== origin
     || fact.payload.sourceActor !== expectedSourceActor
@@ -43,6 +46,7 @@ export function validateRetainedInputFact({
     || source[0].createdOrder !== firstIngestion?.createdOrder
     || actor.createdOrder >= fact.createdOrder
     || firstInteraction?.family !== "interaction_segment" || firstInteraction.origin !== "sut"
+    || firstInteraction.createdByTransitionRef !== binding.firstIngestionTransitionRef
     || containingInteractions.length === 0
     || containingInteractions[0].reference !== firstInteraction.reference
     || firstInteraction.inputReferences.filter((ref) => ref === fact.reference).length !== 1

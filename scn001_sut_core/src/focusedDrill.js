@@ -43,9 +43,10 @@ const OUTCOME_KEYS = Object.freeze([
 ]);
 
 export function deriveFocusedDrillDecisionParticipants({
-  records, relations, sourceFactBindings, interaction, interactionFacts, activeTrial
+  records, relations, sourceFactBindings, interaction, interactionFacts, activeTrial,
+  validateActiveTrial
 }) {
-  assertActiveTrialParticipant(activeTrial);
+  validateFocusedActiveTrial(records, activeTrial?.reference, validateActiveTrial);
   const contexts = interactionFacts.filter((fact) => fact?.role === "context_label");
   const requests = interactionFacts.filter((fact) => (
     fact?.role === "communication" && isImmediateCorrectionRequest(fact.payload)
@@ -95,7 +96,8 @@ export function deriveFocusedDrillDecisionParticipants({
   }
   if (matchingInstructions.length === 1) {
     const instruction = validateFocusedDrillInstructionClosure({
-      records, relations, sourceFactBindings, instruction: matchingInstructions[0]
+      records, relations, sourceFactBindings, instruction: matchingInstructions[0],
+      validateActiveTrial
     });
     const dispositions = [...records.values()].filter((record) => (
       record.family === "focused_drill_behavior_disposition"
@@ -110,7 +112,8 @@ export function deriveFocusedDrillDecisionParticipants({
       kind: "reuse",
       instruction,
       disposition: validateFocusedDrillDispositionClosure({
-        records, relations, sourceFactBindings, disposition: dispositions[0]
+        records, relations, sourceFactBindings, disposition: dispositions[0],
+        validateActiveTrial
       })
     };
   }
@@ -131,12 +134,14 @@ export function deriveFocusedDrillDecisionParticipants({
 }
 
 export function validateFocusedDrillInstructionClosure({
-  records, relations, sourceFactBindings, instruction
+  records, relations, sourceFactBindings, instruction, validateActiveTrial
 }) {
   const transition = resolveUniqueCreatingTransition(
     records, instruction, "Focused-drill instruction"
   );
-  const activeTrial = records.get(instruction?.activeTrialRef);
+  const activeTrial = validateFocusedActiveTrial(
+    records, instruction?.activeTrialRef, validateActiveTrial
+  );
   const context = records.get(instruction?.contextRef);
   const communication = records.get(instruction?.sourceCommunicationRef);
   const assertion = records.get(instruction?.attributedAssertionRef);
@@ -218,14 +223,14 @@ export function validateFocusedDrillInstructionClosure({
 }
 
 export function validateFocusedDrillDispositionClosure({
-  records, relations, sourceFactBindings, disposition
+  records, relations, sourceFactBindings, disposition, validateActiveTrial
 }) {
   const transition = resolveUniqueCreatingTransition(
     records, disposition, "Focused-drill behavior disposition"
   );
   const instruction = validateFocusedDrillInstructionClosure({
     records, relations, sourceFactBindings,
-    instruction: records.get(disposition?.instructionRef)
+    instruction: records.get(disposition?.instructionRef), validateActiveTrial
   });
   const activeTrial = records.get(disposition?.activeTrialRef);
   const context = records.get(disposition?.contextRef);
@@ -271,10 +276,12 @@ export function validateFocusedDrillDispositionClosure({
 }
 
 export function resolveFocusedDrillRealizationClosure({
-  records, relations, sourceFactBindings, dispositionRef, expectedFactRef
+  records, relations, sourceFactBindings, dispositionRef, expectedFactRef,
+  validateActiveTrial
 }) {
   const disposition = validateFocusedDrillDispositionClosure({
-    records, relations, sourceFactBindings, disposition: records.get(dispositionRef)
+    records, relations, sourceFactBindings, disposition: records.get(dispositionRef),
+    validateActiveTrial
   });
   const realizationRelations = relations.filter((relation) => (
     relation.relationKind === "realization" && relation.toRef === disposition.reference
@@ -293,6 +300,14 @@ export function resolveFocusedDrillRealizationClosure({
   const transition = transitions[0];
   const fact = records.get(relation.fromRef);
   const interaction = records.get(transition.interactionRef);
+  const firstInteraction = records.get(fact?.firstInteractionRef);
+  const ingestion = validateExactInputIngestionClosure({
+    records,
+    relations,
+    interaction: firstInteraction,
+    expectedInputRefs: [fact?.reference],
+    label: "Focused-drill realization"
+  });
   const bases = relations.filter((candidate) => (
     candidate.fromRef === transition.reference && candidate.relationKind === "basis"
   ));
@@ -306,8 +321,9 @@ export function resolveFocusedDrillRealizationClosure({
     || fact.payload.requestedBehavior !== disposition.requestedBehavior
     || !validRealizationResult(fact.payload)
     || (expectedFactRef && fact.reference !== expectedFactRef)
+    || interaction?.reference !== firstInteraction?.reference
     || interaction?.family !== "interaction_segment" || interaction.origin !== "sut"
-    || !interaction.inputReferences?.includes(fact.reference)
+    || !isDeepStrictEqual(interaction.inputReferences, [fact.reference])
     || transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
     || transition.result !== "focused_drill_realization_recorded"
     || !isDeepStrictEqual(transition.inputReferences, [fact.reference, disposition.reference])
@@ -321,7 +337,9 @@ export function resolveFocusedDrillRealizationClosure({
     || relation.effectiveOrder !== transition.createdOrder
     || relation.createdOrder !== transition.createdOrder
     || records.get(disposition.createdByTransitionRef)?.createdOrder >= fact.createdOrder
-    || fact.createdOrder >= transition.createdOrder) {
+    || fact.createdOrder >= firstInteraction.createdOrder
+    || firstInteraction.createdOrder >= ingestion.createdOrder
+    || ingestion.createdOrder >= transition.createdOrder) {
     throw new SutStateIntegrityError("Focused-drill realization closure is malformed.");
   }
   validateRetainedInputFact({
@@ -334,7 +352,7 @@ export function resolveFocusedDrillRealizationClosure({
 
 export function deriveFocusedDrillOutcomeParticipants({
   records, relations, sourceFactBindings, interaction, interactionFacts,
-  realizationClosures
+  realizationClosures, validateActiveTrial
 }) {
   const observations = interactionFacts.filter((fact) => (
     fact?.role === "task_observation" && isExactFocusedDrillObservation(fact.payload)
@@ -363,7 +381,7 @@ export function deriveFocusedDrillOutcomeParticipants({
     return {
       kind: "reuse",
       outcome: validateFocusedDrillOutcomeClosure({
-        records, relations, sourceFactBindings, outcome: existing[0]
+        records, relations, sourceFactBindings, outcome: existing[0], validateActiveTrial
       })
     };
   }
@@ -387,7 +405,7 @@ export function deriveFocusedDrillOutcomeParticipants({
   const disposition = realization.disposition;
   const instruction = validateFocusedDrillInstructionClosure({
     records, relations, sourceFactBindings,
-    instruction: records.get(disposition.instructionRef)
+    instruction: records.get(disposition.instructionRef), validateActiveTrial
   });
   const activeTrial = records.get(disposition.activeTrialRef);
   if (observation.payload.dimension !== activeTrial?.activeScope?.dimension) return undefined;
@@ -420,7 +438,7 @@ export function deriveFocusedDrillOutcomeParticipants({
 }
 
 export function validateFocusedDrillOutcomeClosure({
-  records, relations, sourceFactBindings, outcome
+  records, relations, sourceFactBindings, outcome, validateActiveTrial
 }) {
   const transition = resolveUniqueCreatingTransition(
     records, outcome, "Focused-drill short-term outcome"
@@ -428,21 +446,28 @@ export function validateFocusedDrillOutcomeClosure({
   const activeTrial = records.get(outcome?.activeTrialRef);
   const disposition = validateFocusedDrillDispositionClosure({
     records, relations, sourceFactBindings,
-    disposition: records.get(outcome?.behaviorDispositionRef)
+    disposition: records.get(outcome?.behaviorDispositionRef), validateActiveTrial
   });
   const instruction = validateFocusedDrillInstructionClosure({
     records, relations, sourceFactBindings,
-    instruction: records.get(outcome?.instructionRef)
+    instruction: records.get(outcome?.instructionRef), validateActiveTrial
   });
   const realization = resolveFocusedDrillRealizationClosure({
     records, relations, sourceFactBindings,
     dispositionRef: disposition.reference,
-    expectedFactRef: outcome?.realizationFactRef
+    expectedFactRef: outcome?.realizationFactRef,
+    validateActiveTrial
   });
   const observation = records.get(outcome?.observationRef);
   const feedback = records.get(outcome?.feedbackRef);
   const interaction = records.get(outcome?.interactionRef);
-  const ingestion = records.get(outcome?.outcomeIngestionTransitionRef);
+  const ingestion = validateExactInputIngestionClosure({
+    records,
+    relations,
+    interaction,
+    expectedInputRefs: [observation?.reference, feedback?.reference],
+    label: "Focused-drill outcome"
+  });
   const outcomeRelations = relations.filter((relation) => (
     relation.fromRef === outcome?.reference && relation.relationKind === "outcome"
   ));
@@ -486,6 +511,8 @@ export function validateFocusedDrillOutcomeClosure({
     || competing.length !== 1 || competing[0].reference !== outcome.reference
     || interaction?.family !== "interaction_segment" || interaction.origin !== "sut"
     || !isDeepStrictEqual(interaction.inputReferences, [observation.reference, feedback.reference])
+    || outcome.outcomeIngestionTransitionRef !== interaction.createdByTransitionRef
+    || outcome.outcomeIngestionTransitionRef !== ingestion.reference
     || ingestion?.family !== "sut_transition_evidence" || ingestion.origin !== "sut"
     || ingestion.transitionKind !== "ingest_sut_visible_inputs"
     || ingestion.interactionRef !== interaction.reference
@@ -500,6 +527,9 @@ export function validateFocusedDrillOutcomeClosure({
       || relation.effectiveOrder !== outcome.createdOrder
       || relation.createdOrder !== transition.createdOrder)
     || realization.transition.createdOrder >= observation.createdOrder
+    || observation.createdOrder >= interaction.createdOrder
+    || feedback.createdOrder >= interaction.createdOrder
+    || interaction.createdOrder >= ingestion.createdOrder
     || ingestion.createdOrder >= outcome.createdOrder
     || outcome.createdOrder >= transition.createdOrder) {
     throw new SutStateIntegrityError("Focused-drill short-term outcome closure is malformed.");
@@ -605,14 +635,53 @@ function validRealizationResult(payload) {
         && payload.mismatchOrigin.length > 0));
 }
 
-function assertActiveTrialParticipant(activeTrial) {
-  if (activeTrial?.family !== "active_trial" || activeTrial.origin !== "sut"
-    || activeTrial.trialType !== "production_focused_practice"
-    || activeTrial.currentStatus !== "active") {
+function validateFocusedActiveTrial(records, activeTrialRef, validateActiveTrial) {
+  if (typeof validateActiveTrial !== "function") {
     throw new SutStateIntegrityError(
-      "Focused-drill derivation requires an exact active production trial."
+      "Focused-drill validation requires the RunState active-trial authority."
     );
   }
+  const activeTrial = records.get(activeTrialRef);
+  const validated = validateActiveTrial(activeTrial);
+  if (validated?.reference !== activeTrialRef) {
+    throw new SutStateIntegrityError(
+      "Focused-drill state requires its exact active production-trial foundation."
+    );
+  }
+  return validated;
+}
+
+function validateExactInputIngestionClosure({
+  records, relations, interaction, expectedInputRefs, label
+}) {
+  const ingestion = resolveUniqueCreatingTransition(records, interaction, `${label} ingestion`);
+  const bases = relations.filter((relation) => (
+    relation.fromRef === ingestion?.reference && relation.relationKind === "basis"
+  ));
+  if (!hasExactKeys(interaction, [
+    "reference", "family", "origin", "inputReferences", "createdOrder",
+    "createdByTransitionRef"
+  ]) || interaction.family !== "interaction_segment" || interaction.origin !== "sut"
+    || interaction.createdByTransitionRef !== ingestion?.reference
+    || !isDeepStrictEqual(interaction.inputReferences, expectedInputRefs)
+    || new Set(interaction.inputReferences).size !== interaction.inputReferences.length
+    || ingestion.family !== "sut_transition_evidence" || ingestion.origin !== "sut"
+    || ingestion.transitionKind !== "ingest_sut_visible_inputs"
+    || ingestion.interactionRef !== interaction.reference
+    || !isDeepStrictEqual(ingestion.inputReferences, expectedInputRefs)
+    || new Set(ingestion.inputReferences).size !== ingestion.inputReferences.length
+    || !isDeepStrictEqual(ingestion.resultReferences, [interaction.reference])
+    || ingestion.result !== "accepted"
+    || bases.length !== expectedInputRefs.length
+    || !hasExactRoleReferencePairs(
+      bases, expectedInputRefs.map((reference) => [reference, "ingested_input"])
+    )
+    || bases.some((relation) => relation.assertedByRole !== "sut"
+      || relation.effectiveOrder !== ingestion.createdOrder
+      || relation.createdOrder !== ingestion.createdOrder)) {
+    throw new SutStateIntegrityError(`${label} ingestion closure is malformed.`);
+  }
+  return ingestion;
 }
 
 function focusedDrillScopeFrom(payload) {

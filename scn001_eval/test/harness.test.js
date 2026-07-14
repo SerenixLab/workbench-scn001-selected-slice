@@ -762,6 +762,137 @@ test("focused-drill opening requires one exact retained active-trial closure", (
         ));
       },
       throws: true
+    },
+    {
+      mutate(snapshot) {
+        snapshot.records.find(
+          (record) => record.family === "activation_assessment"
+        ).checkResults.scope.reason = "arbitrary_non_empty_reason";
+      },
+      throws: true
+    },
+    {
+      mutate(snapshot) {
+        snapshot.records.find(
+          (record) => record.family === "trial_candidate"
+        ).decisionBasisAffordanceRefs = [];
+      },
+      throws: true
+    },
+    {
+      mutate(snapshot) {
+        snapshot.records.find((record) => (
+          record.role === "fixture_control_fact"
+          && record.payload.control === "user_governed_constraints"
+        )).payload.value = "partial_scope";
+      },
+      throws: true
+    },
+    {
+      mutate(snapshot) {
+        snapshot.records.find((record) => (
+          record.role === "fixture_control_fact"
+          && record.payload.control === "evaluation_retention_basis"
+        )).payload.value = "production_memory";
+      },
+      throws: true
+    },
+    {
+      mutate(snapshot) {
+        snapshot.records.find((record) => (
+          record.role === "fixture_control_fact"
+          && record.payload.control === "reversibility"
+        )).payload.value = "irreversible";
+      },
+      throws: true
+    },
+    {
+      mutate(snapshot) {
+        const control = snapshot.records.find((record) => (
+          record.role === "fixture_control_fact"
+          && record.payload.control === "evaluation_retention_basis"
+        ));
+        snapshot.records.find(
+          (record) => record.reference === control.sourceActorRef
+        ).sourceActor = "wrong-control-source";
+      },
+      throws: true
+    },
+    {
+      mutate(snapshot) {
+        const control = snapshot.records.find((record) => (
+          record.role === "fixture_control_fact"
+          && record.payload.control === "evaluation_retention_basis"
+        ));
+        control.payload.sourceFactRef = `${control.payload.sourceFactRef}-substitute`;
+      },
+      throws: true
+    },
+    {
+      mutate(snapshot) {
+        snapshot.records.find(
+          (record) => record.role === "chronology_fact"
+        ).payload.scenarioDay -= 1;
+      },
+      throws: true
+    },
+    {
+      mutate(snapshot) {
+        const comparison = snapshot.records.find(
+          (record) => record.family === "dimension_comparison"
+        );
+        snapshot.relations.find((relation) => (
+          relation.fromRef === comparison.reference
+          && relation.targetRole === "recognition_observation"
+        )).targetRole = "production_observation";
+      },
+      throws: true
+    },
+    {
+      mutate(snapshot) {
+        const assessment = snapshot.records.find(
+          (record) => record.family === "activation_assessment"
+        );
+        snapshot.relations.find((relation) => (
+          relation.fromRef === assessment.reference
+          && relation.targetRole === "activation_context"
+        )).targetRole = "activation_chronology";
+      },
+      throws: true
+    },
+    {
+      mutate(snapshot) {
+        const assessment = snapshot.records.find(
+          (record) => record.family === "activation_assessment"
+        );
+        const transition = snapshot.records.find(
+          (record) => record.reference === assessment.createdByTransitionRef
+        );
+        const retentionRef = assessment.controlBasisRefs.bindingInteraction
+          .retentionBasisRefs[0];
+        const userGovernedRef = assessment.controlBasisRefs.bindingInteraction
+          .userGovernedConstraintRefs[0];
+        assessment.controlBasisRefs.bindingInteraction.retentionBasisRefs = [userGovernedRef];
+        assessment.materialBasisRefs = assessment.materialBasisRefs.filter(
+          (reference) => reference !== retentionRef
+        );
+        transition.inputReferences = [...assessment.materialBasisRefs];
+        snapshot.relations.find((relation) => (
+          relation.fromRef === assessment.reference
+          && relation.toRef === retentionRef
+          && relation.targetRole === "binding_retention_control"
+        )).toRef = userGovernedRef;
+      },
+      throws: true
+    },
+    {
+      mutate(snapshot) {
+        snapshot.records.find((record) => (
+          record.role === "context_label"
+          && record.payload.taskMode === "spontaneous_production"
+        )).payload.activity = "unrelated_activity";
+      },
+      throws: true
     }
   ];
   for (const attack of attacks) {

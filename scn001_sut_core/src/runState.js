@@ -144,6 +144,8 @@ export class RunState {
       this.records.set(fact.reference, fact);
       this.sourceFactBindings.set(fact.sourceFactRef, {
         inputFactRef: fact.reference,
+        firstInteractionRef: fact.firstInteractionRef,
+        firstIngestionTransitionRef: transition.reference,
         semanticMeaning: sourceFactMeaning(fact.payload)
       });
     }
@@ -1357,7 +1359,8 @@ export class RunState {
       sourceFactBindings: this.sourceFactBindings,
       interaction,
       interactionFacts,
-      activeTrial
+      activeTrial,
+      validateActiveTrial: (trial) => this.validActiveTrialClosure(trial)
     });
     if (!participants || participants.kind === "reuse") return [];
 
@@ -1565,7 +1568,8 @@ export class RunState {
       sourceFactBindings: this.sourceFactBindings,
       interaction,
       interactionFacts,
-      realizationClosures
+      realizationClosures,
+      validateActiveTrial: (trial) => this.validActiveTrialClosure(trial)
     });
     if (!participants || participants.kind === "reuse") return undefined;
     if (participants.activeTrial.reference !== activeTrial.reference) {
@@ -1652,7 +1656,8 @@ export class RunState {
       records: this.records,
       relations: this.relations,
       sourceFactBindings: this.sourceFactBindings,
-      disposition
+      disposition,
+      validateActiveTrial: (trial) => this.validActiveTrialClosure(trial)
     });
   }
 
@@ -1662,7 +1667,8 @@ export class RunState {
       relations: this.relations,
       sourceFactBindings: this.sourceFactBindings,
       dispositionRef,
-      expectedFactRef
+      expectedFactRef,
+      validateActiveTrial: (trial) => this.validActiveTrialClosure(trial)
     });
   }
 
@@ -1671,7 +1677,8 @@ export class RunState {
       records: this.records,
       relations: this.relations,
       sourceFactBindings: this.sourceFactBindings,
-      outcome
+      outcome,
+      validateActiveTrial: (trial) => this.validActiveTrialClosure(trial)
     });
   }
 
