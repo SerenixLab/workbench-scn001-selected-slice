@@ -3,6 +3,15 @@ import { isDeepStrictEqual } from "node:util";
 
 import { SutBoundaryValidationError, SutReferenceError, SutStateIntegrityError } from "./errors.js";
 import {
+  deriveFocusedDrillDecisionParticipants,
+  deriveFocusedDrillOutcomeParticipants,
+  IMMEDIATE_CORRECTION_BEHAVIOR,
+  isMatchedImmediateRealization,
+  resolveFocusedDrillRealizationClosure,
+  validateFocusedDrillDispositionClosure,
+  validateFocusedDrillOutcomeClosure
+} from "./focusedDrill.js";
+import {
   assertEligibleProductionCandidate,
   classifyProposalResponse,
   PRODUCTION_FOCUSED_TRIAL_DIRECTION,
@@ -221,7 +230,7 @@ export class RunState {
     for (const input of inputs) {
       const reference = input.kind === "state_reference"
         ? input.stateRef
-        : input.kind === "simulator_realization"
+        : ["simulator_realization", "simulator_behavior_realization"].includes(input.kind)
           ? input.requestedRef
           : undefined;
 
@@ -275,6 +284,18 @@ export class RunState {
       interaction,
       activationAssessmentTransitionRef
     );
+    const focusedDrillDecisionTransitionRefs = this.deriveFocusedDrillDecision(
+      interaction,
+      interactionFacts
+    );
+    const focusedDrillRealizationTransitionRef = this.recordFocusedDrillRealization(
+      interaction,
+      interactionFacts
+    );
+    const focusedDrillOutcomeTransitionRef = this.recordFocusedDrillOutcome(
+      interaction,
+      interactionFacts
+    );
     const semanticTransitionRefs = [
       attributionTransitionRef,
       temporalAssessmentTransitionRef,
@@ -285,7 +306,10 @@ export class RunState {
       proposalRealizationTransitionRef,
       bindingAssessmentTransitionRef,
       activationAssessmentTransitionRef,
-      activeTrialTransitionRef
+      activeTrialTransitionRef,
+      ...focusedDrillDecisionTransitionRefs,
+      focusedDrillRealizationTransitionRef,
+      focusedDrillOutcomeTransitionRef
     ].filter(Boolean);
     const processingTransition = this.createTransition(
       "process_interaction_segment",
@@ -333,27 +357,44 @@ export class RunState {
   }
 
   emitAvailableOutputs() {
-    const outstanding = [...this.records.values()]
+    const proposalOutputs = [...this.records.values()]
       .filter((record) => record.transitionKind === "select_proposal_for_realization")
       .map((selection) => {
         const proposal = this.validateProposalSelection(selection);
         const realization = this.resolveProposalRealizationClosure(proposal.reference);
         return realization ? undefined : { selection, proposal };
       })
+      .filter(Boolean)
+      .map(({ selection, proposal }) => ({
+        kind: "proposal_realization_request",
+        outputRef: selection.reference,
+        requestedRef: proposal.reference,
+        candidateRef: proposal.candidateRef,
+        materialIntent: proposal.materialIntent,
+        candidateMaterialIntent: proposal.candidateMaterialIntent,
+        proposedScope: structuredClone(proposal.proposedScope)
+      }));
+    const focusedDrillOutputs = [...this.records.values()]
+      .filter((record) => record.family === "focused_drill_behavior_disposition")
+      .map((disposition) => {
+        const activeTrial = this.records.get(disposition.activeTrialRef);
+        this.validActiveTrialClosure(activeTrial);
+        this.validateFocusedDrillDispositionClosure(disposition);
+        const realization = this.resolveFocusedDrillRealizationClosure(disposition.reference);
+        return realization ? undefined : {
+          kind: "focused_drill_behavior_request",
+          outputRef: disposition.createdByTransitionRef,
+          requestedRef: disposition.reference,
+          requestedBehavior: disposition.requestedBehavior,
+          drillScope: structuredClone(disposition.drillScope)
+        };
+      })
       .filter(Boolean);
+    const outstanding = [...proposalOutputs, ...focusedDrillOutputs];
     if (outstanding.length !== 1) {
       return Object.freeze([]);
     }
-    const { selection, proposal } = outstanding[0];
-    return deepFreeze([{
-      kind: "proposal_realization_request",
-      outputRef: selection.reference,
-      requestedRef: proposal.reference,
-      candidateRef: proposal.candidateRef,
-      materialIntent: proposal.materialIntent,
-      candidateMaterialIntent: proposal.candidateMaterialIntent,
-      proposedScope: structuredClone(proposal.proposedScope)
-    }]);
+    return deepFreeze(outstanding);
   }
 
   deriveAttributedAssertions(interaction, interactionFacts) {
@@ -1307,6 +1348,333 @@ export class RunState {
     return transition.reference;
   }
 
+  deriveFocusedDrillDecision(interaction, interactionFacts) {
+    const activeTrial = this.resolveExactActiveProductionTrial();
+    if (!activeTrial) return [];
+    const participants = deriveFocusedDrillDecisionParticipants({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      interaction,
+      interactionFacts,
+      activeTrial
+    });
+    if (!participants || participants.kind === "reuse") return [];
+
+    const instruction = {
+      reference: createReference("state"),
+      family: "focused_drill_instruction",
+      origin: "sut",
+      instructionType: "explicit_current_focused_drill_correction",
+      activeTrialRef: activeTrial.reference,
+      sourceCommunicationRef: participants.communication.reference,
+      attributedAssertionRef: participants.assertion.reference,
+      sourceActorRef: participants.sourceActorRef,
+      contextRef: participants.context.reference,
+      drillScope: structuredClone(participants.drillScope),
+      requestedBehavior: IMMEDIATE_CORRECTION_BEHAVIOR,
+      authority: "explicit_expected_user_request",
+      applicability: "exact_current_focused_drill_only",
+      globalPreference: "not_established",
+      statusOrigin: "sut_transition",
+      interactionRef: interaction.reference,
+      createdOrder: this.allocateOrder()
+    };
+    const instructionInputs = [
+      activeTrial.reference,
+      participants.context.reference,
+      participants.communication.reference,
+      participants.assertion.reference
+    ];
+    const instructionTransition = this.createTransition(
+      "derive_focused_drill_instruction",
+      instructionInputs,
+      [instruction.reference],
+      interaction.reference
+    );
+    instructionTransition.result = "focused_drill_instruction_derived";
+    attachCreatingTransition([instruction], instructionTransition);
+
+    const disposition = {
+      reference: createReference("state"),
+      family: "focused_drill_behavior_disposition",
+      origin: "sut",
+      dispositionType: "current_focused_drill_correction_behavior",
+      activeTrialRef: activeTrial.reference,
+      instructionRef: instruction.reference,
+      contextRef: participants.context.reference,
+      drillScope: structuredClone(participants.drillScope),
+      requestedBehavior: IMMEDIATE_CORRECTION_BEHAVIOR,
+      behaviorStatus: "requested_for_exact_current_drill",
+      statusOrigin: "sut_transition",
+      interactionRef: interaction.reference,
+      createdOrder: this.allocateOrder()
+    };
+    const dispositionInputs = [
+      activeTrial.reference,
+      participants.context.reference,
+      instruction.reference
+    ];
+    const dispositionTransition = this.createTransition(
+      "derive_focused_drill_behavior_disposition",
+      dispositionInputs,
+      [disposition.reference],
+      interaction.reference
+    );
+    dispositionTransition.result = "focused_drill_behavior_disposition_derived";
+    attachCreatingTransition([disposition], dispositionTransition);
+
+    this.commitDerivedRecords([instruction], instructionTransition);
+    this.commitDerivedRecords([disposition], dispositionTransition);
+    for (const [reference, role] of [
+      [activeTrial.reference, "active_production_trial"],
+      [participants.context.reference, "current_focused_drill_context"],
+      [participants.communication.reference, "explicit_request_communication"],
+      [participants.assertion.reference, "attributed_current_request"]
+    ]) {
+      this.relations.push({
+        relationKind: "basis",
+        fromRef: instruction.reference,
+        toRef: reference,
+        targetRole: role,
+        effectiveOrder: instruction.createdOrder,
+        createdOrder: instructionTransition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    this.relations.push({
+      relationKind: "source",
+      fromRef: instruction.reference,
+      toRef: participants.sourceActorRef,
+      targetRole: "semantic_source",
+      effectiveOrder: instruction.createdOrder,
+      createdOrder: instructionTransition.createdOrder,
+      assertedByRole: "sut"
+    });
+    for (const [reference, role] of [
+      [activeTrial.reference, "active_production_trial"],
+      [participants.context.reference, "current_focused_drill_context"],
+      [instruction.reference, "explicit_focused_drill_instruction"]
+    ]) {
+      this.relations.push({
+        relationKind: "basis",
+        fromRef: disposition.reference,
+        toRef: reference,
+        targetRole: role,
+        effectiveOrder: disposition.createdOrder,
+        createdOrder: dispositionTransition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    return [instructionTransition.reference, dispositionTransition.reference];
+  }
+
+  recordFocusedDrillRealization(interaction, interactionFacts) {
+    const facts = interactionFacts.filter((fact) => (
+      fact.role === "simulator_behavior_realization"
+    ));
+    if (facts.length === 0) return undefined;
+    if (facts.length !== 1) return undefined;
+    const fact = facts[0];
+    const disposition = this.records.get(fact.payload.requestedRef);
+    if (disposition?.family !== "focused_drill_behavior_disposition") {
+      throw new SutStateIntegrityError(
+        "Focused-drill realization must target an exact SUT behavior disposition."
+      );
+    }
+    const activeTrial = this.resolveExactActiveProductionTrial();
+    if (!activeTrial || disposition.activeTrialRef !== activeTrial.reference) {
+      throw new SutStateIntegrityError(
+        "Focused-drill realization requires the exact retained active production trial."
+      );
+    }
+    this.validateFocusedDrillDispositionClosure(disposition);
+    const payload = fact.payload;
+    const validMatch = isMatchedImmediateRealization(payload);
+    const validMismatch = payload.requestedBehavior === IMMEDIATE_CORRECTION_BEHAVIOR
+      && payload.fidelity === "mismatch"
+      && payload.realizedBehavior !== IMMEDIATE_CORRECTION_BEHAVIOR
+      && typeof payload.mismatchOrigin === "string"
+      && payload.mismatchOrigin.length > 0;
+    if (!validMatch && !validMismatch) {
+      throw new SutStateIntegrityError("Focused-drill simulator realization is inconsistent.");
+    }
+    this.validateRetainedInputFact(
+      fact, "simulator", "simulator_behavior_realization", interaction,
+      "simulated-dependency"
+    );
+    const existing = this.resolveFocusedDrillRealizationClosure(disposition.reference);
+    if (existing) {
+      if (existing.fact.reference === fact.reference) return undefined;
+      throw new SutStateIntegrityError(
+        "A distinct realization already exists for this focused-drill disposition."
+      );
+    }
+    const transition = this.createTransition(
+      "record_focused_drill_realization",
+      [fact.reference, disposition.reference],
+      [],
+      interaction.reference
+    );
+    transition.result = "focused_drill_realization_recorded";
+    this.records.set(transition.reference, transition);
+    for (const [reference, role] of [
+      [fact.reference, "simulator_behavior_realization_fact"],
+      [disposition.reference, "requested_focused_drill_disposition"]
+    ]) {
+      this.relations.push({
+        relationKind: "basis",
+        fromRef: transition.reference,
+        toRef: reference,
+        targetRole: role,
+        effectiveOrder: transition.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    this.relations.push({
+      relationKind: "realization",
+      fromRef: fact.reference,
+      toRef: disposition.reference,
+      targetRole: "focused_drill_behavior_disposition",
+      effectiveOrder: transition.createdOrder,
+      createdOrder: transition.createdOrder,
+      assertedByRole: "sut"
+    });
+    return transition.reference;
+  }
+
+  recordFocusedDrillOutcome(interaction, interactionFacts) {
+    const activeTrial = this.resolveExactActiveProductionTrial();
+    if (!activeTrial) return undefined;
+    const realizationClosures = [...this.records.values()]
+      .filter((record) => record.family === "focused_drill_behavior_disposition")
+      .map((disposition) => {
+        if (disposition.activeTrialRef !== activeTrial.reference) {
+          throw new SutStateIntegrityError(
+            "Focused-drill state cannot resolve a different active production trial."
+          );
+        }
+        return this.resolveFocusedDrillRealizationClosure(disposition.reference);
+      })
+      .filter(Boolean)
+      .filter((closure) => isMatchedImmediateRealization(closure.fact.payload));
+    const participants = deriveFocusedDrillOutcomeParticipants({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      interaction,
+      interactionFacts,
+      realizationClosures
+    });
+    if (!participants || participants.kind === "reuse") return undefined;
+    if (participants.activeTrial.reference !== activeTrial.reference) {
+      throw new SutStateIntegrityError(
+        "Focused-drill outcome must use the exact retained active production trial."
+      );
+    }
+    const outcome = {
+      reference: createReference("state"),
+      family: "focused_drill_outcome",
+      origin: "sut",
+      outcomeType: "short_term_intervention_conditioned_focused_drill",
+      activeTrialRef: activeTrial.reference,
+      instructionRef: participants.instruction.reference,
+      behaviorDispositionRef: participants.disposition.reference,
+      realizationFactRef: participants.realization.fact.reference,
+      realizationTransitionRef: participants.realization.transition.reference,
+      observationRef: participants.observation.reference,
+      feedbackRef: participants.feedback.reference,
+      outcomeIngestionTransitionRef: participants.ingestion.reference,
+      observedPerformance: { correctCount: 5, totalCount: 6 },
+      feedbackClassification: "positive_current_drill_feedback",
+      interventionConditioning:
+        "immediate_correction_followed_by_supplied_drill_observation_and_feedback",
+      coInterventionStatus: "none_supplied",
+      causalScope: "association_only_for_exact_intervention_conditioned_drill",
+      longTermEfficacy: "not_established",
+      globalPreference: "not_established",
+      spontaneousProductionApplicability: "not_established",
+      futureApplicability: "not_established",
+      statusOrigin: "sut_transition",
+      interactionRef: interaction.reference,
+      createdOrder: this.allocateOrder()
+    };
+    const participantPairs = [
+      [activeTrial.reference, "active_production_trial"],
+      [participants.instruction.reference, "explicit_focused_drill_instruction"],
+      [participants.disposition.reference, "focused_drill_behavior_disposition"],
+      [participants.realization.fact.reference, "matched_simulator_realization"],
+      [participants.realization.transition.reference, "realization_transition_evidence"],
+      [participants.observation.reference, "focused_drill_observation"],
+      [participants.feedback.reference, "current_user_feedback"],
+      [interaction.reference, "outcome_interaction"],
+      [participants.ingestion.reference, "outcome_ingestion"]
+    ];
+    const transition = this.createTransition(
+      "record_short_term_focused_drill_outcome",
+      participantPairs.map(([reference]) => reference),
+      [outcome.reference],
+      interaction.reference
+    );
+    transition.result = "short_term_focused_drill_outcome_recorded";
+    attachCreatingTransition([outcome], transition);
+    this.commitDerivedRecords([outcome], transition);
+    for (const [reference, role] of participantPairs) {
+      this.relations.push({
+        relationKind: "outcome",
+        fromRef: outcome.reference,
+        toRef: reference,
+        targetRole: role,
+        effectiveOrder: outcome.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    return transition.reference;
+  }
+
+  resolveExactActiveProductionTrial() {
+    const activeTrials = [...this.records.values()].filter((record) => (
+      record.family === "active_trial"
+    ));
+    if (activeTrials.length === 0) return undefined;
+    if (activeTrials.length !== 1) {
+      throw new SutStateIntegrityError(
+        "Focused-drill processing requires one exact active production trial."
+      );
+    }
+    return this.validActiveTrialClosure(activeTrials[0]);
+  }
+
+  validateFocusedDrillDispositionClosure(disposition) {
+    return validateFocusedDrillDispositionClosure({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      disposition
+    });
+  }
+
+  resolveFocusedDrillRealizationClosure(dispositionRef, expectedFactRef) {
+    return resolveFocusedDrillRealizationClosure({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      dispositionRef,
+      expectedFactRef
+    });
+  }
+
+  validateFocusedDrillOutcomeClosure(outcome) {
+    return validateFocusedDrillOutcomeClosure({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      outcome
+    });
+  }
+
   resolveActivationBindingTrigger(interaction, bindingTransitionRef) {
     const transition = this.records.get(bindingTransitionRef);
     const binding = this.records.get(transition?.resultReferences?.[0]);
@@ -1832,7 +2200,8 @@ function byCreatedOrder(left, right) {
 }
 
 function inputOrigin(input) {
-  return input.kind === "simulator_realization" ? "simulator" : "fixture";
+  return ["simulator_realization", "simulator_behavior_realization"].includes(input.kind)
+    ? "simulator" : "fixture";
 }
 
 function actorReferenceKey(sourceActor, origin) {

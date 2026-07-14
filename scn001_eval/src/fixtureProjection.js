@@ -53,8 +53,14 @@ export function projectFixtureRecord(record, sourceFactRef = createSourceFactRef
   if (!definition) {
     throw new Error(`Unsupported fixture role: ${record.role}.`);
   }
-  assertExactKeys(record.data, definition.keys, `fixture record ${record.fixtureRecordId}.data`);
+  const dataKeys = record.role === "task_observation" && Object.hasOwn(record.data, "itemRefs")
+    ? definition.keys.map((key) => key === "itemRef" ? "itemRefs" : key)
+    : definition.keys;
+  assertExactKeys(record.data, dataKeys, `fixture record ${record.fixtureRecordId}.data`);
   if (definition.kind === "task_observation") {
+    if (Object.hasOwn(record.data, "itemRefs")) {
+      assertStringArray(record.data.itemRefs, `fixture record ${record.fixtureRecordId}.data.itemRefs`);
+    }
     assertRawPerformance(record.data.performance, `fixture record ${record.fixtureRecordId}.data.performance`);
   }
 
@@ -119,6 +125,14 @@ function assertRawPerformance(value, path) {
     return;
   }
   throw new Error(`${path}.kind is not an accepted raw performance form.`);
+}
+
+function assertStringArray(value, path) {
+  if (!Array.isArray(value) || value.length === 0
+    || value.some((item) => typeof item !== "string" || item.length === 0)
+    || new Set(value).size !== value.length) {
+    throw new Error(`${path} must be a non-empty array of unique strings.`);
+  }
 }
 
 function isPlainObject(value) {

@@ -7,6 +7,10 @@ const RECORD_KEYS = [
   "requestedCandidateMaterialIntent", "requestedScope", "realizedBehavior",
   "realizedMaterialIntent", "fidelity", "mismatchOrigin"
 ];
+const BEHAVIOR_RECORD_KEYS = [
+  "simulatorRecordId", "role", "sourceActor", "occurrenceOrder", "requestedOutputRef",
+  "requestedRef", "requestedBehavior", "realizedBehavior", "fidelity", "mismatchOrigin"
+];
 const REFERENCE_PATTERNS = {
   requestedOutputRef: /^transition_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
   requestedRef: /^state_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
@@ -23,20 +27,36 @@ export function createSimulatorProjector() {
         sourceFactRef = `source_${randomUUID()}`;
         sourceRefs.set(record.simulatorRecordId, sourceFactRef);
       }
-      return {
-        sourceFactRef,
-        kind: "simulator_realization",
-        sourceActor: record.sourceActor,
-        occurrenceOrder: record.occurrenceOrder,
-        requestedRef: record.requestedRef,
-        realizedBehavior: record.realizedBehavior,
-        fidelity: record.fidelity
-      };
+      return record.role === "simulated_behavior_realization_fact"
+        ? {
+            sourceFactRef,
+            kind: "simulator_behavior_realization",
+            sourceActor: record.sourceActor,
+            occurrenceOrder: record.occurrenceOrder,
+            requestedRef: record.requestedRef,
+            requestedBehavior: record.requestedBehavior,
+            realizedBehavior: record.realizedBehavior,
+            fidelity: record.fidelity,
+            mismatchOrigin: record.mismatchOrigin
+          }
+        : {
+            sourceFactRef,
+            kind: "simulator_realization",
+            sourceActor: record.sourceActor,
+            occurrenceOrder: record.occurrenceOrder,
+            requestedRef: record.requestedRef,
+            realizedBehavior: record.realizedBehavior,
+            fidelity: record.fidelity
+          };
     }
   });
 }
 
 function assertSimulatorRecord(record) {
+  if (record?.role === "simulated_behavior_realization_fact") {
+    assertBehaviorSimulatorRecord(record);
+    return;
+  }
   assertExactKeys(record, RECORD_KEYS, "evaluation-side simulator record");
   assertExactKeys(record.requestedScope, ["dimension", "taskMode"], "requestedScope");
   assertExactKeys(
@@ -91,6 +111,32 @@ function assertSimulatorRecord(record) {
     || !fidelityConsistent
   ) {
     throw new Error("Invalid evaluation-side simulator record.");
+  }
+}
+
+function assertBehaviorSimulatorRecord(record) {
+  assertExactKeys(record, BEHAVIOR_RECORD_KEYS, "evaluation-side behavior simulator record");
+  for (const field of ["requestedOutputRef", "requestedRef"]) {
+    const pattern = REFERENCE_PATTERNS[field];
+    if (typeof record[field] !== "string" || !pattern.test(record[field])) {
+      throw new Error(`Invalid ${field} on evaluation-side behavior simulator record.`);
+    }
+  }
+  const match = record.fidelity === "match"
+    && record.requestedBehavior === record.realizedBehavior
+    && record.mismatchOrigin === null;
+  const mismatch = record.fidelity === "mismatch"
+    && record.requestedBehavior !== record.realizedBehavior
+    && typeof record.mismatchOrigin === "string"
+    && record.mismatchOrigin.length > 0;
+  if (record.role !== "simulated_behavior_realization_fact"
+    || typeof record.simulatorRecordId !== "string" || record.simulatorRecordId.length === 0
+    || record.sourceActor !== "simulated-dependency"
+    || !Number.isSafeInteger(record.occurrenceOrder) || record.occurrenceOrder < 1
+    || record.requestedBehavior !== "immediate_correction"
+    || typeof record.realizedBehavior !== "string" || record.realizedBehavior.length === 0
+    || !(match || mismatch)) {
+    throw new Error("Invalid evaluation-side behavior simulator record.");
   }
 }
 

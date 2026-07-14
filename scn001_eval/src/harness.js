@@ -1,7 +1,7 @@
 import { SUT_PUBLIC_BOUNDARY_METHODS } from "@zoey/scn001-sut-core";
 
 import { createSourceFactReference, projectFixtureRecords } from "./fixtureProjection.js";
-import { realizeProposalOutput } from "./simulator.js";
+import { realizeAvailableOutput } from "./simulator.js";
 import { createSimulatorProjector } from "./simulatorProjection.js";
 
 const ACCEPTANCE_FIXTURES = Object.freeze({
@@ -22,6 +22,48 @@ const ACCEPTANCE_FIXTURES = Object.freeze({
   }) })
 });
 
+const FOCUSED_DRILL_OPEN_FIXTURES = Object.freeze({
+  "D-001": Object.freeze({
+    role: "context_label", sourceActor: "fixture-driver", occurrenceOrder: 15,
+    data: Object.freeze({
+      surfaceLabel: "text_simulated", activity: "japanese_practice",
+      taskMode: "focused_production_drill", consequence: "low"
+    })
+  }),
+  "D-002": Object.freeze({
+    role: "communication_event", sourceActor: "synthetic-user-a", occurrenceOrder: 16,
+    data: Object.freeze({
+      content: "Please correct me right away during this drill.",
+      context: "focused_production_drill", semanticStatusOrigin: "unclassified"
+    })
+  })
+});
+
+const FOCUSED_DRILL_OUTCOME_FIXTURES = Object.freeze({
+  "D-003": Object.freeze({
+    role: "task_observation", sourceActor: "fixture-scorer", occurrenceOrder: 17,
+    data: Object.freeze({
+      itemRefs: Object.freeze([
+        "DRILL-1", "DRILL-2", "DRILL-3", "DRILL-4", "DRILL-5", "DRILL-6"
+      ]),
+      taskMode: "focused_production_drill", dimension: "particle_pattern_a",
+      performance: Object.freeze({ kind: "aggregate", correctCount: 5, totalCount: 6 }),
+      occurrenceScenarioDay: 135, sessionId: "focused-drill-current", sessionOrder: 3
+    })
+  }),
+  "D-004": Object.freeze({
+    role: "outcome_fact", sourceActor: "synthetic-user-a", occurrenceOrder: 18,
+    data: Object.freeze({
+      observation: "That helped for this drill.", context: "focused_production_drill"
+    })
+  })
+});
+
+const RESERVED_FOCUSED_DRILL_FIXTURE_IDS = new Set([
+  ...Object.keys(FOCUSED_DRILL_OPEN_FIXTURES),
+  ...Object.keys(FOCUSED_DRILL_OUTCOME_FIXTURES)
+]);
+
 export function createEvaluationHarness(sutBoundary, ...extraArguments) {
   if (extraArguments.length !== 0) {
     throw new Error("The formal evaluation harness accepts only the SUT public boundary.");
@@ -31,7 +73,7 @@ export function createEvaluationHarness(sutBoundary, ...extraArguments) {
 
 export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
   assertPublicBoundary(sutBoundary);
-  const renderOutput = dependencies.renderOutput ?? realizeProposalOutput;
+  const renderOutput = dependencies.renderOutput ?? realizeAvailableOutput;
   const createProjector = dependencies.createProjector ?? createSimulatorProjector;
   const runSourceFactReferences = new Map();
   const runTransport = new Map();
@@ -41,7 +83,9 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
       const runRef = sutBoundary.startRun();
       runSourceFactReferences.set(runRef, new Map());
       runTransport.set(runRef, {
-        routed: new Map(), projector: createProjector(), nextOrder: 1, acceptanceDeliveries: new Map()
+        routed: new Map(), projector: createProjector(), nextOrder: 1,
+        acceptanceDeliveries: new Map(), focusedOpenDeliveries: new Map(),
+        focusedOutcomeDeliveries: new Map()
       });
       return runRef;
     },
@@ -56,7 +100,34 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
       if (Array.isArray(fixtureRecords) && fixtureRecords.some((record) => record?.role === "user_response")) {
         throw new Error("Generic formal fixture delivery cannot deliver user_response records.");
       }
+      if (Array.isArray(fixtureRecords) && fixtureRecords.some((record) => (
+        RESERVED_FOCUSED_DRILL_FIXTURE_IDS.has(record?.fixtureRecordId)
+        || isFocusedDrillFixtureMaterial(record)
+      ))) {
+        throw new Error("Focused-drill fixture records require their staged checkpoint delivery.");
+      }
       return deliverProjectedFixtureRecords(runRef, fixtureRecords);
+    },
+
+    deliverFocusedDrillInputsIfEligible(runRef, fixtureRecords) {
+      const transport = runTransport.get(runRef);
+      if (!transport) throw new Error(`Unknown or closed evaluation run: ${runRef}.`);
+      validateExactFixtureSet(
+        fixtureRecords, FOCUSED_DRILL_OPEN_FIXTURES,
+        "Focused-drill opening delivery"
+      );
+      const snapshot = sutBoundary.captureInspectionSnapshot(runRef);
+      const activeTrial = findExactActiveProductionTrial(snapshot);
+      if (!activeTrial) return Object.freeze([]);
+      const prior = transport.focusedOpenDeliveries.get(activeTrial.reference);
+      if (prior) return prior;
+      const result = deliverProjectedFixtureRecords(runRef, fixtureRecords);
+      const frozen = deepFreeze([{
+        activeTrialRef: activeTrial.reference,
+        acceptedInputRefs: [...result.acceptedInputRefs]
+      }]);
+      transport.focusedOpenDeliveries.set(activeTrial.reference, frozen);
+      return frozen;
     },
 
     deliverProposalAcceptanceIfEligible(runRef, responseAndControlFixtureRecords) {
@@ -82,6 +153,32 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
       });
       const frozen = deepFreeze([{ outputRef, acceptedInputRefs: [...result.acceptedInputRefs] }]);
       transport.acceptanceDeliveries.set(outputRef, frozen);
+      return frozen;
+    },
+
+    deliverFocusedDrillOutcomeIfEligible(runRef, fixtureRecords) {
+      const transport = runTransport.get(runRef);
+      if (!transport) throw new Error(`Unknown or closed evaluation run: ${runRef}.`);
+      validateExactFixtureSet(
+        fixtureRecords, FOCUSED_DRILL_OUTCOME_FIXTURES,
+        "Focused-drill outcome delivery"
+      );
+      const eligible = findEligibleFocusedDrillRealizations(sutBoundary, runRef, transport);
+      if (eligible.length === 0) return Object.freeze([]);
+      if (eligible.length !== 1) {
+        throw new Error(
+          "Focused-drill realization checkpoint requires exactly one eligible disposition."
+        );
+      }
+      const { outputRef } = eligible[0];
+      const prior = transport.focusedOutcomeDeliveries.get(outputRef);
+      if (prior) return prior;
+      const result = deliverProjectedFixtureRecords(runRef, fixtureRecords);
+      const frozen = deepFreeze([{
+        outputRef,
+        acceptedInputRefs: [...result.acceptedInputRefs]
+      }]);
+      transport.focusedOutcomeDeliveries.set(outputRef, frozen);
       return frozen;
     },
 
@@ -111,6 +208,7 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
         throw new Error("Simulator routing must accept exactly one SUT input fact reference.");
       }
       transport.routed.set(output.outputRef, Object.freeze({
+        output,
         record,
         simulatorFactRef: result.acceptedInputRefs[0]
       }));
@@ -309,6 +407,561 @@ function findEligibleRoutedRealizations(sutBoundary, runRef, transport) {
     if (!valid) throw new Error("Acceptance branch boundary integrity requires an exact P/S/F/R/E checkpoint.");
     return [{ outputRef, entry }];
   });
+}
+
+function findExactActiveProductionTrial(snapshot) {
+  const trials = snapshot.records.filter((record) => record.family === "active_trial");
+  if (trials.length === 0) return undefined;
+  if (trials.length !== 1) {
+    throw new Error("CP-PROD-ACTIVE requires exactly one active production trial.");
+  }
+  const trial = trials[0];
+  const candidate = exactRecord(snapshot, trial.candidateRef, "active-trial candidate");
+  const assessment = exactRecord(
+    snapshot, trial.activationAssessmentRef, "activation assessment"
+  );
+  const binding = exactRecord(
+    snapshot, assessment?.bindingAssessmentRef, "proposal-response binding"
+  );
+  const proposal = exactRecord(snapshot, binding?.proposalRef, "bound proposal");
+  const direction = exactRecord(snapshot, candidate?.trialDirectionRef, "trial direction");
+  const trialTransition = uniqueCreatingTransition(snapshot, trial, "active trial");
+  const assessmentTransition = uniqueCreatingTransition(
+    snapshot, assessment, "activation assessment"
+  );
+  const candidateTransition = uniqueCreatingTransition(snapshot, candidate, "trial candidate");
+  const proposalTransition = uniqueCreatingTransition(snapshot, proposal, "proposal");
+  const bindingTransition = uniqueCreatingTransition(snapshot, binding, "binding assessment");
+  const trialAncestry = snapshot.relations.filter((relation) => (
+    relation.fromRef === trial.reference && relation.relationKind === "transition_ancestry"
+  ));
+  const assessmentBasis = snapshot.relations.filter((relation) => (
+    relation.fromRef === assessment.reference && relation.relationKind === "basis"
+  ));
+  const expectedChecks = [
+    "scope", "basis_lineage", "current_stale_basis", "user_governed_constraints",
+    "reversibility", "consequence", "current_applicability", "retention_basis",
+    "non_adaptation_boundary"
+  ];
+  const checkKeys = Object.keys(assessment?.checkResults ?? {}).sort();
+  const validChecks = checkKeys.length === expectedChecks.length
+    && checkKeys.every((key, index) => key === [...expectedChecks].sort()[index])
+    && Object.values(assessment.checkResults).every((result) => (
+      hasExactKeys(result, ["status", "reason"])
+      && result.status === "passed"
+      && typeof result.reason === "string" && result.reason.length > 0
+    ));
+  const materialRefs = assessment?.materialBasisRefs ?? [];
+  const valid = hasExactKeys(trial, [
+    "reference", "family", "origin", "trialType", "trialOrigin", "candidateRef",
+    "activationAssessmentRef", "activationBasisType", "activeScope", "currentStatus",
+    "lifecycleVersion", "correctionPath", "statusOrigin", "interactionRef", "createdOrder",
+    "createdByTransitionRef"
+  ]) && trial.origin === "sut" && trial.trialType === "production_focused_practice"
+    && trial.trialOrigin === "zoey_derived_trial" && trial.currentStatus === "active"
+    && trial.lifecycleVersion === 1
+    && trial.activationBasisType === "bound_candidate_specific_proposal_acceptance"
+    && trial.statusOrigin === "sut_transition"
+    && hasExactKeys(candidate, [
+      "reference", "family", "origin", "candidateType", "materialIntent",
+      "candidateSource", "purpose", "trialDirectionRef", "supportComparisonRef",
+      "proposedScope", "reversibility", "correctionPath", "lifecycleStatus",
+      "lifecycleVersion", "decisionBasisAffordanceRefs", "uncertainty", "statusOrigin",
+      "interactionRef", "createdOrder", "createdByTransitionRef"
+    ])
+    && candidate?.family === "trial_candidate" && candidate.origin === "sut"
+    && candidate.candidateType === "production_focused_practice"
+    && candidate.materialIntent === "practice_spontaneous_production_for_target_dimension"
+    && candidate.lifecycleStatus === "formed_non_active" && candidate.lifecycleVersion === 1
+    && candidate.proposedScope?.taskMode === "spontaneous_production"
+    && JSON.stringify(trial.activeScope) === JSON.stringify(candidate.proposedScope)
+    && direction?.family === "input_fact" && direction.origin === "fixture"
+    && direction.role === "affordance_fact"
+    && direction.payload?.direction === "TRIAL-PROD-FOCUS"
+    && candidateTransition.family === "sut_transition_evidence"
+    && candidateTransition.origin === "sut"
+    && candidateTransition.transitionKind
+      === "form_or_withhold_production_focused_candidate"
+    && candidateTransition.interactionRef === candidate.interactionRef
+    && candidateTransition.result === "candidate_formed"
+    && candidateTransition.resultReferences.includes(candidate.reference)
+    && hasExactKeys(proposal, [
+      "reference", "family", "origin", "proposalType", "candidateRef", "materialIntent",
+      "candidateMaterialIntent", "proposedScope", "responseExpectation", "statusOrigin",
+      "interactionRef", "createdOrder", "createdByTransitionRef"
+    ])
+    && proposal?.family === "proposal_intent" && proposal.origin === "sut"
+    && proposal.candidateRef === candidate.reference
+    && proposal.proposalType === "candidate_bound_trial_offer"
+    && proposal.materialIntent === "offer_scoped_trial_for_user_decision"
+    && proposal.candidateMaterialIntent === candidate.materialIntent
+    && JSON.stringify(proposal.proposedScope) === JSON.stringify(candidate.proposedScope)
+    && proposal.responseExpectation === "candidate_bound_trial_decision"
+    && proposal.statusOrigin === "sut_transition"
+    && proposalTransition.family === "sut_transition_evidence"
+    && proposalTransition.origin === "sut"
+    && proposalTransition.transitionKind === "form_candidate_bound_proposal_intent"
+    && proposalTransition.interactionRef === proposal.interactionRef
+    && proposalTransition.result === "proposal_intent_formed"
+    && JSON.stringify(proposalTransition.inputReferences) === JSON.stringify([
+      candidate.reference
+    ])
+    && JSON.stringify(proposalTransition.resultReferences) === JSON.stringify([
+      proposal.reference
+    ])
+    && hasExactKeys(binding, [
+      "reference", "family", "origin", "bindingType", "proposalRef",
+      "realizationFactRefs", "userResponseRefs", "bindingStatus", "responseStatus",
+      "materialIntentStatus", "reason", "statusOrigin", "interactionRef", "createdOrder",
+      "createdByTransitionRef"
+    ])
+    && binding?.family === "binding_assessment" && binding.origin === "sut"
+    && binding.bindingType === "candidate_bound_proposal_response"
+    && binding.proposalRef === proposal.reference
+    && binding.realizationFactRefs.length === 1
+    && binding.userResponseRefs.length === 1
+    && binding.bindingStatus === "bound" && binding.responseStatus === "accepted"
+    && binding.materialIntentStatus === "match"
+    && binding.reason === "exact_candidate_bound_proposal_response"
+    && binding.statusOrigin === "sut_transition"
+    && bindingTransition.family === "sut_transition_evidence"
+    && bindingTransition.origin === "sut"
+    && bindingTransition.transitionKind === "assess_proposal_response_binding"
+    && bindingTransition.interactionRef === binding.interactionRef
+    && bindingTransition.result === "binding_assessed"
+    && JSON.stringify(bindingTransition.resultReferences) === JSON.stringify([
+      binding.reference
+    ])
+    && hasExactKeys(assessment, [
+      "reference", "family", "origin", "activationType", "activationBasisType",
+      "candidateRef", "bindingAssessmentRef", "activeScope", "overallStatus",
+      "comparisonRef", "recognitionObservationRef", "productionObservationRef",
+      "chronologyRef", "contextRef", "controlBasisRefs", "checkResults",
+      "materialBasisRefs", "statusOrigin", "interactionRef", "createdOrder",
+      "createdByTransitionRef"
+    ])
+    && assessment?.family === "activation_assessment" && assessment.origin === "sut"
+    && assessment.activationType === "production_focused_candidate_activation"
+    && assessment.activationBasisType === "bound_candidate_specific_proposal_acceptance"
+    && assessment.candidateRef === candidate.reference
+    && assessment.bindingAssessmentRef === binding.reference
+    && JSON.stringify(assessment.activeScope) === JSON.stringify(candidate.proposedScope)
+    && assessment.overallStatus === "sufficient" && validChecks
+    && assessment.statusOrigin === "sut_transition"
+    && materialRefs.length === new Set(materialRefs).size
+    && materialRefs.includes(candidate.reference) && materialRefs.includes(binding.reference)
+    && JSON.stringify(assessmentTransition.inputReferences) === JSON.stringify(materialRefs)
+    && assessmentTransition.transitionKind === "assess_production_focused_trial_activation"
+    && JSON.stringify(assessmentTransition.resultReferences) === JSON.stringify([
+      assessment.reference
+    ])
+    && new Set(assessmentBasis.map((relation) => relation.toRef)).size === materialRefs.length
+    && sameReferenceSet([...new Set(assessmentBasis.map((relation) => relation.toRef))], materialRefs)
+    && assessmentBasis.every((relation) => relation.assertedByRole === "sut"
+      && relation.effectiveOrder === assessment.createdOrder
+      && relation.createdOrder === assessmentTransition.createdOrder)
+    && assessmentTransition.family === "sut_transition_evidence"
+    && assessmentTransition.origin === "sut"
+    && assessmentTransition.interactionRef === assessment.interactionRef
+    && assessmentTransition.result === "activation_assessed"
+    && trialTransition.transitionKind === "activate_production_focused_trial"
+    && trialTransition.family === "sut_transition_evidence"
+    && trialTransition.origin === "sut"
+    && trialTransition.interactionRef === trial.interactionRef
+    && trialTransition.result === "trial_activated"
+    && JSON.stringify(trialTransition.inputReferences) === JSON.stringify([
+      candidate.reference, assessment.reference
+    ])
+    && JSON.stringify(trialTransition.resultReferences) === JSON.stringify([trial.reference])
+    && trialAncestry.length === 2
+    && hasRoleReference(trialAncestry, candidate.reference, "trial_candidate")
+    && hasRoleReference(trialAncestry, assessment.reference, "activation_assessment")
+    && trialAncestry.every((relation) => relation.assertedByRole === "sut"
+      && relation.effectiveOrder === trial.createdOrder
+      && relation.createdOrder === trialTransition.createdOrder)
+    && candidate.createdOrder < candidateTransition.createdOrder
+    && candidateTransition.createdOrder < proposal.createdOrder
+    && proposal.createdOrder < proposalTransition.createdOrder
+    && binding.createdOrder < bindingTransition.createdOrder
+    && assessment.createdOrder < assessmentTransition.createdOrder
+    && assessmentTransition.createdOrder < trial.createdOrder
+    && trial.createdOrder < trialTransition.createdOrder;
+  if (!valid) {
+    throw new Error("CP-PROD-ACTIVE requires exact candidate/proposal/binding/assessment closure.");
+  }
+  return trial;
+}
+
+function findEligibleFocusedDrillRealizations(sutBoundary, runRef, transport) {
+  const snapshot = sutBoundary.captureInspectionSnapshot(runRef);
+  const activeTrial = findExactActiveProductionTrial(snapshot);
+  if (!activeTrial) return [];
+  return [...transport.routed.entries()].flatMap(([outputRef, entry]) => {
+    const { output, record, simulatorFactRef } = entry;
+    if (record.role !== "simulated_behavior_realization_fact") return [];
+    if (record.requestedBehavior !== "immediate_correction"
+      || record.realizedBehavior !== "immediate_correction"
+      || record.fidelity !== "match" || record.mismatchOrigin !== null) return [];
+    const disposition = exactRecord(snapshot, record.requestedRef, "focused-drill disposition");
+    const instruction = exactRecord(snapshot, disposition?.instructionRef, "drill instruction");
+    const context = exactRecord(snapshot, disposition?.contextRef, "focused-drill context");
+    const communication = exactRecord(
+      snapshot, instruction?.sourceCommunicationRef, "focused-drill request"
+    );
+    const assertion = exactRecord(
+      snapshot, instruction?.attributedAssertionRef, "focused-drill attribution"
+    );
+    const instructionActor = exactRecord(
+      snapshot, instruction?.sourceActorRef, "focused-drill request actor"
+    );
+    const attributionTransition = uniqueCreatingTransition(
+      snapshot, assertion, "focused-drill attribution"
+    );
+    const instructionTransition = uniqueCreatingTransition(
+      snapshot, instruction, "focused-drill instruction"
+    );
+    const dispositionTransition = uniqueCreatingTransition(
+      snapshot, disposition, "focused-drill disposition"
+    );
+    const fact = exactRecord(snapshot, simulatorFactRef, "focused-drill simulator fact");
+    const transitions = snapshot.records.filter((item) => (
+      item.transitionKind === "record_focused_drill_realization"
+      && (item.inputReferences?.includes(simulatorFactRef)
+        || item.inputReferences?.includes(disposition.reference))
+    ));
+    const realizationRelations = snapshot.relations.filter((relation) => (
+      relation.relationKind === "realization"
+      && (relation.fromRef === simulatorFactRef || relation.toRef === disposition.reference)
+    ));
+    if (transitions.length === 0 && realizationRelations.length === 0) return [];
+    const transition = exactlyOne(transitions, "focused-drill recording transition");
+    const realization = exactlyOne(realizationRelations, "focused-drill realization relation");
+    const bases = snapshot.relations.filter((relation) => (
+      relation.fromRef === transition.reference && relation.relationKind === "basis"
+    ));
+    const instructionBases = snapshot.relations.filter((relation) => (
+      relation.fromRef === instruction.reference && relation.relationKind === "basis"
+    ));
+    const instructionSources = snapshot.relations.filter((relation) => (
+      relation.fromRef === instruction.reference && relation.relationKind === "source"
+    ));
+    const assertionBases = snapshot.relations.filter((relation) => (
+      relation.fromRef === assertion.reference && relation.relationKind === "basis"
+    ));
+    const assertionSources = snapshot.relations.filter((relation) => (
+      relation.fromRef === assertion.reference && relation.relationKind === "source"
+    ));
+    const dispositionBases = snapshot.relations.filter((relation) => (
+      relation.fromRef === disposition.reference && relation.relationKind === "basis"
+    ));
+    const projected = transport.projector.project(record);
+    const valid = hasExactKeys(output, [
+      "kind", "outputRef", "requestedRef", "requestedBehavior", "drillScope"
+    ]) && output.kind === "focused_drill_behavior_request"
+      && output.outputRef === outputRef && output.requestedRef === disposition.reference
+      && output.requestedBehavior === "immediate_correction"
+      && outputRef === disposition.createdByTransitionRef
+      && hasExactKeys(instruction, [
+        "reference", "family", "origin", "instructionType", "activeTrialRef",
+        "sourceCommunicationRef", "attributedAssertionRef", "sourceActorRef", "contextRef",
+        "drillScope", "requestedBehavior", "authority", "applicability", "globalPreference",
+        "statusOrigin", "interactionRef", "createdOrder", "createdByTransitionRef"
+      ])
+      && hasExactKeys(disposition, [
+        "reference", "family", "origin", "dispositionType", "activeTrialRef",
+        "instructionRef", "contextRef", "drillScope", "requestedBehavior",
+        "behaviorStatus", "statusOrigin", "interactionRef", "createdOrder",
+        "createdByTransitionRef"
+      ])
+      && disposition?.family === "focused_drill_behavior_disposition"
+      && disposition.origin === "sut"
+      && disposition.dispositionType === "current_focused_drill_correction_behavior"
+      && disposition.activeTrialRef === activeTrial.reference
+      && disposition.instructionRef === instruction.reference
+      && disposition.contextRef === context.reference
+      && disposition.requestedBehavior === "immediate_correction"
+      && disposition.behaviorStatus === "requested_for_exact_current_drill"
+      && disposition.statusOrigin === "sut_transition"
+      && disposition.interactionRef === instruction.interactionRef
+      && JSON.stringify(disposition.drillScope) === JSON.stringify(instruction.drillScope)
+      && instruction?.family === "focused_drill_instruction" && instruction.origin === "sut"
+      && instruction.instructionType === "explicit_current_focused_drill_correction"
+      && instruction.activeTrialRef === activeTrial.reference
+      && instruction.requestedBehavior === "immediate_correction"
+      && instruction.authority === "explicit_expected_user_request"
+      && instruction.applicability === "exact_current_focused_drill_only"
+      && instruction.globalPreference === "not_established"
+      && instruction.contextRef === context.reference
+      && instruction.sourceActorRef === communication.sourceActorRef
+      && instruction.sourceActorRef === instructionActor.reference
+      && instructionActor?.family === "semantic_source"
+      && instructionActor.origin === "fixture"
+      && instructionActor.sourceActor === "synthetic-user-a"
+      && hasExactRetainedInputClosure(
+        snapshot, context, "fixture", "context_label", "fixture-driver"
+      )
+      && hasExactRetainedInputClosure(
+        snapshot, communication, "fixture", "communication", "synthetic-user-a"
+      )
+      && assertion?.family === "attributed_assertion" && assertion.origin === "sut"
+      && hasExactKeys(assertion, [
+        "reference", "family", "origin", "sourceCommunicationRef", "sourceActorRef",
+        "context", "occurrenceOrder", "epistemicStatus", "statusOrigin", "interactionRef",
+        "createdOrder", "createdByTransitionRef"
+      ])
+      && assertion.sourceCommunicationRef === communication.reference
+      && assertion.sourceActorRef === communication.sourceActorRef
+      && assertion.context === communication.payload.context
+      && assertion.occurrenceOrder === communication.payload.occurrenceOrder
+      && assertion.epistemicStatus === "attributed_user_assertion"
+      && assertion.statusOrigin === "sut_transition"
+      && assertion.interactionRef === instruction.interactionRef
+      && communication?.family === "input_fact" && communication.origin === "fixture"
+      && communication.role === "communication"
+      && communication.payload?.sourceActor === "synthetic-user-a"
+      && context?.family === "input_fact" && context.origin === "fixture"
+      && context.role === "context_label"
+      && context.payload?.activity === "japanese_practice"
+      && context.payload?.taskMode === "focused_production_drill"
+      && context.payload?.surfaceLabel === "text_simulated"
+      && context.payload?.consequence === "low"
+      && instruction.interactionRef === context.firstInteractionRef
+      && instruction.interactionRef === communication.firstInteractionRef
+      && attributionTransition.transitionKind === "attribute_current_communications"
+      && attributionTransition.origin === "sut"
+      && attributionTransition.interactionRef === instruction.interactionRef
+      && attributionTransition.inputReferences.includes(communication.reference)
+      && attributionTransition.resultReferences.includes(assertion.reference)
+      && assertionBases.length === 1
+      && hasRoleReference(assertionBases, communication.reference, "attributed_communication")
+      && exactRelationMetadata(
+        assertionBases[0], assertion.createdOrder, attributionTransition.createdOrder, "sut"
+      )
+      && assertionSources.length === 1
+      && hasRoleReference(assertionSources, instructionActor.reference, "semantic_source")
+      && exactRelationMetadata(
+        assertionSources[0], assertion.createdOrder, attributionTransition.createdOrder, "sut"
+      )
+      && instructionTransition.transitionKind === "derive_focused_drill_instruction"
+      && instructionTransition.origin === "sut"
+      && instructionTransition.interactionRef === instruction.interactionRef
+      && instructionTransition.result === "focused_drill_instruction_derived"
+      && JSON.stringify(instructionTransition.inputReferences) === JSON.stringify([
+        activeTrial.reference, context.reference, communication.reference, assertion.reference
+      ])
+      && JSON.stringify(instructionTransition.resultReferences) === JSON.stringify([
+        instruction.reference
+      ])
+      && instructionBases.length === 4
+      && hasRoleReference(instructionBases, activeTrial.reference, "active_production_trial")
+      && hasRoleReference(instructionBases, context.reference, "current_focused_drill_context")
+      && hasRoleReference(
+        instructionBases, communication.reference, "explicit_request_communication"
+      )
+      && hasRoleReference(
+        instructionBases, assertion.reference, "attributed_current_request"
+      )
+      && instructionBases.every((relation) => exactRelationMetadata(
+        relation, instruction.createdOrder, instructionTransition.createdOrder, "sut"
+      ))
+      && instructionSources.length === 1
+      && hasRoleReference(instructionSources, instructionActor.reference, "semantic_source")
+      && exactRelationMetadata(
+        instructionSources[0], instruction.createdOrder, instructionTransition.createdOrder, "sut"
+      )
+      && dispositionTransition.transitionKind
+        === "derive_focused_drill_behavior_disposition"
+      && dispositionTransition.origin === "sut"
+      && dispositionTransition.interactionRef === disposition.interactionRef
+      && dispositionTransition.result === "focused_drill_behavior_disposition_derived"
+      && JSON.stringify(dispositionTransition.inputReferences) === JSON.stringify([
+        activeTrial.reference, context.reference, instruction.reference
+      ])
+      && JSON.stringify(dispositionTransition.resultReferences) === JSON.stringify([
+        disposition.reference
+      ])
+      && dispositionBases.length === 3
+      && hasRoleReference(dispositionBases, activeTrial.reference, "active_production_trial")
+      && hasRoleReference(dispositionBases, context.reference, "current_focused_drill_context")
+      && hasRoleReference(
+        dispositionBases, instruction.reference, "explicit_focused_drill_instruction"
+      )
+      && dispositionBases.every((relation) => exactRelationMetadata(
+        relation, disposition.createdOrder, dispositionTransition.createdOrder, "sut"
+      ))
+      && fact?.family === "input_fact" && fact.origin === "simulator"
+      && fact.role === "simulator_behavior_realization"
+      && hasExactRetainedInputClosure(
+        snapshot, fact, "simulator", "simulator_behavior_realization",
+        "simulated-dependency"
+      )
+      && fact.sourceFactRef === projected.sourceFactRef
+      && fact.payload.requestedRef === disposition.reference
+      && fact.payload.requestedBehavior === record.requestedBehavior
+      && fact.payload.realizedBehavior === record.realizedBehavior
+      && fact.payload.fidelity === record.fidelity
+      && fact.payload.mismatchOrigin === record.mismatchOrigin
+      && transition.family === "sut_transition_evidence" && transition.origin === "sut"
+      && transition.transitionKind === "record_focused_drill_realization"
+      && transition.interactionRef === fact.firstInteractionRef
+      && transition.result === "focused_drill_realization_recorded"
+      && JSON.stringify(transition.inputReferences) === JSON.stringify([
+        fact.reference, disposition.reference
+      ])
+      && transition.resultReferences.length === 0
+      && bases.length === 2
+      && hasRoleReference(bases, fact.reference, "simulator_behavior_realization_fact")
+      && hasRoleReference(bases, disposition.reference, "requested_focused_drill_disposition")
+      && bases.every((relation) => exactRelationMetadata(
+        relation, transition.createdOrder, transition.createdOrder, "sut"
+      ))
+      && realization.fromRef === fact.reference
+      && realization.toRef === disposition.reference
+      && realization.targetRole === "focused_drill_behavior_disposition"
+      && realization.assertedByRole === "sut"
+      && realization.fromRef !== realization.toRef
+      && realization.createdOrder === transition.createdOrder
+      && realization.effectiveOrder === transition.createdOrder
+      && attributionTransition.createdOrder < instruction.createdOrder
+      && instruction.createdOrder < instructionTransition.createdOrder
+      && instructionTransition.createdOrder < disposition.createdOrder
+      && dispositionTransition.createdOrder < fact.createdOrder
+      && fact.createdOrder < transition.createdOrder;
+    if (!valid) {
+      throw new Error(
+        "CP-DRILL-REALIZATION-MATCH requires exact T/I/D/F/R/E closure."
+      );
+    }
+    return [{ outputRef, entry }];
+  });
+}
+
+function validateExactFixtureSet(records, expectedFixtures, label) {
+  const expectedIds = Object.keys(expectedFixtures);
+  if (!Array.isArray(records) || records.length !== expectedIds.length) {
+    throw new Error(`${label} requires its exact package-local fixture set.`);
+  }
+  const byId = new Map(records.map((record) => [record?.fixtureRecordId, record]));
+  if (byId.size !== expectedIds.length || expectedIds.some((id) => !byId.has(id))) {
+    throw new Error(`${label} requires exact package-local fixture identities.`);
+  }
+  for (const [id, expected] of Object.entries(expectedFixtures)) {
+    const record = byId.get(id);
+    projectFixtureRecords([record], () => "source_00000000-0000-0000-0000-000000000000");
+    if (record.role !== expected.role || record.sourceActor !== expected.sourceActor
+      || record.occurrenceOrder !== expected.occurrenceOrder
+      || JSON.stringify(record.data) !== JSON.stringify(expected.data)) {
+      throw new Error(`${label} contains invalid package-local content for ${id}.`);
+    }
+  }
+}
+
+function isFocusedDrillFixtureMaterial(record) {
+  const data = record?.data;
+  return (record?.role === "context_label"
+      && record.sourceActor === "fixture-driver"
+      && data?.activity === "japanese_practice"
+      && data.taskMode === "focused_production_drill"
+      && data.surfaceLabel === "text_simulated"
+      && data.consequence === "low")
+    || (record?.role === "communication_event"
+      && record.sourceActor === "synthetic-user-a"
+      && data?.content?.trim().replaceAll(/\s+/g, " ").toLocaleLowerCase("en-US")
+        === "please correct me right away during this drill."
+      && data.context === "focused_production_drill"
+      && data.semanticStatusOrigin === "unclassified")
+    || (record?.role === "task_observation"
+      && record.sourceActor === "fixture-scorer"
+      && JSON.stringify(data?.itemRefs) === JSON.stringify([
+        "DRILL-1", "DRILL-2", "DRILL-3", "DRILL-4", "DRILL-5", "DRILL-6"
+      ])
+      && data.taskMode === "focused_production_drill"
+      && data.dimension === "particle_pattern_a"
+      && JSON.stringify(data.performance) === JSON.stringify({
+        kind: "aggregate", correctCount: 5, totalCount: 6
+      }))
+    || (record?.role === "outcome_fact"
+      && record.sourceActor === "synthetic-user-a"
+      && data?.observation === "That helped for this drill."
+      && data.context === "focused_production_drill");
+}
+
+function uniqueCreatingTransition(snapshot, record, label) {
+  const claimants = snapshot.records.filter((candidate) => (
+    candidate.reference === record?.createdByTransitionRef
+    || candidate.resultReferences?.includes(record?.reference)
+  ));
+  if (claimants.length !== 1) {
+    throw new Error(`${label} requires exactly one retained creating transition.`);
+  }
+  return claimants[0];
+}
+
+function hasRoleReference(relations, reference, role) {
+  return relations.filter((relation) => (
+    relation.toRef === reference && relation.targetRole === role
+  )).length === 1;
+}
+
+function hasExactRetainedInputClosure(snapshot, fact, origin, role, sourceActor) {
+  if (!hasExactKeys(fact, [
+    "reference", "family", "origin", "role", "sourceFactRef", "payload",
+    "firstInteractionRef", "createdOrder", "sourceActorRef"
+  ]) || fact.family !== "input_fact" || fact.origin !== origin || fact.role !== role
+    || fact.payload?.sourceActor !== sourceActor) return false;
+  const actor = exactRecord(snapshot, fact.sourceActorRef, `${role} semantic actor`);
+  const interaction = exactRecord(snapshot, fact.firstInteractionRef, `${role} interaction`);
+  const ingestion = uniqueCreatingTransition(snapshot, interaction, `${role} ingestion`);
+  const sources = snapshot.relations.filter((relation) => (
+    relation.fromRef === fact.reference && relation.relationKind === "source"
+  ));
+  const ingestionBases = snapshot.relations.filter((relation) => (
+    relation.fromRef === ingestion.reference && relation.relationKind === "basis"
+  ));
+  return hasExactKeys(actor, ["reference", "family", "origin", "sourceActor", "createdOrder"])
+    && actor.family === "semantic_source" && actor.origin === origin
+    && actor.sourceActor === sourceActor
+    && hasExactKeys(interaction, [
+      "reference", "family", "origin", "inputReferences", "createdOrder",
+      "createdByTransitionRef"
+    ])
+    && interaction.family === "interaction_segment" && interaction.origin === "sut"
+    && interaction.inputReferences.includes(fact.reference)
+    && interaction.inputReferences.length === new Set(interaction.inputReferences).size
+    && ingestion.family === "sut_transition_evidence" && ingestion.origin === "sut"
+    && ingestion.transitionKind === "ingest_sut_visible_inputs"
+    && ingestion.interactionRef === interaction.reference
+    && JSON.stringify(ingestion.inputReferences) === JSON.stringify(interaction.inputReferences)
+    && JSON.stringify(ingestion.resultReferences) === JSON.stringify([interaction.reference])
+    && ingestion.result === "accepted"
+    && sources.length === 1
+    && hasRoleReference(sources, actor.reference, "semantic_source")
+    && exactRelationMetadata(sources[0], fact.createdOrder, ingestion.createdOrder, "sut")
+    && ingestionBases.length === interaction.inputReferences.length
+    && interaction.inputReferences.every((reference) => (
+      hasRoleReference(ingestionBases, reference, "ingested_input")
+    ))
+    && ingestionBases.every((relation) => exactRelationMetadata(
+      relation, ingestion.createdOrder, ingestion.createdOrder, "sut"
+    ))
+    && actor.createdOrder < fact.createdOrder
+    && fact.createdOrder < interaction.createdOrder
+    && interaction.createdOrder < ingestion.createdOrder;
+}
+
+function exactRelationMetadata(relation, effectiveOrder, createdOrder, assertedByRole) {
+  return relation?.effectiveOrder === effectiveOrder
+    && relation.createdOrder === createdOrder
+    && relation.assertedByRole === assertedByRole;
+}
+
+function sameReferenceSet(left, right) {
+  return JSON.stringify([...left].sort()) === JSON.stringify([...right].sort());
+}
+
+function hasExactKeys(value, keys) {
+  return value && Object.getPrototypeOf(value) === Object.prototype
+    && Object.keys(value).sort().join("|") === [...keys].sort().join("|");
 }
 
 function exactRecord(snapshot, reference, label) {

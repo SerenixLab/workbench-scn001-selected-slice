@@ -99,6 +99,53 @@ function fixtureControlInput(overrides = {}) {
   };
 }
 
+function focusedDrillContextInput(overrides = {}) {
+  return {
+    sourceFactRef: sourceRef(), kind: "context_label", sourceActor: "fixture-driver",
+    occurrenceOrder: 15, surfaceLabel: "text_simulated", activity: "japanese_practice",
+    taskMode: "focused_production_drill", consequence: "low", ...overrides
+  };
+}
+
+function focusedDrillRequestInput(overrides = {}) {
+  return communicationInput({
+    occurrenceOrder: 16,
+    content: "Please correct me right away during this drill.",
+    context: "focused_production_drill",
+    semanticStatusOrigin: "unclassified",
+    ...overrides
+  });
+}
+
+function focusedDrillRealizationInput(requestedRef, overrides = {}) {
+  return {
+    sourceFactRef: sourceRef(), kind: "simulator_behavior_realization",
+    sourceActor: "simulated-dependency", occurrenceOrder: 17, requestedRef,
+    requestedBehavior: "immediate_correction", realizedBehavior: "immediate_correction",
+    fidelity: "match", mismatchOrigin: null, ...overrides
+  };
+}
+
+function focusedDrillObservationInput(overrides = {}) {
+  return {
+    sourceFactRef: sourceRef(), kind: "task_observation", sourceActor: "fixture-scorer",
+    occurrenceOrder: 18,
+    itemRefs: ["DRILL-1", "DRILL-2", "DRILL-3", "DRILL-4", "DRILL-5", "DRILL-6"],
+    taskMode: "focused_production_drill", dimension: "particle_pattern_a",
+    performance: { kind: "aggregate", correctCount: 5, totalCount: 6 },
+    occurrenceScenarioDay: 0, sessionId: "focused-drill-current", sessionOrder: 3,
+    ...overrides
+  };
+}
+
+function focusedDrillFeedbackInput(overrides = {}) {
+  return {
+    sourceFactRef: sourceRef(), kind: "outcome_fact", sourceActor: "synthetic-user-a",
+    occurrenceOrder: 19, observation: "That helped for this drill.",
+    context: "focused_production_drill", ...overrides
+  };
+}
+
 function calibrationInputs(recognitionCorrect = 4, productionCorrect = 1, overrides = {}) {
   const dimension = overrides.dimension ?? "particle_pattern_a";
   return [
@@ -295,6 +342,52 @@ function activationAssessmentOnlyRun() {
     }
   }
   return run;
+}
+
+function focusedDrillDecisionRun() {
+  const run = activationReadyRun();
+  const inputs = [focusedDrillContextInput(), focusedDrillRequestInput()];
+  run.assertSourceFactConsistency(inputs);
+  run.ingest(inputs);
+  run.processCurrentInteraction();
+  return {
+    run,
+    inputs,
+    activeTrial: [...run.records.values()].find((record) => record.family === "active_trial"),
+    instruction: [...run.records.values()].find(
+      (record) => record.family === "focused_drill_instruction"
+    ),
+    disposition: [...run.records.values()].find(
+      (record) => record.family === "focused_drill_behavior_disposition"
+    )
+  };
+}
+
+function focusedDrillRealizedRun(overrides = {}) {
+  const decision = focusedDrillDecisionRun();
+  const input = focusedDrillRealizationInput(decision.disposition.reference, overrides);
+  decision.run.assertSourceFactConsistency([input]);
+  decision.run.ingest([input]);
+  decision.run.processCurrentInteraction();
+  const fact = [...decision.run.records.values()].find(
+    (record) => record.role === "simulator_behavior_realization"
+  );
+  const transition = [...decision.run.records.values()].find(
+    (record) => record.transitionKind === "record_focused_drill_realization"
+  );
+  return { ...decision, input, fact, realizationTransition: transition };
+}
+
+function focusedDrillOutcomeRun() {
+  const realized = focusedDrillRealizedRun();
+  const inputs = [focusedDrillObservationInput(), focusedDrillFeedbackInput()];
+  realized.run.assertSourceFactConsistency(inputs);
+  realized.run.ingest(inputs);
+  realized.run.processCurrentInteraction();
+  const outcome = [...realized.run.records.values()].find(
+    (record) => record.family === "focused_drill_outcome"
+  );
+  return { ...realized, outcomeInputs: inputs, outcome };
 }
 
 function cloneRetainedTransition(run, transition, overrides = {}) {
@@ -2535,5 +2628,253 @@ test("activation retained facts require complete exact first-ingestion provenanc
       () => run.validActivationAssessmentClosure(assessment),
       /Activation retained input-fact closure/
     );
+  }
+});
+
+test("focused-drill instruction and disposition are exact separate state after retained activation", () => {
+  const { run, inputs, activeTrial, instruction, disposition } = focusedDrillDecisionRun();
+  const candidate = run.records.get(activeTrial.candidateRef);
+  const candidateBefore = structuredClone(candidate);
+  const trialBefore = structuredClone(activeTrial);
+  assert.ok(instruction);
+  assert.ok(disposition);
+  assert.notEqual(instruction.reference, activeTrial.reference);
+  assert.notEqual(disposition.reference, instruction.reference);
+  assert.notEqual(disposition.reference, activeTrial.reference);
+  assert.equal(instruction.sourceCommunicationRef, run.sourceFactBindings.get(
+    inputs[1].sourceFactRef
+  ).inputFactRef);
+  assert.equal(instruction.contextRef, run.sourceFactBindings.get(inputs[0].sourceFactRef).inputFactRef);
+  assert.equal(instruction.globalPreference, "not_established");
+  assert.equal(disposition.activeTrialRef, activeTrial.reference);
+  assert.equal(disposition.instructionRef, instruction.reference);
+  assert.equal(disposition.requestedBehavior, "immediate_correction");
+  run.validateFocusedDrillDispositionClosure(disposition);
+  const output = run.emitAvailableOutputs();
+  assert.equal(output.length, 1);
+  assert.equal(output[0].requestedRef, disposition.reference);
+  assert.equal(output[0].outputRef, disposition.createdByTransitionRef);
+  assert.equal(Object.isFrozen(output), true);
+  assert.equal(Object.isFrozen(output[0].drillScope), true);
+  assert.deepEqual(run.records.get(candidate.reference), candidateBefore);
+  assert.deepEqual(run.records.get(activeTrial.reference), trialBefore);
+
+  const focusedCounts = () => ({
+    instructions: [...run.records.values()].filter(
+      (record) => record.family === "focused_drill_instruction"
+    ).length,
+    dispositions: [...run.records.values()].filter(
+      (record) => record.family === "focused_drill_behavior_disposition"
+    ).length,
+    instructionTransitions: [...run.records.values()].filter(
+      (record) => record.transitionKind === "derive_focused_drill_instruction"
+    ).length,
+    dispositionTransitions: [...run.records.values()].filter(
+      (record) => record.transitionKind === "derive_focused_drill_behavior_disposition"
+    ).length
+  });
+  const beforeReplay = focusedCounts();
+  run.assertSourceFactConsistency(inputs);
+  run.ingest(inputs);
+  run.processCurrentInteraction();
+  assert.deepEqual(focusedCounts(), beforeReplay);
+  assert.equal(run.emitAvailableOutputs()[0].requestedRef, disposition.reference);
+});
+
+test("focused-drill derivation fails closed for missing, historical, wrong-actor, or incompatible input", () => {
+  const cases = [
+    [focusedDrillRequestInput()],
+    [focusedDrillContextInput()],
+    [focusedDrillContextInput(), focusedDrillRequestInput({ sourceActor: "fixture-driver" })],
+    [focusedDrillContextInput({ consequence: "high" }), focusedDrillRequestInput()],
+    [focusedDrillContextInput({ taskMode: "spontaneous_production" }), focusedDrillRequestInput()],
+    [focusedDrillContextInput(), focusedDrillRequestInput({
+      context: "focused_text_drill", semanticStatusOrigin: "fixture_initialized"
+    })],
+    [focusedDrillContextInput(), focusedDrillRequestInput(), focusedDrillRequestInput()]
+  ];
+  for (const inputs of cases) {
+    const run = activationReadyRun();
+    run.assertSourceFactConsistency(inputs);
+    run.ingest(inputs);
+    try {
+      run.processCurrentInteraction();
+    } catch (error) {
+      assert.match(error.message, /Focused-drill|retained input-fact closure/);
+    }
+    assert.equal([...run.records.values()].some((record) => (
+      record.family === "focused_drill_instruction"
+      || record.family === "focused_drill_behavior_disposition"
+    )), false);
+  }
+
+  const noTrial = new RunState();
+  const inputs = [focusedDrillContextInput(), focusedDrillRequestInput()];
+  noTrial.assertSourceFactConsistency(inputs);
+  noTrial.ingest(inputs);
+  noTrial.processCurrentInteraction();
+  assert.equal([...noTrial.records.values()].some((record) => (
+    record.family === "focused_drill_instruction"
+    || record.family === "focused_drill_behavior_disposition"
+  )), false);
+});
+
+test("equal-payload prior drill instructions remain distinct and are never selected by order", () => {
+  const first = focusedDrillDecisionRun();
+  const inputs = [focusedDrillContextInput(), focusedDrillRequestInput()];
+  first.run.assertSourceFactConsistency(inputs);
+  first.run.ingest(inputs);
+  first.run.processCurrentInteraction();
+  const instructions = [...first.run.records.values()].filter(
+    (record) => record.family === "focused_drill_instruction"
+  );
+  const dispositions = [...first.run.records.values()].filter(
+    (record) => record.family === "focused_drill_behavior_disposition"
+  );
+  assert.equal(instructions.length, 2);
+  assert.equal(dispositions.length, 2);
+  assert.notEqual(instructions[0].sourceCommunicationRef, instructions[1].sourceCommunicationRef);
+  assert.notEqual(dispositions[0].instructionRef, dispositions[1].instructionRef);
+  assert.deepEqual(first.run.emitAvailableOutputs(), []);
+});
+
+test("focused-drill realization is separate, exact-targeted, and mismatch cannot create outcome", () => {
+  const matched = focusedDrillRealizedRun();
+  const closure = matched.run.resolveFocusedDrillRealizationClosure(
+    matched.disposition.reference,
+    matched.fact.reference
+  );
+  assert.equal(closure.fact.reference, matched.fact.reference);
+  assert.equal(closure.disposition.reference, matched.disposition.reference);
+  assert.notEqual(closure.fact.reference, matched.disposition.reference);
+  assert.deepEqual(closure.transition.inputReferences, [
+    matched.fact.reference, matched.disposition.reference
+  ]);
+  assert.deepEqual(matched.run.emitAvailableOutputs(), []);
+
+  const mismatch = focusedDrillRealizedRun({
+    realizedBehavior: "delayed_correction",
+    fidelity: "mismatch",
+    mismatchOrigin: "simulated_dependency"
+  });
+  const outcomeInputs = [focusedDrillObservationInput(), focusedDrillFeedbackInput()];
+  mismatch.run.assertSourceFactConsistency(outcomeInputs);
+  mismatch.run.ingest(outcomeInputs);
+  mismatch.run.processCurrentInteraction();
+  assert.equal([...mismatch.run.records.values()].some(
+    (record) => record.family === "focused_drill_outcome"
+  ), false);
+
+  const wrongTarget = focusedDrillDecisionRun();
+  const candidate = [...wrongTarget.run.records.values()].find(
+    (record) => record.family === "trial_candidate"
+  );
+  const wrongInput = focusedDrillRealizationInput(candidate.reference);
+  wrongTarget.run.assertSourceFactConsistency([wrongInput]);
+  wrongTarget.run.ingest([wrongInput]);
+  const before = retainedMutationSnapshot(wrongTarget.run);
+  assert.throws(
+    () => wrongTarget.run.processCurrentInteraction(),
+    /must target an exact SUT behavior disposition/
+  );
+  assert.deepEqual(retainedMutationSnapshot(wrongTarget.run), before);
+});
+
+test("short-term focused-drill outcome requires every exact material participant", () => {
+  {
+    const realized = focusedDrillRealizedRun();
+    const input = focusedDrillObservationInput();
+    realized.run.assertSourceFactConsistency([input]);
+    realized.run.ingest([input]);
+    realized.run.processCurrentInteraction();
+    assert.equal([...realized.run.records.values()].some(
+      (record) => record.family === "focused_drill_outcome"
+    ), false);
+  }
+  {
+    const realized = focusedDrillRealizedRun();
+    const input = focusedDrillFeedbackInput();
+    realized.run.assertSourceFactConsistency([input]);
+    realized.run.ingest([input]);
+    realized.run.processCurrentInteraction();
+    assert.equal([...realized.run.records.values()].some(
+      (record) => record.family === "focused_drill_outcome"
+    ), false);
+  }
+  const completed = focusedDrillOutcomeRun();
+  const outcome = completed.run.validateFocusedDrillOutcomeClosure(completed.outcome);
+  assert.equal(outcome.activeTrialRef, completed.activeTrial.reference);
+  assert.equal(outcome.instructionRef, completed.instruction.reference);
+  assert.equal(outcome.behaviorDispositionRef, completed.disposition.reference);
+  assert.equal(outcome.realizationFactRef, completed.fact.reference);
+  assert.equal(outcome.observationRef, completed.run.sourceFactBindings.get(
+    completed.outcomeInputs[0].sourceFactRef
+  ).inputFactRef);
+  assert.equal(outcome.feedbackRef, completed.run.sourceFactBindings.get(
+    completed.outcomeInputs[1].sourceFactRef
+  ).inputFactRef);
+  assert.equal(outcome.longTermEfficacy, "not_established");
+  assert.equal(outcome.globalPreference, "not_established");
+  assert.equal(outcome.spontaneousProductionApplicability, "not_established");
+  assert.equal(outcome.futureApplicability, "not_established");
+  assert.equal(completed.run.relations.filter((relation) => (
+    relation.fromRef === outcome.reference && relation.relationKind === "outcome"
+  )).length, 9);
+});
+
+test("focused-drill closure attacks fail before allocating or repairing retained state", () => {
+  {
+    const completed = focusedDrillOutcomeRun();
+    completed.run.relations.splice(completed.run.relations.findIndex((relation) => (
+      relation.fromRef === completed.outcome.reference
+      && relation.targetRole === "focused_drill_observation"
+    )), 1);
+    const before = retainedMutationSnapshot(completed.run);
+    assert.throws(
+      () => completed.run.validateFocusedDrillOutcomeClosure(completed.outcome),
+      /outcome closure is malformed/
+    );
+    assert.deepEqual(retainedMutationSnapshot(completed.run), before);
+  }
+  {
+    const decision = focusedDrillDecisionRun();
+    cloneRetainedTransition(
+      decision.run,
+      decision.run.records.get(decision.instruction.createdByTransitionRef)
+    );
+    const before = retainedMutationSnapshot(decision.run);
+    assert.throws(
+      () => decision.run.emitAvailableOutputs(),
+      /requires exactly one retained creating transition/
+    );
+    assert.deepEqual(retainedMutationSnapshot(decision.run), before);
+  }
+  {
+    const run = activationReadyRun();
+    const inputs = [focusedDrillContextInput(), focusedDrillRequestInput()];
+    run.assertSourceFactConsistency(inputs);
+    run.ingest(inputs);
+    const interaction = run.pendingInteractions[0];
+    const facts = interaction.inputReferences.map((reference) => run.records.get(reference));
+    run.deriveAttributedAssertions(interaction, facts);
+    const trial = [...run.records.values()].find((record) => record.family === "active_trial");
+    run.records.set(createReference("state"), {
+      ...structuredClone(trial), reference: createReference("state")
+    });
+    const before = retainedMutationSnapshot(run);
+    assert.throws(
+      () => run.deriveFocusedDrillDecision(interaction, facts),
+      /requires one exact active production trial/
+    );
+    assert.deepEqual(retainedMutationSnapshot(run), before);
+  }
+});
+
+test("focused-drill identities remain isolated across independent RunState instances", () => {
+  const first = focusedDrillOutcomeRun();
+  const second = focusedDrillOutcomeRun();
+  for (const key of ["instruction", "disposition", "fact", "outcome"]) {
+    assert.notEqual(first[key].reference, second[key].reference);
+    assert.equal(second.run.records.has(first[key].reference), false);
   }
 });

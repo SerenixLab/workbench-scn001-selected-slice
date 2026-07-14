@@ -5,7 +5,11 @@ import { createSutBoundary } from "@zoey/scn001-sut-core";
 
 import { createEvaluationHarness } from "../index.js";
 import { createHarnessForMechanismTests } from "../src/harness.js";
-import { realizeProposalOutput } from "../src/simulator.js";
+import {
+  realizeAvailableOutput,
+  realizeFocusedDrillOutput,
+  realizeProposalOutput
+} from "../src/simulator.js";
 import { createSimulatorProjector } from "../src/simulatorProjection.js";
 import { projectFixtureRecord } from "../src/fixtureProjection.js";
 
@@ -294,6 +298,62 @@ function proposalAcceptanceRecords() {
   }));
 }
 
+function focusedDrillOpeningRecords() {
+  return [
+    {
+      fixtureRecordId: "D-001", role: "context_label", sourceActor: "fixture-driver",
+      occurrenceOrder: 15,
+      data: {
+        surfaceLabel: "text_simulated", activity: "japanese_practice",
+        taskMode: "focused_production_drill", consequence: "low"
+      },
+      oracleAnnotations: { checkpoint: "CP-PROD-ACTIVE" }
+    },
+    {
+      fixtureRecordId: "D-002", role: "communication_event",
+      sourceActor: "synthetic-user-a", occurrenceOrder: 16,
+      data: {
+        content: "Please correct me right away during this drill.",
+        context: "focused_production_drill", semanticStatusOrigin: "unclassified"
+      },
+      oracleAnnotations: { expectedBehavior: "immediate_correction" }
+    }
+  ];
+}
+
+function focusedDrillOutcomeRecords() {
+  return [
+    {
+      fixtureRecordId: "D-003", role: "task_observation", sourceActor: "fixture-scorer",
+      occurrenceOrder: 17,
+      data: {
+        itemRefs: ["DRILL-1", "DRILL-2", "DRILL-3", "DRILL-4", "DRILL-5", "DRILL-6"],
+        taskMode: "focused_production_drill", dimension: "particle_pattern_a",
+        performance: { kind: "aggregate", correctCount: 5, totalCount: 6 },
+        occurrenceScenarioDay: 135, sessionId: "focused-drill-current", sessionOrder: 3
+      },
+      oracleAnnotations: { checkpoint: "CP-DRILL-REALIZATION-MATCH" }
+    },
+    {
+      fixtureRecordId: "D-004", role: "outcome_fact", sourceActor: "synthetic-user-a",
+      occurrenceOrder: 18,
+      data: {
+        observation: "That helped for this drill.", context: "focused_production_drill"
+      },
+      oracleAnnotations: { expectedOutcome: "positive_short_term" }
+    }
+  ];
+}
+
+function activateProductionTrial(harness, runRef) {
+  harness.deliverFixtureRecords(runRef, productionProposalRecords());
+  harness.processCurrentInteraction(runRef);
+  harness.realizeAvailableOutputs(runRef);
+  harness.processCurrentInteraction(runRef);
+  harness.deliverProposalAcceptanceIfEligible(runRef, proposalAcceptanceRecords());
+  harness.processCurrentInteraction(runRef);
+}
+
 test("simulator validates the closed request and deterministically preserves material meaning", () => {
   const request = {
     kind: "proposal_realization_request",
@@ -537,6 +597,401 @@ test("activation assessment and active trial identities are isolated across inde
     () => boundary.inspectRecord(second.runRef, first.trial.reference),
     /Unknown or closed/
   );
+});
+
+test("formal harness stages the complete focused-drill trajectory through both exact checkpoints", () => {
+  const boundary = createSutBoundary();
+  const harness = createEvaluationHarness(boundary);
+  const runRef = harness.startRun();
+  const opening = focusedDrillOpeningRecords();
+  const outcomeFacts = focusedDrillOutcomeRecords();
+  assert.deepEqual(harness.deliverFocusedDrillInputsIfEligible(runRef, opening), []);
+  assert.throws(
+    () => harness.deliverFixtureRecords(runRef, opening),
+    /staged checkpoint delivery/
+  );
+  assert.throws(
+    () => harness.deliverFixtureRecords(runRef, opening.map((record, index) => ({
+      ...record, fixtureRecordId: `RENAMED-OPEN-${index}`
+    }))),
+    /staged checkpoint delivery/
+  );
+  assert.throws(
+    () => harness.deliverFixtureRecords(runRef, outcomeFacts.map((record, index) => ({
+      ...record, fixtureRecordId: `RENAMED-OUTCOME-${index}`
+    }))),
+    /staged checkpoint delivery/
+  );
+  harness.deliverFixtureRecords(runRef, productionProposalRecords());
+  harness.processCurrentInteraction(runRef);
+  assert.deepEqual(harness.deliverFocusedDrillInputsIfEligible(runRef, opening), []);
+  harness.realizeAvailableOutputs(runRef);
+  harness.processCurrentInteraction(runRef);
+  assert.deepEqual(harness.deliverFocusedDrillInputsIfEligible(runRef, opening), []);
+  harness.deliverProposalAcceptanceIfEligible(runRef, proposalAcceptanceRecords());
+  harness.processCurrentInteraction(runRef);
+  const beforeDrill = harness.captureInspectionSnapshot(runRef);
+  const candidateBefore = structuredClone(beforeDrill.records.find(
+    (record) => record.family === "trial_candidate"
+  ));
+  const activeTrialBefore = structuredClone(beforeDrill.records.find(
+    (record) => record.family === "active_trial"
+  ));
+  const deliveredOpening = harness.deliverFocusedDrillInputsIfEligible(runRef, opening);
+  assert.equal(deliveredOpening.length, 1);
+  assert.equal(deliveredOpening[0].activeTrialRef, activeTrialBefore.reference);
+  harness.processCurrentInteraction(runRef);
+  let snapshot = harness.captureInspectionSnapshot(runRef);
+  const instruction = snapshot.records.find(
+    (record) => record.family === "focused_drill_instruction"
+  );
+  const disposition = snapshot.records.find(
+    (record) => record.family === "focused_drill_behavior_disposition"
+  );
+  assert.ok(instruction);
+  assert.ok(disposition);
+  assert.notEqual(instruction.reference, activeTrialBefore.reference);
+  assert.notEqual(disposition.reference, instruction.reference);
+  assert.notEqual(disposition.reference, activeTrialBefore.reference);
+  assert.equal(instruction.activeTrialRef, activeTrialBefore.reference);
+  assert.equal(disposition.activeTrialRef, activeTrialBefore.reference);
+  assert.equal(disposition.instructionRef, instruction.reference);
+  const outputs = harness.emitAvailableOutputs(runRef);
+  assert.equal(outputs.length, 1);
+  assert.deepEqual(Object.keys(outputs[0]).sort(), [
+    "drillScope", "kind", "outputRef", "requestedBehavior", "requestedRef"
+  ].sort());
+  assert.equal(outputs[0].kind, "focused_drill_behavior_request");
+  assert.equal(outputs[0].requestedRef, disposition.reference);
+  assert.equal(outputs[0].requestedBehavior, "immediate_correction");
+  assert.equal(Object.isFrozen(outputs), true);
+  assert.equal(Object.isFrozen(outputs[0]), true);
+  const realized = harness.realizeAvailableOutputs(runRef);
+  assert.equal(realized.length, 1);
+  assert.equal(realized[0].requestedRef, disposition.reference);
+  assert.equal(realized[0].requestedBehavior, "immediate_correction");
+  assert.equal(realized[0].realizedBehavior, "immediate_correction");
+  assert.equal(realized[0].fidelity, "match");
+  assert.equal(realized[0].mismatchOrigin, null);
+  assert.deepEqual(harness.deliverFocusedDrillOutcomeIfEligible(runRef, outcomeFacts), []);
+  harness.processCurrentInteraction(runRef);
+  const deliveredOutcome = harness.deliverFocusedDrillOutcomeIfEligible(runRef, outcomeFacts);
+  assert.equal(deliveredOutcome.length, 1);
+  assert.equal(deliveredOutcome[0].outputRef, outputs[0].outputRef);
+  harness.processCurrentInteraction(runRef);
+  snapshot = harness.captureInspectionSnapshot(runRef);
+  const realizationFact = snapshot.records.find(
+    (record) => record.role === "simulator_behavior_realization"
+  );
+  const realizationTransition = snapshot.records.find(
+    (record) => record.transitionKind === "record_focused_drill_realization"
+  );
+  const shortTermOutcome = snapshot.records.find(
+    (record) => record.family === "focused_drill_outcome"
+  );
+  assert.ok(realizationFact);
+  assert.ok(realizationTransition);
+  assert.ok(shortTermOutcome);
+  assert.equal(shortTermOutcome.activeTrialRef, activeTrialBefore.reference);
+  assert.equal(shortTermOutcome.instructionRef, instruction.reference);
+  assert.equal(shortTermOutcome.behaviorDispositionRef, disposition.reference);
+  assert.equal(shortTermOutcome.realizationFactRef, realizationFact.reference);
+  assert.equal(shortTermOutcome.realizationTransitionRef, realizationTransition.reference);
+  assert.deepEqual(shortTermOutcome.observedPerformance, { correctCount: 5, totalCount: 6 });
+  assert.equal(shortTermOutcome.longTermEfficacy, "not_established");
+  assert.equal(shortTermOutcome.globalPreference, "not_established");
+  assert.equal(shortTermOutcome.spontaneousProductionApplicability, "not_established");
+  assert.equal(shortTermOutcome.futureApplicability, "not_established");
+  assert.equal(snapshot.relations.filter((relation) => (
+    relation.fromRef === shortTermOutcome.reference && relation.relationKind === "outcome"
+  )).length, 9);
+  assert.deepEqual(snapshot.records.find(
+    (record) => record.reference === candidateBefore.reference
+  ), candidateBefore);
+  assert.deepEqual(snapshot.records.find(
+    (record) => record.reference === activeTrialBefore.reference
+  ), activeTrialBefore);
+  assert.equal(snapshot.records.some((record) => [
+    "direct_correction", "delayed_correction_candidate", "later_use_applicability",
+    "explanation_support", "formal_evaluation_record", "scoring_artifact"
+  ].includes(record.family)), false);
+  assert.doesNotMatch(
+    JSON.stringify(snapshot),
+    /fixtureRecordId|checkpoint|expectedBehavior|expectedOutcome|oracleAnnotations/
+  );
+  const beforeReplay = structuredClone(snapshot);
+  assert.equal(harness.deliverFocusedDrillInputsIfEligible(runRef, opening), deliveredOpening);
+  assert.equal(
+    harness.deliverFocusedDrillOutcomeIfEligible(runRef, outcomeFacts), deliveredOutcome
+  );
+  assert.deepEqual(harness.realizeAvailableOutputs(runRef), []);
+  assert.deepEqual(harness.captureInspectionSnapshot(runRef), beforeReplay);
+});
+
+test("focused-drill opening requires one exact retained active-trial closure", () => {
+  const attacks = [
+    {
+      mutate(snapshot) {
+        snapshot.records = snapshot.records.filter(
+          (record) => record.family !== "active_trial"
+        );
+      },
+      throws: false
+    },
+    {
+      mutate(snapshot) {
+        const trial = snapshot.records.find((record) => record.family === "active_trial");
+        snapshot.records.push({ ...structuredClone(trial), reference: `${trial.reference}-copy` });
+      },
+      throws: true
+    },
+    {
+      mutate(snapshot) {
+        snapshot.records.find(
+          (record) => record.family === "active_trial"
+        ).currentStatus = "formed_non_active";
+      },
+      throws: true
+    },
+    {
+      mutate(snapshot) {
+        const trial = snapshot.records.find((record) => record.family === "active_trial");
+        snapshot.relations = snapshot.relations.filter((relation) => !(
+          relation.fromRef === trial.reference
+          && relation.targetRole === "activation_assessment"
+        ));
+      },
+      throws: true
+    }
+  ];
+  for (const attack of attacks) {
+    const real = createSutBoundary();
+    let corrupt = false;
+    let ingressCalls = 0;
+    const boundary = Object.freeze({
+      ...real,
+      ingestSutVisibleInputs(...args) {
+        ingressCalls += 1;
+        return real.ingestSutVisibleInputs(...args);
+      },
+      captureInspectionSnapshot(runRef) {
+        const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+        if (corrupt) attack.mutate(snapshot);
+        return snapshot;
+      }
+    });
+    const harness = createEvaluationHarness(boundary);
+    const runRef = harness.startRun();
+    activateProductionTrial(harness, runRef);
+    const before = ingressCalls;
+    corrupt = true;
+    if (attack.throws) {
+      assert.throws(
+        () => harness.deliverFocusedDrillInputsIfEligible(
+          runRef, focusedDrillOpeningRecords()
+        )
+      );
+    } else {
+      assert.deepEqual(
+        harness.deliverFocusedDrillInputsIfEligible(runRef, focusedDrillOpeningRecords()),
+        []
+      );
+    }
+    assert.equal(ingressCalls, before);
+  }
+  {
+    const real = createSutBoundary();
+    let corrupt = false;
+    let ingressCalls = 0;
+    const boundary = Object.freeze({
+      ...real,
+      ingestSutVisibleInputs(...args) {
+        ingressCalls += 1;
+        return real.ingestSutVisibleInputs(...args);
+      },
+      captureInspectionSnapshot(runRef) {
+        const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+        if (corrupt) {
+          snapshot.relations.find((relation) => (
+            relation.relationKind === "realization"
+            && relation.targetRole === "focused_drill_behavior_disposition"
+          )).targetRole = "wrong";
+        }
+        return snapshot;
+      }
+    });
+    const harness = createEvaluationHarness(boundary);
+    const runRef = harness.startRun();
+    activateProductionTrial(harness, runRef);
+    harness.deliverFocusedDrillInputsIfEligible(runRef, focusedDrillOpeningRecords());
+    harness.processCurrentInteraction(runRef);
+    harness.realizeAvailableOutputs(runRef);
+    harness.processCurrentInteraction(runRef);
+    harness.deliverFocusedDrillOutcomeIfEligible(runRef, focusedDrillOutcomeRecords());
+    const before = ingressCalls;
+    corrupt = true;
+    assert.throws(
+      () => harness.deliverFocusedDrillOutcomeIfEligible(
+        runRef, focusedDrillOutcomeRecords()
+      )
+    );
+    assert.equal(ingressCalls, before);
+  }
+});
+
+test("focused-drill mismatch remains separate and blocks outcome delivery", () => {
+  const harness = createHarnessForMechanismTests(createSutBoundary(), {
+    renderOutput(output, order) {
+      const record = realizeAvailableOutput(output, order);
+      if (output.kind !== "focused_drill_behavior_request") return record;
+      return Object.freeze({
+        ...record,
+        realizedBehavior: "delayed_correction",
+        fidelity: "mismatch",
+        mismatchOrigin: "simulated_dependency"
+      });
+    }
+  });
+  const runRef = harness.startRun();
+  activateProductionTrial(harness, runRef);
+  harness.deliverFocusedDrillInputsIfEligible(runRef, focusedDrillOpeningRecords());
+  harness.processCurrentInteraction(runRef);
+  const disposition = harness.captureInspectionSnapshot(runRef).records.find(
+    (record) => record.family === "focused_drill_behavior_disposition"
+  );
+  const realized = harness.realizeAvailableOutputs(runRef)[0];
+  assert.equal(realized.requestedRef, disposition.reference);
+  assert.equal(realized.requestedBehavior, "immediate_correction");
+  assert.equal(realized.realizedBehavior, "delayed_correction");
+  assert.equal(realized.fidelity, "mismatch");
+  harness.processCurrentInteraction(runRef);
+  assert.deepEqual(
+    harness.deliverFocusedDrillOutcomeIfEligible(runRef, focusedDrillOutcomeRecords()),
+    []
+  );
+  assert.equal(harness.captureInspectionSnapshot(runRef).records.some(
+    (record) => record.family === "focused_drill_outcome"
+  ), false);
+});
+
+test("focused-drill simulator and projector preserve closed behavior ownership", () => {
+  const request = {
+    kind: "focused_drill_behavior_request",
+    outputRef: "transition_00000000-0000-0000-0000-000000000000",
+    requestedRef: "state_00000000-0000-0000-0000-000000000000",
+    requestedBehavior: "immediate_correction",
+    drillScope: {
+      activity: "japanese_practice", taskMode: "focused_production_drill",
+      surfaceLabel: "text_simulated", consequence: "low"
+    }
+  };
+  const record = realizeFocusedDrillOutput(request, 4);
+  assert.equal(record.requestedBehavior, request.requestedBehavior);
+  assert.equal(record.realizedBehavior, request.requestedBehavior);
+  const projected = createSimulatorProjector().project(record);
+  assert.deepEqual(Object.keys(projected).sort(), [
+    "fidelity", "kind", "mismatchOrigin", "occurrenceOrder", "realizedBehavior",
+    "requestedBehavior", "requestedRef", "sourceActor", "sourceFactRef"
+  ].sort());
+  assert.equal(projected.kind, "simulator_behavior_realization");
+  assert.doesNotMatch(JSON.stringify(projected), /requestedOutputRef|fixture|checkpoint|oracle/i);
+  assert.throws(
+    () => realizeFocusedDrillOutput({ ...request, requestedBehavior: "delayed_correction" }),
+    /Unsupported focused-drill/
+  );
+  assert.throws(
+    () => realizeFocusedDrillOutput({ ...request, oracle: "immediate_correction" }),
+    /contain exactly/
+  );
+  assert.throws(
+    () => createSimulatorProjector().project({ ...record, mismatchOrigin: "simulator" }),
+    /Invalid evaluation-side behavior/
+  );
+});
+
+test("focused-drill realization checkpoint rejects actor, ingestion, relation, and order corruption", () => {
+  const attacks = [
+    (snapshot) => {
+      const fact = snapshot.records.find(
+        (record) => record.role === "simulator_behavior_realization"
+      );
+      snapshot.records.find((record) => record.reference === fact.sourceActorRef).sourceActor
+        = "wrong-simulator";
+    },
+    (snapshot) => {
+      const fact = snapshot.records.find(
+        (record) => record.role === "simulator_behavior_realization"
+      );
+      fact.firstInteractionRef = snapshot.records.find(
+        (record) => record.family === "focused_drill_instruction"
+      ).interactionRef;
+    },
+    (snapshot) => {
+      const fact = snapshot.records.find(
+        (record) => record.role === "simulator_behavior_realization"
+      );
+      const interaction = snapshot.records.find(
+        (record) => record.reference === fact.firstInteractionRef
+      );
+      snapshot.records.find(
+        (record) => record.reference === interaction.createdByTransitionRef
+      ).inputReferences = [];
+    },
+    (snapshot) => {
+      snapshot.relations.find((relation) => (
+        relation.relationKind === "realization"
+        && relation.targetRole === "focused_drill_behavior_disposition"
+      )).targetRole = "wrong";
+    },
+    (snapshot) => {
+      const transition = snapshot.records.find(
+        (record) => record.transitionKind === "record_focused_drill_realization"
+      );
+      snapshot.relations.find((relation) => (
+        relation.fromRef === transition.reference && relation.relationKind === "basis"
+      )).createdOrder -= 1;
+    },
+    (snapshot) => {
+      const fact = snapshot.records.find(
+        (record) => record.role === "simulator_behavior_realization"
+      );
+      snapshot.records.find(
+        (record) => record.transitionKind === "record_focused_drill_realization"
+      ).createdOrder = fact.createdOrder;
+    }
+  ];
+  for (const attack of attacks) {
+    const real = createSutBoundary();
+    let corrupt = false;
+    let ingressCalls = 0;
+    const boundary = Object.freeze({
+      ...real,
+      ingestSutVisibleInputs(...args) {
+        ingressCalls += 1;
+        return real.ingestSutVisibleInputs(...args);
+      },
+      captureInspectionSnapshot(runRef) {
+        const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+        if (corrupt) attack(snapshot);
+        return snapshot;
+      }
+    });
+    const harness = createEvaluationHarness(boundary);
+    const runRef = harness.startRun();
+    activateProductionTrial(harness, runRef);
+    harness.deliverFocusedDrillInputsIfEligible(runRef, focusedDrillOpeningRecords());
+    harness.processCurrentInteraction(runRef);
+    harness.realizeAvailableOutputs(runRef);
+    harness.processCurrentInteraction(runRef);
+    const before = ingressCalls;
+    corrupt = true;
+    assert.throws(
+      () => harness.deliverFocusedDrillOutcomeIfEligible(
+        runRef, focusedDrillOutcomeRecords()
+      )
+    );
+    assert.equal(ingressCalls, before);
+  }
 });
 
 test("acceptance branch validates complete C/A/P/S/F/R/E closure before ingress", () => {

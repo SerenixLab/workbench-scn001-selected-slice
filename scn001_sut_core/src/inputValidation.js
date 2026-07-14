@@ -12,10 +12,15 @@ const inputValidators = {
   },
   task_observation: (input, path) => {
     assertCommonInputFields(input, path);
-    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "itemRef", "taskMode", "dimension", "performance", "occurrenceScenarioDay", "sessionId", "sessionOrder"], path);
+    const itemIdentityKey = Object.hasOwn(input, "itemRefs") ? "itemRefs" : "itemRef";
+    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", itemIdentityKey, "taskMode", "dimension", "performance", "occurrenceScenarioDay", "sessionId", "sessionOrder"], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
-    assertString(input.itemRef, `${path}.itemRef`);
+    if (itemIdentityKey === "itemRefs") {
+      assertStringArray(input.itemRefs, `${path}.itemRefs`);
+    } else {
+      assertString(input.itemRef, `${path}.itemRef`);
+    }
     assertString(input.taskMode, `${path}.taskMode`);
     assertString(input.dimension, `${path}.dimension`);
     assertPerformance(input.performance, `${path}.performance`);
@@ -74,6 +79,19 @@ const inputValidators = {
     assertOpaqueStateReference(input.requestedRef, `${path}.requestedRef`);
     assertString(input.realizedBehavior, `${path}.realizedBehavior`);
     assertOneOf(input.fidelity, ["match", "mismatch", "unknown"], `${path}.fidelity`);
+  },
+  simulator_behavior_realization: (input, path) => {
+    assertCommonInputFields(input, path);
+    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "requestedRef", "requestedBehavior", "realizedBehavior", "fidelity", "mismatchOrigin"], path);
+    assertString(input.sourceActor, `${path}.sourceActor`);
+    assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
+    assertOpaqueStateReference(input.requestedRef, `${path}.requestedRef`);
+    assertString(input.requestedBehavior, `${path}.requestedBehavior`);
+    assertString(input.realizedBehavior, `${path}.realizedBehavior`);
+    assertOneOf(input.fidelity, ["match", "mismatch"], `${path}.fidelity`);
+    if (input.mismatchOrigin !== null) {
+      assertString(input.mismatchOrigin, `${path}.mismatchOrigin`);
+    }
   },
   state_reference: (input, path) => {
     assertCommonInputFields(input, path);
@@ -138,6 +156,14 @@ function assertExactKeys(value, expectedKeys, path) {
 function assertString(value, path) {
   if (typeof value !== "string" || value.length === 0) {
     throw new SutBoundaryValidationError(`${path} must be a non-empty string.`);
+  }
+}
+
+function assertStringArray(value, path) {
+  if (!Array.isArray(value) || value.length === 0
+    || value.some((item) => typeof item !== "string" || item.length === 0)
+    || new Set(value).size !== value.length) {
+    throw new SutBoundaryValidationError(`${path} must be a non-empty array of unique strings.`);
   }
 }
 
