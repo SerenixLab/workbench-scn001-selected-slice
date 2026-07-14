@@ -1415,3 +1415,94 @@ configuration; and the intentionally absent focused-drill, correction,
 later-use, outcome, explanation, formal-evaluation, and scoring families. No
 exception is introduced, and no compatibility, formal-evidence, milestone, or
 readiness claim is made.
+
+## README Synchronization And Internal Decomposition Independent Review Closure
+
+On 2026-07-14, an independent ChatGPT review examined:
+
+* README truth-synchronization commit `e1e21260382f5d8865947e0f0790126393dd18b8`; and
+* behavior-preserving internal-decomposition commit `187528d3375aee610b08c2c5b7587e44124762a5`
+
+against starting baseline `15824900c2c9c64ef513d3d2229931fcaf166bff`, the accepted Step-6 implementation and review closure, the projected repository-role and claim contracts, and the applicable focused-change, abstraction, structure, API, dependency, state, inspection, and test obligations.
+
+### README review
+
+The review confirms that the README now truthfully describes the currently implemented bounded chain:
+
+```text
+raw run-local facts
+    -> attribution and temporal assessment
+    -> dimension comparison
+    -> formed/non-active production candidate
+    -> candidate-bound proposal
+    -> proposal realization
+    -> exact proposal-response binding
+    -> nine-check activation assessment
+    -> separate active production trial
+```
+
+The README no longer states that proposals or active trials are absent and no longer identifies proposal or activation as the next increment.
+
+It identifies focused-drill behavior after `CP-PROD-ACTIVE` as the current semantic frontier while preserving the repository's workbench classification, package direction, governance baseline, durable-extraction boundary, and denied claims.
+
+The README continues to deny focused-drill implementation, direct correction, delayed-correction trials, later-use applicability, outcomes, explanations, formal evaluation, scoring, milestone acceptance, broader `SCN-001` acceptance, and production readiness.
+
+Independent review outcome for `e1e21260382f5d8865947e0f0790126393dd18b8`: **pass**.
+
+### Internal-decomposition review
+
+The review confirms that the decomposition introduces three bounded private SUT modules:
+
+* `retainedStateClosure.js`, responsible for read-only validation and resolution of retained input, semantic-source, ingestion, and sole-creating-transition closure;
+* `proposalClosure.js`, responsible for read-only validation and resolution of production candidates, candidate-bound proposals, realization selection, proposal realization, and proposal-response binding;
+* `productionTrialActivation.js`, responsible for deriving the exact nine-check activation results and the participant/material structures consumed by `RunState` activation closure validation.
+
+`RunState` remains the sole:
+
+* run-scoped state owner;
+* mutation authority;
+* order allocator;
+* retained-record and transition committer;
+* relation mutation owner;
+* lifecycle owner;
+* semantic-transition orchestrator.
+
+The review found no new mutable state owner, service layer, repository abstraction, dependency-injection framework, event system, plugin system, generic graph, generic policy engine, catch-all helper module, evaluation dependency, runtime dependency, circular dependency, or public test-only seam.
+
+The public package continues to export only `createSutBoundary` and `SUT_PUBLIC_BOUNDARY_METHODS`. Public method names and signatures, SUT-visible input and output schemas, retained record families and key sets, transition kinds and ordering, relation kinds and roles, source-fact identity, proposal/binding/activation semantics, activation checks and reasons, active-trial semantics, replay identity, run isolation, error classification, inspection behavior, and claim boundaries remain unchanged.
+
+The candidate remains `formed_non_active` at lifecycle version 1. Focused-drill behavior, later-use applicability, outcomes, explanations, formal evaluation, scoring, completion, broader selected-slice acceptance, and production-readiness state remain absent.
+
+The decomposition is currently justified by repeated concrete semantic pressure, review locality, testability, and preservation of accepted exact closure. It creates a bounded internal location for future focused-drill logic without establishing a new durable architecture or repository boundary.
+
+Independent review outcome for `187528d3375aee610b08c2c5b7587e44124762a5`: **pass**.
+
+### Scope of closure
+
+These passing outcomes close only the change-specific manual-review conditions for:
+
+* `ENG-HEALTH-CHANGE-001 R2`;
+* `ENG-HEALTH-ABSTRACTION-001 R2`; and
+* `ENG-HEALTH-STRUCTURE-001 R2`
+
+for these exact stabilization commits.
+
+They do not:
+
+* rewrite prior review history;
+* independently execute the repository gates;
+* establish automated enforcement;
+* satisfy unrelated CI-required controls;
+* establish formal behavioral evidence;
+* satisfy a formal campaign or milestone gate;
+* approve focused-drill implementation;
+* remove unverified protected required-check configuration;
+* justify further abstraction without new concrete pressure.
+
+With this review recorded, current applicability/status counts are:
+
+* 44 rules `applicable` and 5 `not-applicable`;
+* 10 applicable rules `review-only`;
+* 34 applicable rules `uncovered`;
+* no applicable rule `revalidation-required`;
+* no rule claimed `enforced`.
