@@ -2487,3 +2487,61 @@ Until that review is recorded, `ENG-HEALTH-CHANGE-001`,
 No active delayed-correction trial, later disposition, later realization, outcome,
 explanation, formal evaluation, scoring, milestone completion, broader compatibility,
 obligation-satisfaction, or production claim is introduced.
+
+## Delayed-Correction Candidate Independent Review Closure
+
+On 2026-07-15, a fresh independent ChatGPT review examined exact Phase 6A stack
+`9feea9b..1784bfe`, comprising candidate-formation commit `a8aeff5` and the
+implementing-agent relation-typing correction `1784bfe`. The review compared the
+complete SUT and evaluation paths with accepted `ADR-003 R2`, `ADR-005 R2`,
+`ADR-006 R2`, `ADR-007 R3`, `ADR-008 R2`, and the applicable engineering rules.
+
+Independent review outcome: **pass for exact stack `9feea9b..1784bfe`**.
+
+The review confirmed exact SUT/evaluation parity over:
+
+* 15 ordered, unique candidate-creator inputs;
+* 15 typed `basis` relations for every consumed drill, correction, context,
+  policy, and control participant;
+* 6 separate `support` relations only for evidence that epistemically favors
+  the scoped delayed-correction candidate; and
+* one separate `transition_ancestry` relation to the direct current-session
+  correction disposition.
+
+The candidate remains separate, `formed_non_active`, prohibited from influencing
+behavior, reversible, narrowly scoped, and distinct from direct user preference,
+global policy, active trial state, and durable adaptation. Formation requires the
+same-run exact direct realization, active production trial, focused instruction,
+disposition, realization, outcome, spontaneous context, bounded-trial policy, and
+three selected controls. Exact replay reuses the candidate; mismatch, missing, or
+ambiguous lineage withholds formation or fails closed.
+
+The review also confirmed source identity through the complete direct, focused,
+active-trial, and explicit trial-policy source-binding closures; generic public SUT
+boundary preservation; passive inspection; and structural run isolation. The new
+candidate has run-local opaque identity and cannot cross a closed or independent
+`RunState`.
+
+Independent verification reported:
+
+* 12 focused delayed/direct hostile tests passed;
+* `npm run check:boundary` passed all 160 tests;
+* `npm run check` passed all gates and all 255 tests;
+* `git diff --check 9feea9b..1784bfe` passed;
+* the reviewed worktree was clean.
+
+This is the qualifying independent review outcome for
+`ENG-HEALTH-CHANGE-001 R2`, `ENG-HEALTH-ABSTRACTION-001 R2`, and
+`ENG-HEALTH-STRUCTURE-001 R2` for Phase 6A. It does not establish automated
+enforcement, protected required-check configuration, an active delayed trial,
+later behavior, formal evidence, behavioral compatibility, scoreability,
+milestone completion, broader acceptance, obligation satisfaction, production
+readiness, or deployment.
+
+With this review recorded, current applicability/status counts return to:
+
+* 44 rules `applicable` and 5 `not-applicable`;
+* 10 applicable rules `review-only`;
+* 34 applicable rules `uncovered`;
+* no applicable rule `revalidation-required`;
+* no rule claimed `enforced`.
