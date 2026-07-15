@@ -515,6 +515,9 @@ export function findExactDirectCorrectionRealization(snapshot, sourceBindingEvid
     || fact.payload.requestedBehavior !== TURN_COMPLETION
     || fact.payload.realizedBehavior !== TURN_COMPLETION
     || fact.payload.fidelity !== "match" || fact.payload.mismatchOrigin !== null
+    || JSON.stringify(factInteraction?.inputReferences) !== JSON.stringify([
+      fact.reference
+    ])
     || realizationTransition.family !== "sut_transition_evidence"
     || realizationTransition.origin !== "sut"
     || realizationTransition.result !== "direct_current_session_correction_realization_recorded"

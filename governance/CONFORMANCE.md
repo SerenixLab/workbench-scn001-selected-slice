@@ -2320,3 +2320,55 @@ dispositions; unverified protected required-check configuration; intentionally
 absent delayed-correction and later semantic families; and absent formal
 evaluation, scoring, milestone-completion, broader compatibility, or production
 evidence. No exception or stronger claim is introduced.
+
+## Direct-Realization Ingestion-Parity Blocking Review And Corrective Increment
+
+On 2026-07-15, a fresh independent review examined exact workbench commit
+`3efb7ca057369dd835f70fc120ced1ac5c175e0f` against parent and merge-base
+`99772a8343c4fb01ba85618fbace6b0c8f20b263`, the complete retained focused and
+direct paths, and the applicable selected-slice contracts.
+
+Review outcome for `3efb7ca`: **blocking / failed**.
+
+The review confirmed that the commit correctly rejects the newly covered direct
+`payload.requestedRef` ownership ambiguity, competing facts, indirect, partial,
+duplicate, and combined relation or transition claimants, focused outcome-pointer
+ambiguity, and unstable replay. It found one remaining full-path authority-parity
+defect: the SUT requires the direct simulator realization's first interaction to
+contain exactly the realization fact, while evaluation source-binding validation
+accepted a unique, internally consistent participant superset.
+
+A read-only hostile reproduction completed the trajectory through the public SUT
+boundary, cloned only the passive inspection snapshot, appended the direct
+disposition to the simulator fact's interaction and ingestion input sets, and
+added the corresponding `ingested_input` basis relation. The evaluation checkpoint
+accepted that coherently extended capture even though the SUT realization closure
+rejects it. The retained SUT snapshot remained unchanged. The full local gate still
+passed 244 tests, demonstrating that the defect was missing negative coverage rather
+than a failing existing mechanism.
+
+The failed review is preserved as failed. Its passing manual focus, abstraction,
+and structure dispositions do not convert the exact commit into a passing review
+or close Phase 5.
+
+The corrective increment containing this addendum has one primary purpose: require
+evaluation to preserve the SUT's exact singleton participant predicate for direct
+realization ingestion. The direct checkpoint now requires the simulator fact's
+first interaction input references to equal exactly that fact reference before it
+can validate the rest of the realization closure. A public-boundary hostile
+regression applies the exact coherent participant-set extension from the independent
+review, requires checkpoint rejection, and proves the real retained SUT snapshot is
+unchanged.
+
+Affected rows are `ENG-CONF-CAPTURE-001`, `ENG-CONF-DEP-001`,
+`ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`, `ENG-CONF-STATE-002`,
+`ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-FAILURE-001`, `ENG-HEALTH-TEST-001`, and
+`ENG-HEALTH-TEST-002`. Applicability, revisions, promotion mappings, active
+exceptions, and public boundaries do not change.
+
+At corrective implementation completion, the exact corrected commit still requires
+a fresh qualifying independent review. Current counts therefore remain 44
+applicable, 5 not applicable, 7 review-only, 37 uncovered, none
+revalidation-required, and none enforced. No delayed-correction or later semantic
+family, formal evidence, scoring, completion, broader compatibility, or production
+claim is introduced.

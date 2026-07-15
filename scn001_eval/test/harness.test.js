@@ -1724,6 +1724,26 @@ test("realization checkpoints reject selected-closure ambiguity", async (t) => {
       const parts = directParts(snapshot);
       snapshot.relations.push(structuredClone(parts.relation));
     }],
+    ["direct rejects a coherently extended realization-ingestion basis", (snapshot) => {
+      const parts = directParts(snapshot);
+      const interaction = snapshot.records.find((record) => (
+        record.reference === parts.fact.firstInteractionRef
+      ));
+      const ingestion = snapshot.records.find((record) => (
+        record.reference === interaction.createdByTransitionRef
+      ));
+      const factBasis = snapshot.relations.find((relation) => (
+        relation.fromRef === ingestion.reference
+        && relation.toRef === parts.fact.reference
+        && relation.targetRole === "ingested_input"
+      ));
+      interaction.inputReferences.push(parts.disposition.reference);
+      ingestion.inputReferences.push(parts.disposition.reference);
+      snapshot.relations.push({
+        ...structuredClone(factBasis),
+        toRef: parts.disposition.reference
+      });
+    }],
     ["focused rejects another transition consuming the disposition", (snapshot) => {
       const parts = focusedParts(snapshot);
       addTransition(
