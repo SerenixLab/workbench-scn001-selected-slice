@@ -44,7 +44,8 @@ export function findExactDelayedCorrectionCandidate(snapshot, sourceBindingEvide
   const focused = findExactCompletedFocusedDrillPrefix(
     snapshot, sourceBindingEvidence, {
       allowDirectCorrectionState: true,
-      allowDelayedCorrectionCandidate: true
+      allowDelayedCorrectionCandidate: true,
+      allowDelayedCorrectionActivation: true
     }
   );
   if (!activeTrial || !focused) return undefined;

@@ -6,6 +6,7 @@ import {
   findExactDirectCorrectionRealization
 } from "./directCorrectionCheckpoint.js";
 import { findExactDelayedCorrectionCandidate } from "./delayedCandidateCheckpoint.js";
+import { findExactActiveDelayedCorrectionTrial } from "./delayedActiveCheckpoint.js";
 import { findExactActiveProductionTrial } from "./productionActiveCheckpoint.js";
 import { realizeAvailableOutput } from "./simulator.js";
 import { createSimulatorProjector } from "./simulatorProjection.js";
@@ -289,7 +290,8 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
       const focusedPrefix = findExactCompletedFocusedDrillPrefix(
         snapshot, sourceBindings, {
           allowDirectCorrectionState: true,
-          allowDelayedCorrectionCandidate: true
+          allowDelayedCorrectionCandidate: true,
+          allowDelayedCorrectionActivation: true
         }
       );
       validateDirectCorrectionTrajectory(snapshot, focusedPrefix, closure);
@@ -312,6 +314,24 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
         lifecycleStatus: closure.candidate.lifecycleStatus,
         directDispositionRef: closure.direct.disposition.reference,
         focusedOutcomeRef: closure.focused.outcome.reference
+      }]);
+    },
+
+    inspectActiveDelayedCorrectionCheckpoint(runRef) {
+      const closure = findExactActiveDelayedCorrectionTrial(
+        sutBoundary.captureInspectionSnapshot(runRef),
+        sourceBindingEvidenceForRun(runRef)
+      );
+      if (!closure) return Object.freeze([]);
+      return deepFreeze([{
+        candidateRef: closure.candidate.reference,
+        activationAssessmentRef: closure.assessment.reference,
+        activeTrialRef: closure.trial.reference,
+        activationBasisType: closure.assessment.activationBasisType,
+        overallStatus: closure.assessment.overallStatus,
+        checkResults: structuredClone(closure.assessment.checkResults),
+        activeScope: structuredClone(closure.trial.activeScope),
+        currentStatus: closure.trial.currentStatus
       }]);
     },
 

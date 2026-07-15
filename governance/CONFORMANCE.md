@@ -4,8 +4,8 @@ This ledger is the complete applicability router for the 49 rules pinned by `gov
 
 Later change-specific addenda and independent-review closures record subsequent selected-slice semantic increments without rewriting that historical verification basis. The projected lock and snapshot digests identify the exact canonical governance basis; each change-specific record identifies its own starting commit, scope, and review disposition.
 
-The workbench contains a two-package boundary spine and a stabilized semantic segment. The SUT derives attributed current-user assertions, selected temporal eligibility, scoped recognition/spontaneous-production comparisons, immutable non-active trial candidates, distinct candidate-bound proposal intents, proposal-response binding, nine-check activation assessments, separate active trials, scoped focused-drill instructions and dispositions, exact focused behavior-realization closure, separate short-term focused-drill outcomes, a scoped current spontaneous-session correction/control state, a separate direct turn-completion behavior disposition, exact direct realization closure, a separate formed/non-active delayed-correction candidate, and non-activation dispositions from raw run-local source facts and exact typed local relation closure.
-It does not create current-skill facts, active delayed-correction trials, later-use applicability or behavior, later outcomes, explanations, or formal evaluation artifacts.
+The workbench contains a two-package boundary spine and a stabilized semantic segment. The SUT derives attributed current-user assertions, selected temporal eligibility, scoped recognition/spontaneous-production comparisons, immutable non-active trial candidates, distinct candidate-bound proposal intents, proposal-response binding, nine-check activation assessments, separate active trials, scoped focused-drill instructions and dispositions, exact focused behavior-realization closure, separate short-term focused-drill outcomes, a scoped current spontaneous-session correction/control state, a separate direct turn-completion behavior disposition, exact direct realization closure, a separate formed/non-active delayed-correction candidate, its separate nine-check activation assessment, a separate active delayed-correction trial, and non-activation dispositions from raw run-local source facts and exact typed local relation closure.
+It does not create current-skill facts, later-use applicability or behavior, later outcomes, explanations, or formal evaluation artifacts.
 There is no formal evaluation record, behavioral-compatibility claim, scoreability claim, milestone-acceptance claim, replay/restore path, or durable repository extraction.
 
 ## Ledger Conventions
@@ -2545,3 +2545,64 @@ With this review recorded, current applicability/status counts return to:
 * 34 applicable rules `uncovered`;
 * no applicable rule `revalidation-required`;
 * no rule claimed `enforced`.
+
+## Delayed-Correction Activation Increment
+
+The implementation change based on starting `HEAD` `d9d76df` has one bounded
+purpose: implement `DP-DELAY-TRIAL-ACTIVATE` through exact `CP-DELAY-ACTIVE`
+without adding later-use behavior.
+
+After exact delayed-candidate formation, the SUT creates a separate activation
+assessment over that same immutable candidate. The assessment records exactly
+the nine canonical checks for scope, lineage, current/stale basis,
+user-governed constraints, reversibility, consequence, current applicability,
+retention basis, and the non-adaptation boundary. Its exact material basis is
+the candidate, current correction state and disposition, matched realization
+fact and transition, current context and chronology, bounded-trial policy,
+retained active production trial, and the four selected controls. The retained
+evaluation basis is proven to be the same fact already consumed by the active
+production-trial lineage.
+
+The activation basis is typed as same-candidate scoped correction evidence. It
+contains no user-response participant, does not require a second proposal or
+approval, and does not reinterpret V-003 as approval. Only an assessment whose
+nine recomputed checks all pass creates a separate
+`active_delayed_correction_trial`. That active trial has exact transition
+ancestry to the unchanged candidate and assessment, exact active scope, retained
+state identities, correction path, and explicit non-preference,
+non-global-policy, and unsupported-durable-adaptation boundaries. The candidate
+remains `formed_non_active`, `not_assessed`, and
+`prohibited_until_activation`; activation status is owned by the separate
+assessment and active-trial records.
+
+Evaluation adds a passive `CP-DELAY-ACTIVE` reconstruction that independently
+recomputes the nine results, exact basis and retention lineage, creator
+transitions, order, assessment relations, trial ancestry, candidate identity,
+and active scope. The existing direct and candidate checkpoints remain valid
+prerequisites after activation and do not treat later state as proof of their
+own closures. Six public-boundary corruptions and six SUT closure attacks cover
+stored-label trust, candidate substitution, incomplete basis, duplicate
+creators, retained-state substitution, broadened scope, and missing ancestry
+without mutating the real retained state.
+
+Affected rows are `ENG-BASE-001`, `ENG-CHANGE-001`, `ENG-CLAIM-001`,
+`ENG-CONF-CAPTURE-001`, `ENG-CONF-DEP-001`, `ENG-CONF-DEP-002`,
+`ENG-CONF-HARNESS-001`, `ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`,
+`ENG-CONF-REF-001`, `ENG-CONF-ROLE-001`, `ENG-CONF-STATE-001`,
+`ENG-CONF-STATE-002`, `ENG-HEALTH-ABSTRACTION-001`, `ENG-HEALTH-API-001`,
+`ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-FAILURE-001`,
+`ENG-HEALTH-STRUCTURE-001`, `ENG-HEALTH-TEST-001`, and
+`ENG-HEALTH-TEST-002`. Applicability, revisions, promotion mappings, public SUT
+methods, runtime dependencies, and active exceptions do not change.
+
+Local verification at implementation completion includes all aggregate gates
+and all 263 tests. Fresh independent review of the exact activation commit is
+pending. Until it is recorded, `ENG-HEALTH-CHANGE-001`,
+`ENG-HEALTH-ABSTRACTION-001`, and `ENG-HEALTH-STRUCTURE-001` return to
+`uncovered`: 44 rules are applicable, 5 not applicable, 7 review-only, 37
+uncovered, none revalidation-required, and none enforced.
+
+No later-use applicability, later behavior disposition or realization, outcome,
+explanation, formal evaluation, scoring, compatibility, milestone completion,
+broader acceptance, obligation-satisfaction, production-readiness, or deployment
+claim is introduced.

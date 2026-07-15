@@ -63,7 +63,11 @@ const FOCUSED_OUTCOME_KEYS = Object.freeze([
 export function findExactCompletedFocusedDrillPrefix(
   snapshot,
   sourceBindingEvidence,
-  { allowDirectCorrectionState = false, allowDelayedCorrectionCandidate = false } = {}
+  {
+    allowDirectCorrectionState = false,
+    allowDelayedCorrectionCandidate = false,
+    allowDelayedCorrectionActivation = false
+  } = {}
 ) {
   const activeTrial = findExactActiveProductionTrial(snapshot, sourceBindingEvidence);
   if (!activeTrial) return undefined;
@@ -298,7 +302,9 @@ export function findExactCompletedFocusedDrillPrefix(
   validateBoundFact(snapshot, sourceBindingEvidence, feedback, "fixture");
   const forbiddenLaterFamilies = [
     ...(allowDelayedCorrectionCandidate ? [] : ["delayed_correction_candidate"]),
-    "active_delayed_correction_trial",
+    ...(allowDelayedCorrectionActivation ? [] : [
+      "delayed_correction_activation_assessment", "active_delayed_correction_trial"
+    ]),
     ...(allowDirectCorrectionState ? [] : [
       "scoped_current_correction_control", "direct_current_session_correction_disposition"
     ])

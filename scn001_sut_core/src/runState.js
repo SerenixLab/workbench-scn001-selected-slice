@@ -12,10 +12,18 @@ import {
 import {
   candidateInputReferences,
   candidateRelationPairs,
+  DELAYED_ACTIVATION_BASIS_TYPE,
   DELAYED_ACTIVATION_REQUIREMENTS,
   DELAYED_CORRECTION_INTENT,
   DELAYED_CORRECTION_SCOPE,
+  delayedActivationMaterialBasisRefs,
+  delayedActivationRelationPairs,
+  deriveDelayedActivationCheckResults,
+  deriveDelayedActivationOverallStatus,
   deriveDelayedCorrectionCandidateParticipants,
+  resolveDelayedActivationParticipants,
+  validateActiveDelayedCorrectionTrialClosure,
+  validateDelayedActivationAssessmentClosure,
   validateDelayedCorrectionCandidateClosure
 } from "./delayedCorrection.js";
 import {
@@ -326,6 +334,15 @@ export class RunState {
       interaction,
       interactionFacts
     );
+    const delayedActivationAssessmentTransitionRef =
+      this.assessDelayedCorrectionActivation(
+        interaction,
+        delayedCorrectionCandidateTransitionRef
+      );
+    const activeDelayedTrialTransitionRef = this.activateDelayedCorrectionTrial(
+      interaction,
+      delayedActivationAssessmentTransitionRef
+    );
     const semanticTransitionRefs = [
       attributionTransitionRef,
       temporalAssessmentTransitionRef,
@@ -342,7 +359,9 @@ export class RunState {
       focusedDrillOutcomeTransitionRef,
       ...directCorrectionTransitionRefs,
       directCorrectionRealizationTransitionRef,
-      delayedCorrectionCandidateTransitionRef
+      delayedCorrectionCandidateTransitionRef,
+      delayedActivationAssessmentTransitionRef,
+      activeDelayedTrialTransitionRef
     ].filter(Boolean);
     const processingTransition = this.createTransition(
       "process_interaction_segment",
@@ -2043,6 +2062,200 @@ export class RunState {
       sourceFactBindings: this.sourceFactBindings,
       candidate,
       validateActiveTrial: (trial) => this.validActiveTrialClosure(trial),
+      validateFocusedOutcome: (outcome) => this.validateFocusedDrillOutcomeClosure(outcome),
+      resolveDirectRealization: (dispositionRef, expectedFactRef) => (
+        this.resolveDirectCorrectionRealizationClosure(dispositionRef, expectedFactRef)
+      )
+    });
+  }
+
+  assessDelayedCorrectionActivation(interaction, candidateTransitionRef) {
+    if (!candidateTransitionRef) return undefined;
+    const candidateTransition = this.records.get(candidateTransitionRef);
+    const candidate = this.records.get(candidateTransition?.resultReferences?.[0]);
+    if (candidateTransition?.transitionKind !== "form_delayed_correction_trial_candidate"
+      || candidateTransition.interactionRef !== interaction.reference
+      || candidateTransition.resultReferences?.length !== 1) {
+      throw new SutStateIntegrityError("Delayed activation candidate trigger is malformed.");
+    }
+    const participants = resolveDelayedActivationParticipants({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      candidate,
+      validateActiveTrial: (trial) => this.validActiveTrialClosure(trial),
+      validateFocusedOutcome: (outcome) => this.validateFocusedDrillOutcomeClosure(outcome),
+      resolveDirectRealization: (dispositionRef, expectedFactRef) => (
+        this.resolveDirectCorrectionRealizationClosure(dispositionRef, expectedFactRef)
+      )
+    });
+    const existing = [...this.records.values()].filter((record) => (
+      record.family === "delayed_correction_activation_assessment"
+      && record.candidateRef === candidate.reference
+    ));
+    if (existing.length > 1) {
+      throw new SutStateIntegrityError(
+        "Multiple delayed activation assessments resolve for one candidate."
+      );
+    }
+    if (existing.length === 1) {
+      this.validateDelayedActivationAssessmentClosure(existing[0]);
+      return undefined;
+    }
+    const checkResults = deriveDelayedActivationCheckResults(participants);
+    const materialBasisRefs = delayedActivationMaterialBasisRefs(participants);
+    const assessment = {
+      reference: createReference("state"),
+      family: "delayed_correction_activation_assessment",
+      origin: "sut",
+      activationType: "delayed_correction_candidate_activation",
+      activationBasisType: DELAYED_ACTIVATION_BASIS_TYPE,
+      candidateRef: candidate.reference,
+      activeScope: structuredClone(candidate.proposedScope),
+      overallStatus: deriveDelayedActivationOverallStatus(checkResults),
+      checkResults,
+      materialBasisRefs,
+      directCorrectionStateRef: participants.correctionState.reference,
+      directDispositionRef: participants.directDisposition.reference,
+      directRealizationFactRef: participants.directRealizationFact.reference,
+      directRealizationTransitionRef: participants.directRealizationTransition.reference,
+      currentContextRef: participants.currentContext.reference,
+      chronologyRef: participants.chronology.reference,
+      trialPolicyRef: participants.trialPolicy.reference,
+      controlBasisRefs: {
+        userGoverned: participants.controls.userGoverned.reference,
+        consequence: participants.controls.consequence.reference,
+        reversibility: participants.controls.reversibility.reference,
+        retention: participants.controls.retention.reference
+      },
+      interactionRef: interaction.reference,
+      statusOrigin: "sut_transition",
+      createdOrder: this.allocateOrder()
+    };
+    const transition = this.createTransition(
+      "assess_delayed_correction_trial_activation",
+      materialBasisRefs,
+      [assessment.reference],
+      interaction.reference
+    );
+    transition.result = "delayed_correction_activation_assessed";
+    attachCreatingTransition([assessment], transition);
+    this.commitDerivedRecords([assessment], transition);
+    for (const [reference, role] of delayedActivationRelationPairs(participants)) {
+      this.relations.push({
+        relationKind: "basis",
+        fromRef: assessment.reference,
+        toRef: reference,
+        targetRole: role,
+        effectiveOrder: assessment.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    return transition.reference;
+  }
+
+  activateDelayedCorrectionTrial(interaction, assessmentTransitionRef) {
+    if (!assessmentTransitionRef) return undefined;
+    const assessmentTransition = this.records.get(assessmentTransitionRef);
+    const assessment = this.records.get(assessmentTransition?.resultReferences?.[0]);
+    if (assessmentTransition?.transitionKind
+      !== "assess_delayed_correction_trial_activation"
+      || assessmentTransition.interactionRef !== interaction.reference
+      || assessmentTransition.resultReferences?.length !== 1) {
+      throw new SutStateIntegrityError("Delayed trial activation trigger is malformed.");
+    }
+    this.validateDelayedActivationAssessmentClosure(assessment);
+    if (assessment.overallStatus !== "sufficient"
+      || Object.values(assessment.checkResults).some((result) => result.status !== "passed")) {
+      return undefined;
+    }
+    const candidate = this.records.get(assessment.candidateRef);
+    const existing = [...this.records.values()].filter((record) => (
+      record.family === "active_delayed_correction_trial"
+      && record.candidateRef === candidate.reference
+    ));
+    if (existing.length > 1) {
+      throw new SutStateIntegrityError(
+        "Multiple active delayed-correction trials resolve for one candidate."
+      );
+    }
+    if (existing.length === 1) {
+      this.validateActiveDelayedCorrectionTrialClosure(existing[0]);
+      return undefined;
+    }
+    const trial = {
+      reference: createReference("state"),
+      family: "active_delayed_correction_trial",
+      origin: "sut",
+      trialType: "delayed_minor_correction_until_turn_completion",
+      trialOrigin: "zoey_derived_scoped_behavior_trial",
+      candidateRef: candidate.reference,
+      activationAssessmentRef: assessment.reference,
+      activationBasisType: DELAYED_ACTIVATION_BASIS_TYPE,
+      activeScope: structuredClone(candidate.proposedScope),
+      retainedStateRefs: {
+        candidate: candidate.reference,
+        correctionState: assessment.directCorrectionStateRef,
+        directDisposition: assessment.directDispositionRef
+      },
+      currentStatus: "active",
+      lifecycleVersion: 1,
+      correctionPath: "restore_immediate_or_context_specific_correction",
+      userPreference: "not_established",
+      globalPolicy: "not_established",
+      durableAdaptation: "unsupported_in_selected_slice",
+      statusOrigin: "sut_transition",
+      interactionRef: interaction.reference,
+      createdOrder: this.allocateOrder()
+    };
+    const transition = this.createTransition(
+      "activate_delayed_correction_trial",
+      [candidate.reference, assessment.reference],
+      [trial.reference],
+      interaction.reference
+    );
+    transition.result = "delayed_correction_trial_activated";
+    attachCreatingTransition([trial], transition);
+    this.commitDerivedRecords([trial], transition);
+    for (const [reference, role] of [
+      [candidate.reference, "trial_candidate"],
+      [assessment.reference, "activation_assessment"]
+    ]) {
+      this.relations.push({
+        relationKind: "transition_ancestry",
+        fromRef: trial.reference,
+        toRef: reference,
+        targetRole: role,
+        effectiveOrder: trial.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    return transition.reference;
+  }
+
+  validateDelayedActivationAssessmentClosure(assessment) {
+    return validateDelayedActivationAssessmentClosure({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      assessment,
+      validateActiveTrial: (trial) => this.validActiveTrialClosure(trial),
+      validateFocusedOutcome: (outcome) => this.validateFocusedDrillOutcomeClosure(outcome),
+      resolveDirectRealization: (dispositionRef, expectedFactRef) => (
+        this.resolveDirectCorrectionRealizationClosure(dispositionRef, expectedFactRef)
+      )
+    });
+  }
+
+  validateActiveDelayedCorrectionTrialClosure(trial) {
+    return validateActiveDelayedCorrectionTrialClosure({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      trial,
+      validateActiveTrial: (activeTrial) => this.validActiveTrialClosure(activeTrial),
       validateFocusedOutcome: (outcome) => this.validateFocusedDrillOutcomeClosure(outcome),
       resolveDirectRealization: (dispositionRef, expectedFactRef) => (
         this.resolveDirectCorrectionRealizationClosure(dispositionRef, expectedFactRef)

@@ -865,7 +865,7 @@ test("formal harness stages the complete focused-drill trajectory through both e
   assert.deepEqual(harness.captureInspectionSnapshot(runRef), beforeReplay);
 });
 
-test("formal harness reaches exact direct realization and non-active delayed candidate", () => {
+test("formal harness reaches exact delayed candidate assessment and active trial", () => {
   const harness = createEvaluationHarness(createSutBoundary());
   const runRef = harness.startRun();
   const directInputs = spontaneousCorrectionRecords();
@@ -975,6 +975,37 @@ test("formal harness reaches exact direct realization and non-active delayed can
   assert.equal(delayedCandidate.userPreference, "not_established");
   assert.equal(delayedCandidate.globalPolicy, "not_established");
   assert.equal(delayedCandidate.durableAdaptation, "unsupported_in_selected_slice");
+  const activeCheckpoint = harness.inspectActiveDelayedCorrectionCheckpoint(runRef);
+  assert.equal(activeCheckpoint.length, 1);
+  assert.equal(activeCheckpoint[0].candidateRef, delayedCandidate.reference);
+  assert.equal(activeCheckpoint[0].overallStatus, "sufficient");
+  assert.equal(activeCheckpoint[0].currentStatus, "active");
+  assert.deepEqual(Object.keys(activeCheckpoint[0].checkResults), [
+    "scope", "basis_lineage", "current_stale_basis", "user_governed_constraints",
+    "reversibility", "consequence", "current_applicability", "retention_basis",
+    "non_adaptation_boundary"
+  ]);
+  assert.equal(Object.values(activeCheckpoint[0].checkResults).every(
+    (result) => result.status === "passed"
+  ), true);
+  const delayedAssessment = snapshot.records.find(
+    (record) => record.family === "delayed_correction_activation_assessment"
+  );
+  const activeDelayedTrial = snapshot.records.find(
+    (record) => record.family === "active_delayed_correction_trial"
+  );
+  assert.ok(delayedAssessment);
+  assert.ok(activeDelayedTrial);
+  assert.equal(delayedAssessment.candidateRef, delayedCandidate.reference);
+  assert.equal(activeDelayedTrial.candidateRef, delayedCandidate.reference);
+  assert.equal(activeDelayedTrial.activationAssessmentRef, delayedAssessment.reference);
+  assert.equal(delayedCandidate.lifecycleStatus, "formed_non_active");
+  assert.equal(delayedCandidate.activationStatus, "not_assessed");
+  assert.equal(delayedCandidate.behaviorInfluence, "prohibited_until_activation");
+  assert.equal(delayedAssessment.materialBasisRefs.some((reference) => (
+    snapshot.records.find((record) => record.reference === reference)?.role
+      === "user_response"
+  )), false);
   assert.deepEqual(snapshot.records.find(
     (record) => record.reference === candidateBefore.reference
   ), candidateBefore);
@@ -991,7 +1022,7 @@ test("formal harness reaches exact direct realization and non-active delayed can
     (record) => record.reference === focusedOutcomeBefore.reference
   ), focusedOutcomeBefore);
   assert.equal(snapshot.records.some((record) => [
-    "active_delayed_correction_trial", "later_use_applicability",
+    "later_use_applicability",
     "later_outcome", "explanation_support",
     "formal_evaluation_record", "scoring_artifact"
   ].includes(record.family)), false);
@@ -1004,6 +1035,72 @@ test("formal harness reaches exact direct realization and non-active delayed can
   );
   assert.deepEqual(harness.realizeAvailableOutputs(runRef), []);
   assert.deepEqual(harness.captureInspectionSnapshot(runRef), beforeReplay);
+});
+
+test("CP-DELAY-ACTIVE rejects malformed assessment and trial closure passively", async (t) => {
+  const attacks = [
+    ["stored check label", (snapshot, assessment) => {
+      assessment.checkResults.scope.reason = "stored_pass_label_only";
+    }],
+    ["candidate substitution", (snapshot, assessment) => {
+      assessment.candidateRef = snapshot.records.find(
+        (record) => record.family === "trial_candidate"
+      ).reference;
+    }],
+    ["missing material basis relation", (snapshot, assessment) => {
+      snapshot.relations.splice(snapshot.relations.findIndex((relation) => (
+        relation.fromRef === assessment.reference
+        && relation.targetRole === "retention_basis"
+      )), 1);
+    }],
+    ["duplicate assessment creator", (snapshot, assessment) => {
+      const transition = snapshot.records.find(
+        (record) => record.reference === assessment.createdByTransitionRef
+      );
+      snapshot.records.push({
+        ...structuredClone(transition), reference: "transition_duplicate_delayed_assessment"
+      });
+    }],
+    ["broadened active scope", (snapshot, assessment, trial) => {
+      trial.activeScope.taskMode = "all_voice_activity";
+    }],
+    ["missing trial ancestry", (snapshot, assessment, trial) => {
+      snapshot.relations.splice(snapshot.relations.findIndex((relation) => (
+        relation.fromRef === trial.reference
+        && relation.targetRole === "activation_assessment"
+      )), 1);
+    }]
+  ];
+  for (const [name, attack] of attacks) {
+    await t.test(name, () => {
+      const real = createSutBoundary();
+      let corrupt = false;
+      const boundary = Object.freeze({
+        ...real,
+        captureInspectionSnapshot(runRef) {
+          const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+          if (corrupt) {
+            const assessment = snapshot.records.find(
+              (record) => record.family === "delayed_correction_activation_assessment"
+            );
+            const trial = snapshot.records.find(
+              (record) => record.family === "active_delayed_correction_trial"
+            );
+            attack(snapshot, assessment, trial);
+          }
+          return snapshot;
+        }
+      });
+      const harness = createEvaluationHarness(boundary);
+      const runRef = harness.startRun();
+      completeDirectCorrection(harness, runRef);
+      const before = real.captureInspectionSnapshot(runRef);
+      corrupt = true;
+      assert.throws(() => harness.inspectActiveDelayedCorrectionCheckpoint(runRef));
+      corrupt = false;
+      assert.deepEqual(real.captureInspectionSnapshot(runRef), before);
+    });
+  }
 });
 
 test("CP-DELAY-CANDIDATE rejects malformed lineage without mutating SUT state", async (t) => {

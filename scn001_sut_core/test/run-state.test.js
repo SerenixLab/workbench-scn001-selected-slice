@@ -3279,7 +3279,7 @@ test("direct realization requires exact identity and mismatch remains non-matchi
   ), false);
 });
 
-test("matched direct realization forms one separate non-active delayed candidate", () => {
+test("matched direct realization forms, assesses, and activates the exact delayed candidate", () => {
   const completed = directCorrectionRealizedRun();
   const candidate = [...completed.run.records.values()].find(
     (record) => record.family === "delayed_correction_candidate"
@@ -3331,9 +3331,47 @@ test("matched direct realization forms one separate non-active delayed candidate
   const transition = completed.run.records.get(candidate.createdByTransitionRef);
   assert.equal(transition.inputReferences.length, new Set(transition.inputReferences).size);
   assert.equal(completed.run.emitAvailableOutputs().length, 0);
-  assert.equal([...completed.run.records.values()].some((record) => (
-    record.family === "active_delayed_correction_trial"
+  const assessment = [...completed.run.records.values()].find(
+    (record) => record.family === "delayed_correction_activation_assessment"
+  );
+  const activeDelayedTrial = [...completed.run.records.values()].find(
+    (record) => record.family === "active_delayed_correction_trial"
+  );
+  assert.ok(assessment);
+  assert.ok(activeDelayedTrial);
+  completed.run.validateDelayedActivationAssessmentClosure(assessment);
+  completed.run.validateActiveDelayedCorrectionTrialClosure(activeDelayedTrial);
+  assert.equal(assessment.candidateRef, candidate.reference);
+  assert.equal(
+    assessment.activationBasisType, "same_candidate_scoped_correction_evidence"
+  );
+  assert.deepEqual(Object.keys(assessment.checkResults), candidate.activationRequirements);
+  assert.equal(
+    Object.values(assessment.checkResults).every((result) => result.status === "passed"),
+    true
+  );
+  assert.equal(assessment.overallStatus, "sufficient");
+  assert.equal(activeDelayedTrial.candidateRef, candidate.reference);
+  assert.equal(activeDelayedTrial.activationAssessmentRef, assessment.reference);
+  assert.equal(activeDelayedTrial.currentStatus, "active");
+  assert.equal(activeDelayedTrial.userPreference, "not_established");
+  assert.equal(activeDelayedTrial.globalPolicy, "not_established");
+  assert.equal(activeDelayedTrial.durableAdaptation, "unsupported_in_selected_slice");
+  assert.deepEqual(activeDelayedTrial.retainedStateRefs, {
+    candidate: candidate.reference,
+    correctionState: completed.correctionState.reference,
+    directDisposition: completed.disposition.reference
+  });
+  assert.equal(candidate.lifecycleStatus, "formed_non_active");
+  assert.equal(candidate.activationStatus, "not_assessed");
+  assert.equal(candidate.behaviorInfluence, "prohibited_until_activation");
+  assert.equal(assessment.materialBasisRefs.some((reference) => (
+    completed.run.records.get(reference)?.role === "user_response"
   )), false);
+  assert.equal(completed.run.relations.filter((relation) => (
+    relation.fromRef === activeDelayedTrial.reference
+    && relation.relationKind === "transition_ancestry"
+  )).length, 2);
 
   const before = structuredClone(candidate);
   completed.run.assertSourceFactConsistency([completed.input]);
@@ -3342,7 +3380,58 @@ test("matched direct realization forms one separate non-active delayed candidate
   assert.deepEqual([...completed.run.records.values()].filter(
     (record) => record.family === "delayed_correction_candidate"
   ), [before]);
+  assert.equal([...completed.run.records.values()].filter(
+    (record) => record.family === "delayed_correction_activation_assessment"
+  ).length, 1);
+  assert.equal([...completed.run.records.values()].filter(
+    (record) => record.family === "active_delayed_correction_trial"
+  ).length, 1);
   assert.equal(completed.run.emitAvailableOutputs().length, 0);
+});
+
+test("delayed activation closure rejects candidate, assessment, and ancestry attacks", () => {
+  const attacks = [
+    ({ assessment }) => {
+      assessment.checkResults.scope.reason = "stored_pass_label_only";
+    },
+    ({ assessment }) => {
+      assessment.materialBasisRefs = assessment.materialBasisRefs.slice(1);
+    },
+    ({ run, assessment }) => {
+      cloneRetainedTransition(run, run.records.get(assessment.createdByTransitionRef));
+    },
+    ({ trial }) => {
+      trial.retainedStateRefs.correctionState = trial.retainedStateRefs.directDisposition;
+    },
+    ({ run, trial }) => {
+      run.relations.splice(run.relations.findIndex((relation) => (
+        relation.fromRef === trial.reference
+        && relation.targetRole === "activation_assessment"
+      )), 1);
+    },
+    ({ candidate }) => {
+      candidate.behaviorInfluence = "allowed_before_activation";
+    }
+  ];
+  for (const attack of attacks) {
+    const completed = directCorrectionRealizedRun();
+    const candidate = [...completed.run.records.values()].find(
+      (record) => record.family === "delayed_correction_candidate"
+    );
+    const assessment = [...completed.run.records.values()].find(
+      (record) => record.family === "delayed_correction_activation_assessment"
+    );
+    const trial = [...completed.run.records.values()].find(
+      (record) => record.family === "active_delayed_correction_trial"
+    );
+    attack({ run: completed.run, candidate, assessment, trial });
+    const before = retainedMutationSnapshot(completed.run);
+    assert.throws(
+      () => completed.run.validateActiveDelayedCorrectionTrialClosure(trial),
+      /Delayed-correction|delayed-correction|Active delayed/
+    );
+    assert.deepEqual(retainedMutationSnapshot(completed.run), before);
+  }
 });
 
 test("delayed candidate requires the completed focused and direct realization lineage", () => {
