@@ -1058,6 +1058,15 @@ test("CP-DELAY-ACTIVE rejects malformed assessment and trial closure passively",
         && relation.targetRole === "retention_basis"
       )), 1);
     }],
+    ["competing retained evaluation basis", (snapshot, assessment) => {
+      const original = snapshot.records.find(
+        (record) => record.reference === assessment.controlBasisRefs.retention
+      );
+      snapshot.records.push({
+        ...structuredClone(original),
+        reference: "state_competing_delayed_retention_basis"
+      });
+    }],
     ["duplicate assessment creator", (snapshot, assessment) => {
       const transition = snapshot.records.find(
         (record) => record.reference === assessment.createdByTransitionRef

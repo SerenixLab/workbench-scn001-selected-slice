@@ -65,6 +65,11 @@ export function findExactActiveDelayedCorrectionTrial(snapshot, sourceBindingEvi
     reversibility: records.get(assessment.controlBasisRefs?.reversibility),
     retention: records.get(assessment.controlBasisRefs?.retention)
   };
+  const retentionFacts = snapshot.records.filter((record) => (
+    record.family === "input_fact"
+    && record.role === "fixture_control_fact"
+    && record.payload?.control === "evaluation_retention_basis"
+  ));
   const assessmentTransition = uniqueCreator(snapshot, assessment);
   const trialTransition = uniqueCreator(snapshot, trial);
   const expectedChecks = deriveCheckResults({
@@ -141,6 +146,8 @@ export function findExactActiveDelayedCorrectionTrial(snapshot, sourceBindingEvi
       reversibility: candidate.controlBasisRefs.reversibility,
       retention: controls.retention?.reference
     })
+    || retentionFacts.length !== 1
+    || retentionFacts[0].reference !== controls.retention?.reference
     || assessment.interactionRef !== candidate.interactionRef
     || assessment.statusOrigin !== "sut_transition"
     || !hasExactKeys(assessmentTransition, TRANSITION_KEYS)

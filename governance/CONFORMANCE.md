@@ -2580,7 +2580,7 @@ recomputes the nine results, exact basis and retention lineage, creator
 transitions, order, assessment relations, trial ancestry, candidate identity,
 and active scope. The existing direct and candidate checkpoints remain valid
 prerequisites after activation and do not treat later state as proof of their
-own closures. Eleven public-boundary corruptions and eleven SUT closure attacks cover
+own closures. Twelve public-boundary corruptions and eleven SUT closure attacks cover
 stored-label trust, candidate substitution, incomplete basis, duplicate
 creators, retained-state substitution, broadened scope, and missing ancestry
 without mutating the real retained state.
@@ -2596,11 +2596,27 @@ Affected rows are `ENG-BASE-001`, `ENG-CHANGE-001`, `ENG-CLAIM-001`,
 methods, runtime dependencies, and active exceptions do not change.
 
 Local verification at implementation completion includes all aggregate gates
-and all 269 tests. Fresh independent review of the exact activation stack is
+and all 270 tests. Fresh independent review of the exact activation stack is
 pending. Until it is recorded, `ENG-HEALTH-CHANGE-001`,
 `ENG-HEALTH-ABSTRACTION-001`, and `ENG-HEALTH-STRUCTURE-001` return to
 `uncovered`: 44 rules are applicable, 5 not applicable, 7 review-only, 37
 uncovered, none revalidation-required, and none enforced.
+
+A fresh independent review of exact stack `d9d76df..4cf6af5` returned
+**blocking / failed**. The SUT globally required exactly one retained
+`evaluation_retention_basis` input fact, but `CP-DELAY-ACTIVE` validated only
+the fact referenced by the activation assessment. A read-only public-boundary
+reproduction cloned the inspection snapshot, added a second otherwise identical
+retention-basis record with a distinct identity, and the checkpoint accepted it;
+the real retained SUT snapshot remained unchanged. This failed review is
+preserved as failed and does not attest the correction below.
+
+The corrective increment makes the evaluator enumerate the complete retained
+evaluation-basis family and require the exact singleton referenced by the
+assessment, matching the SUT predicate. The public-boundary regression preserves
+the hostile competing record and requires passive rejection with unchanged real
+SUT state. Fresh independent review of the corrected exact stack remains
+required.
 
 No later-use applicability, later behavior disposition or realization, outcome,
 explanation, formal evaluation, scoring, compatibility, milestone completion,
