@@ -865,7 +865,7 @@ test("formal harness stages the complete focused-drill trajectory through both e
   assert.deepEqual(harness.captureInspectionSnapshot(runRef), beforeReplay);
 });
 
-test("formal harness reaches exact CP-DIRECT-CORRECTION-REALIZED without later state", () => {
+test("formal harness reaches exact direct realization and non-active delayed candidate", () => {
   const harness = createEvaluationHarness(createSutBoundary());
   const runRef = harness.startRun();
   const directInputs = spontaneousCorrectionRecords();
@@ -954,12 +954,27 @@ test("formal harness reaches exact CP-DIRECT-CORRECTION-REALIZED without later s
   assert.equal(realized[0].requestedBehavior, "turn_completion_correction");
   assert.equal(realized[0].realizedBehavior, "turn_completion_correction");
   assert.deepEqual(harness.inspectDirectCorrectionRealizedCheckpoint(runRef), []);
+  assert.deepEqual(harness.inspectDelayedCorrectionCandidateCheckpoint(runRef), []);
   harness.processCurrentInteraction(runRef);
   const checkpoint = harness.inspectDirectCorrectionRealizedCheckpoint(runRef);
   assert.equal(checkpoint.length, 1);
   assert.equal(checkpoint[0].correctionStateRef, correctionState.reference);
   assert.equal(checkpoint[0].dispositionRef, disposition.reference);
+  const delayedCheckpoint = harness.inspectDelayedCorrectionCandidateCheckpoint(runRef);
+  assert.equal(delayedCheckpoint.length, 1);
+  assert.equal(delayedCheckpoint[0].lifecycleStatus, "formed_non_active");
+  assert.equal(delayedCheckpoint[0].directDispositionRef, disposition.reference);
+  assert.equal(Object.isFrozen(delayedCheckpoint), true);
   snapshot = harness.captureInspectionSnapshot(runRef);
+  const delayedCandidate = snapshot.records.find(
+    (record) => record.family === "delayed_correction_candidate"
+  );
+  assert.ok(delayedCandidate);
+  assert.equal(delayedCandidate.reference, delayedCheckpoint[0].candidateRef);
+  assert.equal(delayedCandidate.behaviorInfluence, "prohibited_until_activation");
+  assert.equal(delayedCandidate.userPreference, "not_established");
+  assert.equal(delayedCandidate.globalPolicy, "not_established");
+  assert.equal(delayedCandidate.durableAdaptation, "unsupported_in_selected_slice");
   assert.deepEqual(snapshot.records.find(
     (record) => record.reference === candidateBefore.reference
   ), candidateBefore);
@@ -976,8 +991,8 @@ test("formal harness reaches exact CP-DIRECT-CORRECTION-REALIZED without later s
     (record) => record.reference === focusedOutcomeBefore.reference
   ), focusedOutcomeBefore);
   assert.equal(snapshot.records.some((record) => [
-    "delayed_correction_candidate", "active_delayed_correction_trial",
-    "later_use_applicability", "later_outcome", "explanation_support",
+    "active_delayed_correction_trial", "later_use_applicability",
+    "later_outcome", "explanation_support",
     "formal_evaluation_record", "scoring_artifact"
   ].includes(record.family)), false);
   assert.doesNotMatch(
@@ -989,6 +1004,90 @@ test("formal harness reaches exact CP-DIRECT-CORRECTION-REALIZED without later s
   );
   assert.deepEqual(harness.realizeAvailableOutputs(runRef), []);
   assert.deepEqual(harness.captureInspectionSnapshot(runRef), beforeReplay);
+});
+
+test("CP-DELAY-CANDIDATE rejects malformed lineage without mutating SUT state", async (t) => {
+  const attacks = [
+    ["active status", (snapshot, candidate) => {
+      candidate.lifecycleStatus = "active";
+    }],
+    ["broadened scope", (snapshot, candidate) => {
+      candidate.proposedScope.taskMode = "all_voice_activity";
+    }],
+    ["direct disposition substitution", (snapshot, candidate) => {
+      candidate.directDispositionRef = candidate.focusedDispositionRef;
+    }],
+    ["missing focused support", (snapshot, candidate) => {
+      snapshot.relations.splice(snapshot.relations.findIndex((relation) => (
+        relation.fromRef === candidate.reference
+        && relation.targetRole === "prior_focused_outcome"
+      )), 1);
+    }],
+    ["duplicate creator", (snapshot, candidate) => {
+      const transition = snapshot.records.find(
+        (record) => record.reference === candidate.createdByTransitionRef
+      );
+      snapshot.records.push({
+        ...structuredClone(transition),
+        reference: "transition_competing_delayed_candidate"
+      });
+    }],
+    ["duplicate candidate", (snapshot, candidate) => {
+      snapshot.records.push({
+        ...structuredClone(candidate),
+        reference: "state_competing_delayed_candidate"
+      });
+    }],
+    ["coherent trial-policy source substitution", (snapshot, candidate) => {
+      const original = snapshot.records.find(
+        (record) => record.reference === candidate.trialPolicyRef
+      );
+      const substitute = {
+        ...structuredClone(original),
+        reference: "state_substitute_delayed_trial_policy"
+      };
+      snapshot.records.push(substitute);
+      const transition = snapshot.records.find(
+        (record) => record.reference === candidate.createdByTransitionRef
+      );
+      transition.inputReferences = transition.inputReferences.map(
+        (reference) => reference === original.reference ? substitute.reference : reference
+      );
+      snapshot.relations.find((relation) => (
+        relation.fromRef === candidate.reference
+        && relation.toRef === original.reference
+        && relation.targetRole === "bounded_trial_policy"
+      )).toRef = substitute.reference;
+      candidate.trialPolicyRef = substitute.reference;
+    }]
+  ];
+  for (const [name, attack] of attacks) {
+    await t.test(name, () => {
+      const real = createSutBoundary();
+      let corrupt = false;
+      const boundary = Object.freeze({
+        ...real,
+        captureInspectionSnapshot(runRef) {
+          const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+          if (corrupt) {
+            const candidate = snapshot.records.find(
+              (record) => record.family === "delayed_correction_candidate"
+            );
+            attack(snapshot, candidate);
+          }
+          return snapshot;
+        }
+      });
+      const harness = createEvaluationHarness(boundary);
+      const runRef = harness.startRun();
+      completeDirectCorrection(harness, runRef);
+      const before = real.captureInspectionSnapshot(runRef);
+      corrupt = true;
+      assert.throws(() => harness.inspectDelayedCorrectionCandidateCheckpoint(runRef));
+      corrupt = false;
+      assert.deepEqual(real.captureInspectionSnapshot(runRef), before);
+    });
+  }
 });
 
 test("direct-correction simulator preserves SUT timing ownership", () => {

@@ -49,13 +49,14 @@ raw run-local facts
 -> scoped current spontaneous-session correction/control state
 -> direct turn-completion behavior disposition
 -> exact direct simulator realization
+-> separate formed/non-active delayed-correction candidate
 ```
 
 The candidate remains immutable, `formed_non_active`, and distinct from the active trial. Proposal intent, SUT selection, simulated proposal realization, raw user response, binding assessment, activation assessment, active-trial state, explicit drill instruction, behavior disposition, simulated behavior realization, and short-term outcome retain separate identities and exact typed local closure. The focused-drill outcome establishes only the supplied `5/6` observation and positive current feedback after matched immediate-correction behavior in that exact intervention-conditioned drill. It establishes no long-term efficacy, global preference, spontaneous-production applicability, or future applicability. Unsupported, equal, missing, invalid, or conflicting support/control states remain inspectable without silent selection or semantic promotion. `scn001_eval` owns allowlist projection, exact passive checkpoint gating, and harness transport through only the declared public SUT boundary.
 
 The implemented chain now passes `CP-PROD-ACTIVE`, the bounded `DP-FOCUSED-DRILL` trajectory through `CP-DRILL-REALIZATION-MATCH`, and the bounded `DP-DIRECT-CORRECTION` trajectory through `CP-DIRECT-CORRECTION-REALIZED`. The current user correction changes behavior immediately in the exact current spontaneous session by selecting turn-completion correction timing; it does not request immediate linguistic correction. The prior focused-drill immediate-correction instruction remains valid historical evidence for its different exact scope. Neither instruction is global or cross-surface.
 
-The direct path retains the raw current communication, SUT-derived scoped correction/control state, direct current-session disposition, and exact simulator realization as separate objects. It does not form a delayed-correction candidate or active delayed trial and does not implement later-use applicability, later outcomes, explanations, formal evaluation, or scoring.
+The direct path retains the raw current communication, SUT-derived scoped correction/control state, direct current-session disposition, and exact simulator realization as separate objects. After exact matched realization, the SUT forms one separate Zoey-derived delayed-correction candidate from the current correction, retained focused-drill evidence, spontaneous-production context, and bounded-trial controls. The candidate remains `formed_non_active`, cannot influence behavior, and is not a user preference, global policy, active trial, or durable adaptation. The workbench does not implement delayed-candidate activation, later-use applicability, later outcomes, explanations, formal evaluation, or scoring.
 
 This is engineering conformance infrastructure. It is not a formal evaluation record, behavioral-compatibility claim, milestone acceptance, or `SCN-001` pass.
 
@@ -97,13 +98,13 @@ Durable system-project extraction is blocked pending `REPO-001` or an equivalent
 
 ## Current Semantic Frontier
 
-The boundary spine and selected semantic chain are implemented through exact direct current-session correction realization. The next bounded semantic frontier is `DP-DELAY-TRIAL-FORM`.
+The boundary spine and selected semantic chain are implemented through exact `CP-DELAY-CANDIDATE`. The next bounded semantic frontier is `DP-DELAY-TRIAL-ACTIVATE`.
 
 Future increments must continue from the existing exact candidate/proposal/binding/activation closure:
 
 1. preserve the formed/non-active candidate as distinct from the active trial;
 2. preserve the focused-drill instruction, behavior disposition, simulated realization, and short-term outcome as distinct exact retained objects;
-3. implement delayed-correction candidate formation, activation, and later-use applicability only as later, separate semantic families;
+3. preserve the delayed-correction candidate as immutable non-active state and implement activation and later-use applicability only as later, separate semantic families;
 4. extend output and simulator seams only when the next concrete transition requires them.
 
-Delayed-correction candidate formation and every later semantic family remain unimplemented. No current artifact establishes behavioral compatibility, formal evidence, scoring, milestone acceptance, broader `SCN-001` acceptance, or production readiness.
+Delayed-correction activation and every later semantic family remain unimplemented. No current artifact establishes behavioral compatibility, formal evidence, scoring, milestone acceptance, broader `SCN-001` acceptance, or production readiness.

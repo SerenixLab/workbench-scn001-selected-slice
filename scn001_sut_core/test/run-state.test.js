@@ -3274,6 +3274,95 @@ test("direct realization requires exact identity and mismatch remains non-matchi
     mismatchClosure.fact.payload.realizedBehavior,
     mismatchClosure.fact.payload.requestedBehavior
   );
+  assert.equal([...mismatch.run.records.values()].some(
+    (record) => record.family === "delayed_correction_candidate"
+  ), false);
+});
+
+test("matched direct realization forms one separate non-active delayed candidate", () => {
+  const completed = directCorrectionRealizedRun();
+  const candidate = [...completed.run.records.values()].find(
+    (record) => record.family === "delayed_correction_candidate"
+  );
+  assert.ok(candidate);
+  completed.run.validateDelayedCorrectionCandidateClosure(candidate);
+  assert.equal(candidate.lifecycleStatus, "formed_non_active");
+  assert.equal(candidate.activationStatus, "not_assessed");
+  assert.equal(candidate.behaviorInfluence, "prohibited_until_activation");
+  assert.equal(candidate.userPreference, "not_established");
+  assert.equal(candidate.globalPolicy, "not_established");
+  assert.equal(candidate.durableAdaptation, "unsupported_in_selected_slice");
+  assert.equal(candidate.directDispositionRef, completed.disposition.reference);
+  assert.equal(candidate.directRealizationFactRef, completed.fact.reference);
+  assert.equal(candidate.focusedOutcomeRef, [...completed.run.records.values()].find(
+    (record) => record.family === "focused_drill_outcome"
+  ).reference);
+  assert.deepEqual(candidate.proposedScope, {
+    activity: "japanese_practice",
+    taskMode: "spontaneous_production",
+    surfaceLabel: "voice_simulated",
+    correctionClass: "minor_correction",
+    timing: "turn_completion",
+    consequence: "low",
+    excludedTaskModes: ["focused_production_drill"],
+    explicitImmediateCorrection: "excluded"
+  });
+  assert.deepEqual(candidate.activationRequirements, [
+    "scope", "basis_lineage", "current_stale_basis", "user_governed_constraints",
+    "reversibility", "consequence", "current_applicability", "retention_basis",
+    "non_adaptation_boundary"
+  ]);
+  assert.equal(completed.run.emitAvailableOutputs().length, 0);
+  assert.equal([...completed.run.records.values()].some((record) => (
+    record.family === "active_delayed_correction_trial"
+  )), false);
+
+  const before = structuredClone(candidate);
+  completed.run.assertSourceFactConsistency([completed.input]);
+  completed.run.ingest([completed.input]);
+  completed.run.processCurrentInteraction();
+  assert.deepEqual([...completed.run.records.values()].filter(
+    (record) => record.family === "delayed_correction_candidate"
+  ), [before]);
+  assert.equal(completed.run.emitAvailableOutputs().length, 0);
+});
+
+test("delayed candidate requires the completed focused and direct realization lineage", () => {
+  const directOnly = directCorrectionDecisionRun({ withFocusedPrefix: false });
+  const directFact = directRealizationInput(directOnly.disposition.reference);
+  directOnly.run.assertSourceFactConsistency([directFact]);
+  directOnly.run.ingest([directFact]);
+  directOnly.run.processCurrentInteraction();
+  assert.equal([...directOnly.run.records.values()].some(
+    (record) => record.family === "delayed_correction_candidate"
+  ), false);
+
+  for (const attack of [
+    ({ candidate }) => { candidate.activationStatus = "sufficient"; },
+    ({ candidate }) => { candidate.proposedScope.taskMode = "focused_production_drill"; },
+    ({ candidate }) => { candidate.directDispositionRef = candidate.focusedDispositionRef; },
+    ({ run, candidate }) => {
+      run.relations.splice(run.relations.findIndex((relation) => (
+        relation.fromRef === candidate.reference
+        && relation.targetRole === "prior_focused_outcome"
+      )), 1);
+    },
+    ({ run, candidate }) => {
+      cloneRetainedTransition(run, run.records.get(candidate.createdByTransitionRef));
+    }
+  ]) {
+    const completed = directCorrectionRealizedRun();
+    const candidate = [...completed.run.records.values()].find(
+      (record) => record.family === "delayed_correction_candidate"
+    );
+    attack({ run: completed.run, candidate });
+    const before = retainedMutationSnapshot(completed.run);
+    assert.throws(
+      () => completed.run.validateDelayedCorrectionCandidateClosure(candidate),
+      /Delayed-correction candidate|Direct current-session|Focused|retained creating/
+    );
+    assert.deepEqual(retainedMutationSnapshot(completed.run), before);
+  }
 });
 
 test("direct closure attacks fail without allocating order or repairing state", () => {

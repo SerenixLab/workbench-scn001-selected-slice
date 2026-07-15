@@ -61,7 +61,9 @@ const FOCUSED_OUTCOME_KEYS = Object.freeze([
 ]);
 
 export function findExactCompletedFocusedDrillPrefix(
-  snapshot, sourceBindingEvidence, { allowDirectCorrectionState = false } = {}
+  snapshot,
+  sourceBindingEvidence,
+  { allowDirectCorrectionState = false, allowDelayedCorrectionCandidate = false } = {}
 ) {
   const activeTrial = findExactActiveProductionTrial(snapshot, sourceBindingEvidence);
   if (!activeTrial) return undefined;
@@ -295,7 +297,8 @@ export function findExactCompletedFocusedDrillPrefix(
   validateBoundFact(snapshot, sourceBindingEvidence, observation, "fixture");
   validateBoundFact(snapshot, sourceBindingEvidence, feedback, "fixture");
   const forbiddenLaterFamilies = [
-    "delayed_correction_candidate", "active_delayed_correction_trial",
+    ...(allowDelayedCorrectionCandidate ? [] : ["delayed_correction_candidate"]),
+    "active_delayed_correction_trial",
     ...(allowDirectCorrectionState ? [] : [
       "scoped_current_correction_control", "direct_current_session_correction_disposition"
     ])
@@ -554,12 +557,6 @@ export function findExactDirectCorrectionRealization(snapshot, sourceBindingEvid
     validateBoundFact(snapshot, sourceBindingEvidence, item, "fixture");
   }
   validateBoundFact(snapshot, sourceBindingEvidence, fact, "simulator");
-  if (snapshot.records.some((record) => (
-    ["delayed_correction_candidate", "active_delayed_correction_trial",
-      "later_use_applicability", "later_outcome", "explanation_support"].includes(record.family)
-  ))) {
-    throw checkpointError("CP-DIRECT-CORRECTION-REALIZED excludes later semantic families.");
-  }
   return { state, disposition, fact, realizationTransition };
 }
 
@@ -780,7 +777,7 @@ function validateExactAttribution(snapshot, records, assertion, communication, i
   return transition;
 }
 
-function validateBoundFact(snapshot, evidence, fact, origin) {
+export function validateBoundFact(snapshot, evidence, fact, origin) {
   const matches = evidence.filter((entry) => (
     entry.acceptedInputFactRef === fact?.reference
       || entry.sourceFactRef === fact?.sourceFactRef

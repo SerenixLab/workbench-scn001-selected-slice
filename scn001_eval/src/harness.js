@@ -5,6 +5,7 @@ import {
   findExactCompletedFocusedDrillPrefix,
   findExactDirectCorrectionRealization
 } from "./directCorrectionCheckpoint.js";
+import { findExactDelayedCorrectionCandidate } from "./delayedCandidateCheckpoint.js";
 import { findExactActiveProductionTrial } from "./productionActiveCheckpoint.js";
 import { realizeAvailableOutput } from "./simulator.js";
 import { createSimulatorProjector } from "./simulatorProjection.js";
@@ -286,7 +287,10 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
       );
       if (!closure) return Object.freeze([]);
       const focusedPrefix = findExactCompletedFocusedDrillPrefix(
-        snapshot, sourceBindings, { allowDirectCorrectionState: true }
+        snapshot, sourceBindings, {
+          allowDirectCorrectionState: true,
+          allowDelayedCorrectionCandidate: true
+        }
       );
       validateDirectCorrectionTrajectory(snapshot, focusedPrefix, closure);
       return deepFreeze([{
@@ -294,6 +298,20 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
         dispositionRef: closure.disposition.reference,
         realizationFactRef: closure.fact.reference,
         realizationTransitionRef: closure.realizationTransition.reference
+      }]);
+    },
+
+    inspectDelayedCorrectionCandidateCheckpoint(runRef) {
+      const closure = findExactDelayedCorrectionCandidate(
+        sutBoundary.captureInspectionSnapshot(runRef),
+        sourceBindingEvidenceForRun(runRef)
+      );
+      if (!closure) return Object.freeze([]);
+      return deepFreeze([{
+        candidateRef: closure.candidate.reference,
+        lifecycleStatus: closure.candidate.lifecycleStatus,
+        directDispositionRef: closure.direct.disposition.reference,
+        focusedOutcomeRef: closure.focused.outcome.reference
       }]);
     },
 

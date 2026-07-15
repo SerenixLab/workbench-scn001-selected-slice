@@ -4,8 +4,8 @@ This ledger is the complete applicability router for the 49 rules pinned by `gov
 
 Later change-specific addenda and independent-review closures record subsequent selected-slice semantic increments without rewriting that historical verification basis. The projected lock and snapshot digests identify the exact canonical governance basis; each change-specific record identifies its own starting commit, scope, and review disposition.
 
-The workbench contains a two-package boundary spine and a stabilized semantic segment. The SUT derives attributed current-user assertions, selected temporal eligibility, scoped recognition/spontaneous-production comparisons, immutable non-active trial candidates, distinct candidate-bound proposal intents, proposal-response binding, nine-check activation assessments, separate active trials, scoped focused-drill instructions and dispositions, exact focused behavior-realization closure, separate short-term focused-drill outcomes, a scoped current spontaneous-session correction/control state, a separate direct turn-completion behavior disposition, exact direct realization closure, and non-activation dispositions from raw run-local source facts and exact typed local relation closure.
-It does not create current-skill facts, delayed-correction candidates or active trials, later-use applicability or behavior, later outcomes, explanations, or formal evaluation artifacts.
+The workbench contains a two-package boundary spine and a stabilized semantic segment. The SUT derives attributed current-user assertions, selected temporal eligibility, scoped recognition/spontaneous-production comparisons, immutable non-active trial candidates, distinct candidate-bound proposal intents, proposal-response binding, nine-check activation assessments, separate active trials, scoped focused-drill instructions and dispositions, exact focused behavior-realization closure, separate short-term focused-drill outcomes, a scoped current spontaneous-session correction/control state, a separate direct turn-completion behavior disposition, exact direct realization closure, a separate formed/non-active delayed-correction candidate, and non-activation dispositions from raw run-local source facts and exact typed local relation closure.
+It does not create current-skill facts, active delayed-correction trials, later-use applicability or behavior, later outcomes, explanations, or formal evaluation artifacts.
 There is no formal evaluation record, behavioral-compatibility claim, scoreability claim, milestone-acceptance claim, replay/restore path, or durable repository extraction.
 
 ## Ledger Conventions
@@ -2425,3 +2425,65 @@ With this review recorded, current applicability/status counts return to:
 * 34 applicable rules `uncovered`;
 * no applicable rule `revalidation-required`;
 * no rule claimed `enforced`.
+
+## Delayed-Correction Candidate Formation Increment
+
+The implementation change based on starting `HEAD` `9feea9b` has one primary
+purpose: implement `DP-DELAY-TRIAL-FORM` through exact `CP-DELAY-CANDIDATE` while
+leaving activation and every later semantic family absent.
+
+After the exact direct current-session realization is recorded, the SUT forms one
+separate Zoey-derived candidate only when the same run retains the exact active
+production trial, focused-drill instruction, disposition, realization, short-term
+outcome, spontaneous correction/control state, matched direct disposition and
+realization, bounded-trial policy, and selected controls. No fixture supplies a
+candidate conclusion or an activation selector.
+
+The candidate has its own opaque identity, material intent, provisional evaluative
+purpose, Zoey-derived source class, exact support lineage, spontaneous-production
+scope, focused-drill and explicit-immediate-correction exclusions, outcome relevance,
+reversibility path, nine named future activation requirements, and creating
+transition. It remains `formed_non_active` with `not_assessed` activation and
+`prohibited_until_activation` behavior influence. It establishes no user preference,
+global policy, active trial, or durable adaptation.
+
+Candidate relations separately preserve support, basis, and transition ancestry.
+The transition consumes the exact contemporaneous participant set; replay validates
+and reuses the same candidate rather than creating another. Mismatch realization,
+missing focused history, competing candidate/trial/outcome evidence, malformed scope,
+retargeted direct lineage, missing focused support, or duplicate creator evidence
+cannot produce or validate the checkpoint.
+
+Evaluation adds one passive `CP-DELAY-CANDIDATE` reconstruction over the public
+inspection snapshot and evaluation-private source-binding evidence. It independently
+revalidates the complete direct and focused prerequisites, exact candidate content,
+creator, participant order, source-bound trial policy, and all typed relations. The
+existing direct checkpoint remains a reusable prerequisite after later candidate
+formation; it does not treat the candidate as proof of activation.
+
+Affected rows are `ENG-BASE-001`, `ENG-CHANGE-001`, `ENG-CLAIM-001`,
+`ENG-CONF-CAPTURE-001`, `ENG-CONF-DEP-001`, `ENG-CONF-DEP-002`,
+`ENG-CONF-HARNESS-001`, `ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`,
+`ENG-CONF-REF-001`, `ENG-CONF-ROLE-001`, `ENG-CONF-STATE-001`,
+`ENG-CONF-STATE-002`, `ENG-HEALTH-ABSTRACTION-001`, `ENG-HEALTH-API-001`,
+`ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-FAILURE-001`,
+`ENG-HEALTH-STRUCTURE-001`, `ENG-HEALTH-TEST-001`, and
+`ENG-HEALTH-TEST-002`. Applicability, revisions, promotion mappings, public SUT
+methods, runtime dependencies, and active exceptions do not change.
+
+Local verification at implementation completion includes the aggregate governance,
+format, syntax, dependency, boundary, state, and test gates with all 255 tests
+passing. Focused SUT tests prove candidate separation, exact scope and requirements,
+non-influence, replay, missing-prefix withholding, mismatch withholding, and
+fail-closed closure attacks. Focused evaluation tests prove the positive checkpoint
+and seven passive malformed-lineage attacks with unchanged retained SUT state.
+
+Fresh independent review of the exact candidate-formation commit remains pending.
+Until that review is recorded, `ENG-HEALTH-CHANGE-001`,
+`ENG-HEALTH-ABSTRACTION-001`, and `ENG-HEALTH-STRUCTURE-001` return to
+`uncovered`. Current counts are 44 applicable, 5 not applicable, 7 review-only,
+37 uncovered, none revalidation-required, and none enforced.
+
+No active delayed-correction trial, later disposition, later realization, outcome,
+explanation, formal evaluation, scoring, milestone completion, broader compatibility,
+obligation-satisfaction, or production claim is introduced.

@@ -10,6 +10,14 @@ import {
   validateDirectCorrectionDispositionClosure
 } from "./directCorrection.js";
 import {
+  candidateParticipantPairs,
+  DELAYED_ACTIVATION_REQUIREMENTS,
+  DELAYED_CORRECTION_INTENT,
+  DELAYED_CORRECTION_SCOPE,
+  deriveDelayedCorrectionCandidateParticipants,
+  validateDelayedCorrectionCandidateClosure
+} from "./delayedCorrection.js";
+import {
   deriveFocusedDrillDecisionParticipants,
   deriveFocusedDrillOutcomeParticipants,
   IMMEDIATE_CORRECTION_BEHAVIOR,
@@ -313,6 +321,10 @@ export class RunState {
       interaction,
       interactionFacts
     );
+    const delayedCorrectionCandidateTransitionRef = this.deriveDelayedCorrectionCandidate(
+      interaction,
+      interactionFacts
+    );
     const semanticTransitionRefs = [
       attributionTransitionRef,
       temporalAssessmentTransitionRef,
@@ -328,7 +340,8 @@ export class RunState {
       focusedDrillRealizationTransitionRef,
       focusedDrillOutcomeTransitionRef,
       ...directCorrectionTransitionRefs,
-      directCorrectionRealizationTransitionRef
+      directCorrectionRealizationTransitionRef,
+      delayedCorrectionCandidateTransitionRef
     ].filter(Boolean);
     const processingTransition = this.createTransition(
       "process_interaction_segment",
@@ -1943,6 +1956,95 @@ export class RunState {
       sourceFactBindings: this.sourceFactBindings,
       dispositionRef,
       expectedFactRef
+    });
+  }
+
+  deriveDelayedCorrectionCandidate(interaction, interactionFacts) {
+    const participants = deriveDelayedCorrectionCandidateParticipants({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      interaction,
+      interactionFacts,
+      validateActiveTrial: (trial) => this.validActiveTrialClosure(trial),
+      validateFocusedOutcome: (outcome) => this.validateFocusedDrillOutcomeClosure(outcome),
+      resolveDirectRealization: (dispositionRef, expectedFactRef) => (
+        this.resolveDirectCorrectionRealizationClosure(dispositionRef, expectedFactRef)
+      )
+    });
+    if (!participants || participants.kind === "reuse") return undefined;
+
+    const candidate = {
+      reference: createReference("state"),
+      family: "delayed_correction_candidate",
+      origin: "sut",
+      candidateType: "zoey_derived_delayed_correction_trial",
+      materialIntent: DELAYED_CORRECTION_INTENT,
+      sourceClass: "zoey_derived_from_scoped_behavior_evidence",
+      purpose: "provisional_evaluative_future_behavior_trial",
+      proposedScope: structuredClone(DELAYED_CORRECTION_SCOPE),
+      outcomeRelevance: "later_spontaneous_speaking_and_pacing_observation",
+      reversibilityPath: "restore_immediate_or_context_specific_correction",
+      lifecycleStatus: "formed_non_active",
+      activationStatus: "not_assessed",
+      activationRequirements: [...DELAYED_ACTIVATION_REQUIREMENTS],
+      behaviorInfluence: "prohibited_until_activation",
+      userPreference: "not_established",
+      globalPolicy: "not_established",
+      durableAdaptation: "unsupported_in_selected_slice",
+      directCorrectionStateRef: participants.correctionState.reference,
+      directDispositionRef: participants.directDisposition.reference,
+      directRealizationFactRef: participants.directRealizationFact.reference,
+      directRealizationTransitionRef: participants.directRealizationTransition.reference,
+      activeProductionTrialRef: participants.activeTrial.reference,
+      focusedInstructionRef: participants.focusedInstruction.reference,
+      focusedDispositionRef: participants.focusedDisposition.reference,
+      focusedRealizationFactRef: participants.focusedRealizationFact.reference,
+      focusedRealizationTransitionRef: participants.focusedRealizationTransition.reference,
+      focusedOutcomeRef: participants.focusedOutcome.reference,
+      currentContextRef: participants.currentContext.reference,
+      trialPolicyRef: participants.trialPolicy.reference,
+      controlBasisRefs: structuredClone(participants.controlBasisRefs),
+      interactionRef: interaction.reference,
+      statusOrigin: "sut_transition",
+      createdOrder: this.allocateOrder()
+    };
+    candidate.effectiveOrder = candidate.createdOrder;
+    const participantPairs = candidateParticipantPairs(participants);
+    const transition = this.createTransition(
+      "form_delayed_correction_trial_candidate",
+      participantPairs.map(([reference]) => reference),
+      [candidate.reference],
+      interaction.reference
+    );
+    transition.result = "delayed_correction_candidate_formed_non_active";
+    attachCreatingTransition([candidate], transition);
+    this.commitDerivedRecords([candidate], transition);
+    for (const [reference, role, relationKind] of participantPairs) {
+      this.relations.push({
+        relationKind,
+        fromRef: candidate.reference,
+        toRef: reference,
+        targetRole: role,
+        effectiveOrder: candidate.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    return transition.reference;
+  }
+
+  validateDelayedCorrectionCandidateClosure(candidate) {
+    return validateDelayedCorrectionCandidateClosure({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      candidate,
+      validateActiveTrial: (trial) => this.validActiveTrialClosure(trial),
+      validateFocusedOutcome: (outcome) => this.validateFocusedDrillOutcomeClosure(outcome),
+      resolveDirectRealization: (dispositionRef, expectedFactRef) => (
+        this.resolveDirectCorrectionRealizationClosure(dispositionRef, expectedFactRef)
+      )
     });
   }
 
