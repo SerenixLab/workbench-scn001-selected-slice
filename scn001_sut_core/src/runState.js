@@ -37,10 +37,12 @@ import {
 } from "./focusedDrill.js";
 import {
   deriveLaterUseParticipants,
+  effectiveDelayedTrialProjectionState,
   LATER_DELAYED_BEHAVIOR,
   laterUseInputReferences,
   laterUseRelationPairs,
   resolveLaterRealizationClosure,
+  validateLaterStateProjectionClosure,
   validateLaterDispositionClosure,
   validateLaterUseAssessmentClosure
 } from "./laterUse.js";
@@ -2322,6 +2324,67 @@ export class RunState {
       this.validateLaterUseAssessmentClosure(existing[0]);
       return [];
     }
+    const existingProjections = [...this.records.values()].filter((record) => (
+      record.family === "lineage_preserving_projection"
+      && record.sourceReferenceFactRef === participants.stateReferenceFact.reference
+      && record.interactionRef === interaction.reference
+    ));
+    if (existingProjections.length > 1) {
+      throw new SutStateIntegrityError("Later state projection is ambiguous.");
+    }
+    let projection = existingProjections[0];
+    let projectionTransitionRef;
+    if (projection) {
+      projection = this.validateLaterStateProjectionClosure(
+        projection, participants.activeTrial, participants.stateReferenceFact, interaction
+      );
+    } else {
+      projection = {
+        reference: createReference("state"),
+        family: "lineage_preserving_projection",
+        origin: "sut",
+        projectionType: "active_delayed_trial_reference",
+        projectionTargetRef: participants.activeTrial.reference,
+        sourceReferenceFactRef: participants.stateReferenceFact.reference,
+        projectionRule: "same_run_opaque_reference_identity",
+        viewIdentity: "active_delayed_trial_effective_state",
+        semanticContribution: "none_reference_only",
+        effectiveTargetState: effectiveDelayedTrialProjectionState(
+          participants.activeTrial
+        ),
+        statusOrigin: "sut_transition",
+        interactionRef: interaction.reference,
+        createdOrder: this.allocateOrder()
+      };
+      projection.effectiveOrder = projection.createdOrder;
+      const projectionTransition = this.createTransition(
+        "validate_later_state_projection",
+        [participants.stateReferenceFact.reference, participants.activeTrial.reference],
+        [projection.reference],
+        interaction.reference
+      );
+      projectionTransition.result = "later_state_projection_validated";
+      attachCreatingTransition([projection], projectionTransition);
+      this.commitDerivedRecords([projection], projectionTransition);
+      for (const [kind, reference, role] of [
+        ["projection_of", participants.activeTrial.reference,
+          "active_delayed_correction_trial"],
+        ["basis", participants.stateReferenceFact.reference,
+          "opaque_state_reference_fact"]
+      ]) {
+        this.relations.push({
+          relationKind: kind,
+          fromRef: projection.reference,
+          toRef: reference,
+          targetRole: role,
+          effectiveOrder: projection.createdOrder,
+          createdOrder: projectionTransition.createdOrder,
+          assertedByRole: "sut"
+        });
+      }
+      projectionTransitionRef = projectionTransition.reference;
+    }
+    participants.stateProjection = projection;
     const assessment = {
       reference: createReference("state"),
       family: "later_use_applicability",
@@ -2332,6 +2395,7 @@ export class RunState {
       activeTrialRef: participants.activeTrial.reference,
       contextRef: participants.context.reference,
       stateReferenceFactRef: participants.stateReferenceFact.reference,
+      stateProjectionRef: projection.reference,
       correctionCommunicationRef: participants.communication?.reference ?? null,
       attributedAssertionRef: participants.assertion?.reference ?? null,
       controlBasisRefs: {
@@ -2379,7 +2443,7 @@ export class RunState {
       });
     }
     if (participants.applicabilityResult !== "applicable") {
-      return [assessmentTransition.reference];
+      return [projectionTransitionRef, assessmentTransition.reference].filter(Boolean);
     }
     const disposition = {
       reference: createReference("state"),
@@ -2424,7 +2488,9 @@ export class RunState {
         assertedByRole: "sut"
       });
     }
-    return [assessmentTransition.reference, dispositionTransition.reference];
+    return [
+      projectionTransitionRef, assessmentTransition.reference, dispositionTransition.reference
+    ].filter(Boolean);
   }
 
   recordLaterUseRealization(interaction, interactionFacts) {
@@ -2473,6 +2539,19 @@ export class RunState {
       validateActiveDelayedTrial: (trial) => (
         this.validateActiveDelayedCorrectionTrialClosure(trial)
       )
+    });
+  }
+
+  validateLaterStateProjectionClosure(
+    projection, activeTrial, stateReferenceFact, interaction
+  ) {
+    return validateLaterStateProjectionClosure({
+      records: this.records,
+      relations: this.relations,
+      projection,
+      activeTrial,
+      stateReferenceFact,
+      interaction
     });
   }
 

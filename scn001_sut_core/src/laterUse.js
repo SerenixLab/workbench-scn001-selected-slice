@@ -29,6 +29,7 @@ export const DRILL_OPT_IN_SCOPE = Object.freeze({
 const ASSESSMENT_KEYS = [
   "reference", "family", "origin", "assessmentType", "pathType", "useTarget",
   "activeTrialRef", "contextRef", "stateReferenceFactRef",
+  "stateProjectionRef",
   "correctionCommunicationRef", "attributedAssertionRef", "controlBasisRefs",
   "applicabilityResult", "reason", "activeScope", "currentScope",
   "selectedBehavior", "behaviorInfluence", "statusOrigin", "interactionRef",
@@ -56,6 +57,13 @@ const ATTRIBUTION_KEYS = Object.freeze([
   "interactionRef", "createdOrder", "createdByTransitionRef"
 ]);
 
+const PROJECTION_KEYS = Object.freeze([
+  "reference", "family", "origin", "projectionType", "projectionTargetRef",
+  "sourceReferenceFactRef", "projectionRule", "viewIdentity",
+  "semanticContribution", "effectiveTargetState", "statusOrigin",
+  "interactionRef", "createdOrder", "effectiveOrder", "createdByTransitionRef"
+]);
+
 export function deriveLaterUseParticipants({
   records, relations, sourceFactBindings, interaction, interactionFacts,
   validateActiveDelayedTrial
@@ -68,16 +76,17 @@ export function deriveLaterUseParticipants({
   if (contexts.length !== 1 || stateRefs.length !== 1) return undefined;
   const context = contexts[0];
   const stateReferenceFact = stateRefs[0];
-  const activeTrial = validateActiveDelayedTrial(
-    records.get(stateReferenceFact.payload?.stateRef)
-  );
   const canonical = isDeepStrictEqual(scopeFrom(context.payload), LATER_SPONTANEOUS_SCOPE);
   const counterfactual = isDeepStrictEqual(scopeFrom(context.payload), DRILL_OPT_IN_SCOPE);
   if (!canonical && !counterfactual) return undefined;
-  if (canonical && communications.length !== 0 || counterfactual && communications.length !== 1
+  if ((canonical && communications.length !== 0)
+    || (counterfactual && communications.length !== 1)
     || controls.length !== 2 || interactionFacts.length !== (canonical ? 4 : 5)) {
     return undefined;
   }
+  const activeTrial = validateActiveDelayedTrial(
+    records.get(stateReferenceFact.payload?.stateRef)
+  );
   const byType = new Map(controls.map((fact) => [fact.payload.control, fact]));
   if (byType.size !== 2
     || byType.get("user_governed_constraints")?.payload?.value
@@ -140,6 +149,7 @@ export function laterUseInputReferences(participants) {
     participants.activeTrial.reference,
     participants.context.reference,
     participants.stateReferenceFact.reference,
+    participants.stateProjection.reference,
     ...(participants.communication ? [
       participants.communication.reference, participants.assertion.reference
     ] : []),
@@ -153,6 +163,7 @@ export function laterUseRelationPairs(participants) {
     [participants.activeTrial.reference, "retained_active_delayed_trial"],
     [participants.context.reference, "declared_later_use_context"],
     [participants.stateReferenceFact.reference, "same_run_trial_projection"],
+    [participants.stateProjection.reference, "validated_same_run_projection"],
     ...(participants.communication ? [
       [participants.communication.reference, "explicit_drill_immediate_correction"],
       [participants.assertion.reference, "attributed_drill_immediate_correction"]
@@ -160,6 +171,80 @@ export function laterUseRelationPairs(participants) {
     [participants.controls.userGoverned.reference, "user_governed_control"],
     [participants.controls.consequence.reference, "consequence_control"]
   ];
+}
+
+export function effectiveDelayedTrialProjectionState(activeTrial) {
+  return {
+    targetRef: activeTrial.reference,
+    lifecycleVersion: activeTrial.lifecycleVersion,
+    currentStatus: activeTrial.currentStatus,
+    activeScope: structuredClone(activeTrial.activeScope),
+    correctionPath: activeTrial.correctionPath
+  };
+}
+
+export function validateLaterStateProjectionClosure({
+  records, relations, projection, activeTrial, stateReferenceFact, interaction
+}) {
+  const transition = resolveUniqueCreatingTransition(
+    records, projection, "Later state projection"
+  );
+  const outward = relations.filter((relation) => (
+    relation.fromRef === projection?.reference
+  ));
+  const projectionRelations = outward.filter((relation) => (
+    relation.relationKind === "projection_of"
+  ));
+  const basisRelations = outward.filter((relation) => relation.relationKind === "basis");
+  const competing = [...records.values()].filter((record) => (
+    record.family === "lineage_preserving_projection"
+    && record.sourceReferenceFactRef === stateReferenceFact.reference
+    && record.interactionRef === interaction.reference
+  ));
+  if (!hasExactKeys(projection, PROJECTION_KEYS)
+    || projection.family !== "lineage_preserving_projection" || projection.origin !== "sut"
+    || projection.projectionType !== "active_delayed_trial_reference"
+    || projection.projectionTargetRef !== activeTrial.reference
+    || projection.sourceReferenceFactRef !== stateReferenceFact.reference
+    || projection.projectionRule !== "same_run_opaque_reference_identity"
+    || projection.viewIdentity !== "active_delayed_trial_effective_state"
+    || projection.semanticContribution !== "none_reference_only"
+    || !isDeepStrictEqual(
+      projection.effectiveTargetState, effectiveDelayedTrialProjectionState(activeTrial)
+    )
+    || projection.statusOrigin !== "sut_transition"
+    || projection.interactionRef !== interaction.reference
+    || projection.effectiveOrder !== projection.createdOrder
+    || competing.length !== 1 || competing[0].reference !== projection.reference
+    || transition?.reference !== projection.createdByTransitionRef
+    || !hasExactKeys(transition, TRANSITION_KEYS)
+    || transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
+    || transition.transitionKind !== "validate_later_state_projection"
+    || transition.interactionRef !== interaction.reference
+    || transition.result !== "later_state_projection_validated"
+    || !isDeepStrictEqual(
+      transition.inputReferences, [stateReferenceFact.reference, activeTrial.reference]
+    )
+    || !isDeepStrictEqual(transition.resultReferences, [projection.reference])
+    || !hasExactRelations(projectionRelations, [
+      [activeTrial.reference, "active_delayed_correction_trial"]
+    ], "projection_of")
+    || basisRelations.length !== 1
+    || !basisRelations.some((relation) => relation.relationKind === "basis"
+      && relation.toRef === stateReferenceFact.reference
+      && relation.targetRole === "opaque_state_reference_fact")
+    || outward.length !== 2
+    || outward.some((relation) => !exactMetadata(
+      relation, projection.createdOrder, transition.createdOrder
+    ))
+    || records.get(activeTrial.createdByTransitionRef)?.createdOrder
+      >= stateReferenceFact.createdOrder
+    || stateReferenceFact.createdOrder >= interaction.createdOrder
+    || records.get(interaction.createdByTransitionRef)?.createdOrder >= projection.createdOrder
+    || projection.createdOrder >= transition.createdOrder) {
+    throw new SutStateIntegrityError("Later state projection closure is malformed.");
+  }
+  return projection;
 }
 
 export function validateLaterUseAssessmentClosure({
@@ -175,6 +260,13 @@ export function validateLaterUseAssessmentClosure({
   if (!participants) {
     throw new SutStateIntegrityError("Later-use applicability participants are malformed.");
   }
+  participants.stateProjection = validateLaterStateProjectionClosure({
+    records, relations,
+    projection: records.get(assessment?.stateProjectionRef),
+    activeTrial: participants.activeTrial,
+    stateReferenceFact: participants.stateReferenceFact,
+    interaction
+  });
   const expectedInputs = laterUseInputReferences(participants);
   const expectedPairs = laterUseRelationPairs(participants);
   const outward = relations.filter((relation) => relation.fromRef === assessment?.reference);
@@ -196,6 +288,7 @@ export function validateLaterUseAssessmentClosure({
     || assessment.activeTrialRef !== participants.activeTrial.reference
     || assessment.contextRef !== participants.context.reference
     || assessment.stateReferenceFactRef !== participants.stateReferenceFact.reference
+    || assessment.stateProjectionRef !== participants.stateProjection.reference
     || assessment.correctionCommunicationRef !== (participants.communication?.reference ?? null)
     || assessment.attributedAssertionRef !== (participants.assertion?.reference ?? null)
     || !isDeepStrictEqual(assessment.controlBasisRefs, {
@@ -392,6 +485,7 @@ function validateDrillAttribution(records, relations, assertion, communication, 
     || !hasExactKeys(transition, TRANSITION_KEYS)
     || transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
     || transition.transitionKind !== "attribute_current_communications"
+    || transition.reference !== assertion.createdByTransitionRef
     || transition.interactionRef !== interaction.reference
     || !isDeepStrictEqual(transition.inputReferences, [communication.reference])
     || !isDeepStrictEqual(transition.resultReferences, [assertion.reference])

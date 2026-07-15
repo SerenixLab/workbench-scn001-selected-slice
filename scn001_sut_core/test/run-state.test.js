@@ -528,6 +528,10 @@ function laterUseRun({ counterfactual = false } = {}) {
   };
 }
 
+function laterStateProjection(run, assessment) {
+  return run.records.get(assessment.stateProjectionRef);
+}
+
 function cloneRetainedTransition(run, transition, overrides = {}) {
   const clone = {
     ...structuredClone(transition),
@@ -3560,6 +3564,26 @@ test("later spontaneous use rechecks applicability before selecting delayed corr
   );
   assert.equal(later.laterDisposition.activeTrialRef, later.activeTrial.reference);
   assert.equal(later.laterDisposition.globalPolicy, "not_established");
+  const projection = laterStateProjection(later.run, later.assessment);
+  assert.equal(projection.family, "lineage_preserving_projection");
+  assert.equal(projection.projectionTargetRef, later.activeTrial.reference);
+  assert.equal(projection.sourceReferenceFactRef, later.assessment.stateReferenceFactRef);
+  assert.equal(projection.projectionRule, "same_run_opaque_reference_identity");
+  assert.equal(projection.viewIdentity, "active_delayed_trial_effective_state");
+  assert.equal(projection.semanticContribution, "none_reference_only");
+  assert.deepEqual(projection.effectiveTargetState, {
+    targetRef: later.activeTrial.reference,
+    lifecycleVersion: later.activeTrial.lifecycleVersion,
+    currentStatus: later.activeTrial.currentStatus,
+    activeScope: later.activeTrial.activeScope,
+    correctionPath: later.activeTrial.correctionPath
+  });
+  assert.deepEqual(later.run.relations.filter((relation) => (
+    relation.fromRef === projection.reference
+  )).map((relation) => [relation.relationKind, relation.toRef, relation.targetRole]), [
+    ["projection_of", later.activeTrial.reference, "active_delayed_correction_trial"],
+    ["basis", later.assessment.stateReferenceFactRef, "opaque_state_reference_fact"]
+  ]);
   const outputs = later.run.emitAvailableOutputs();
   assert.equal(outputs.length, 1);
   assert.equal(outputs[0].kind, "later_delayed_correction_request");
@@ -3603,6 +3627,15 @@ test("drill opt-in makes the same active delayed trial explicitly inapplicable",
   assert.equal(later.laterDisposition, undefined);
   assert.deepEqual(later.run.emitAvailableOutputs(), []);
   assert.equal(later.activeTrial.currentStatus, "active");
+  const projection = laterStateProjection(later.run, later.assessment);
+  assert.equal(projection.projectionTargetRef, later.activeTrial.reference);
+  assert.equal(projection.sourceReferenceFactRef, later.assessment.stateReferenceFactRef);
+  assert.equal(later.run.relations.some((relation) => (
+    relation.fromRef === projection.reference
+    && relation.relationKind === "projection_of"
+    && relation.toRef === later.activeTrial.reference
+    && relation.targetRole === "active_delayed_correction_trial"
+  )), true);
   assert.equal([...later.run.records.values()].some((record) => (
     ["narrowing", "supersession", "retirement"].includes(record.family)
   )), false);
@@ -3626,6 +3659,52 @@ test("later-use closures reject envelope, attribution, and support corruption pa
     },
     ({ run, assessment }) => {
       run.records.get(assessment.interactionRef).oracleBranch = "later_use";
+    },
+    ({ run, assessment }) => {
+      laterStateProjection(run, assessment).projectionRule = "trust_fixture_state";
+    },
+    ({ run, assessment }) => {
+      laterStateProjection(run, assessment).viewIdentity = "fixture_declared_state";
+    },
+    ({ run, assessment }) => {
+      laterStateProjection(run, assessment).effectiveTargetState.currentStatus = "retired";
+    },
+    ({ run, assessment }) => {
+      laterStateProjection(run, assessment).projectionTargetRef = createReference("state");
+    },
+    ({ run, assessment }) => {
+      const projection = laterStateProjection(run, assessment);
+      run.relations.splice(run.relations.findIndex((relation) => (
+        relation.fromRef === projection.reference && relation.relationKind === "projection_of"
+      )), 1);
+    },
+    ({ run, assessment }) => {
+      const projection = laterStateProjection(run, assessment);
+      run.relations.find((relation) => (
+        relation.fromRef === projection.reference && relation.relationKind === "projection_of"
+      )).toRef = createReference("state");
+    },
+    ({ run, assessment }) => {
+      const projection = laterStateProjection(run, assessment);
+      run.relations.find((relation) => (
+        relation.fromRef === projection.reference && relation.relationKind === "projection_of"
+      )).createdOrder -= 1;
+    },
+    ({ run, assessment }) => {
+      const projection = laterStateProjection(run, assessment);
+      const reference = createReference("state");
+      run.records.set(reference, { ...structuredClone(projection), reference });
+    },
+    ({ run, assessment }) => {
+      const projection = laterStateProjection(run, assessment);
+      const clone = cloneRetainedTransition(run, run.records.get(
+        projection.createdByTransitionRef
+      ));
+      projection.createdByTransitionRef = clone.reference;
+    },
+    ({ run, assessment }) => {
+      const projection = laterStateProjection(run, assessment);
+      cloneRetainedTransition(run, run.records.get(projection.createdByTransitionRef));
     }
   ];
   for (const attack of canonicalAttacks) {
@@ -3647,6 +3726,18 @@ test("later-use closures reject envelope, attribution, and support corruption pa
     counterfactual.assessment
   ));
   assert.deepEqual(retainedMutationSnapshot(counterfactual.run), before);
+
+  const rewrittenCreator = laterUseRun({ counterfactual: true });
+  const rewrittenAssertion = [...rewrittenCreator.run.records.values()].find((record) => (
+    record.family === "attributed_assertion"
+    && record.interactionRef === rewrittenCreator.assessment.interactionRef
+  ));
+  rewrittenAssertion.createdByTransitionRef = createReference("transition");
+  const rewrittenBefore = retainedMutationSnapshot(rewrittenCreator.run);
+  assert.throws(() => rewrittenCreator.run.validateLaterUseAssessmentClosure(
+    rewrittenCreator.assessment
+  ));
+  assert.deepEqual(retainedMutationSnapshot(rewrittenCreator.run), rewrittenBefore);
 });
 
 test("later realization has one ingestion creator and rejects competing evidence", () => {

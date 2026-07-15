@@ -11,6 +11,7 @@ const TRANSITION_KEYS = Object.freeze([
 const ASSESSMENT_KEYS = Object.freeze([
   "reference", "family", "origin", "assessmentType", "pathType", "useTarget",
   "activeTrialRef", "contextRef", "stateReferenceFactRef",
+  "stateProjectionRef",
   "correctionCommunicationRef", "attributedAssertionRef", "controlBasisRefs",
   "applicabilityResult", "reason", "activeScope", "currentScope",
   "selectedBehavior", "behaviorInfluence", "statusOrigin", "interactionRef",
@@ -31,6 +32,13 @@ const ATTRIBUTION_KEYS = Object.freeze([
   "interactionRef", "createdOrder", "createdByTransitionRef"
 ]);
 
+const PROJECTION_KEYS = Object.freeze([
+  "reference", "family", "origin", "projectionType", "projectionTargetRef",
+  "sourceReferenceFactRef", "projectionRule", "viewIdentity",
+  "semanticContribution", "effectiveTargetState", "statusOrigin",
+  "interactionRef", "createdOrder", "effectiveOrder", "createdByTransitionRef"
+]);
+
 export function findExactLaterUse(snapshot, sourceBindingEvidence, pathType) {
   const active = findExactActiveDelayedCorrectionTrial(snapshot, sourceBindingEvidence);
   if (!active) return undefined;
@@ -46,6 +54,7 @@ export function findExactLaterUse(snapshot, sourceBindingEvidence, pathType) {
   )).length !== 1) throw checkpointError("Later-use assessment family is ambiguous.");
   const context = records.get(assessment.contextRef);
   const stateRef = records.get(assessment.stateReferenceFactRef);
+  const projection = records.get(assessment.stateProjectionRef);
   const communication = records.get(assessment.correctionCommunicationRef);
   const assertion = records.get(assessment.attributedAssertionRef);
   const controls = [
@@ -65,6 +74,7 @@ export function findExactLaterUse(snapshot, sourceBindingEvidence, pathType) {
   };
   const expectedInputs = [
     active.trial.reference, context?.reference, stateRef?.reference,
+    projection?.reference,
     ...(canonical ? [] : [communication?.reference, assertion?.reference]),
     ...controls.map((control) => control?.reference)
   ];
@@ -72,6 +82,7 @@ export function findExactLaterUse(snapshot, sourceBindingEvidence, pathType) {
     [active.trial.reference, "retained_active_delayed_trial"],
     [context?.reference, "declared_later_use_context"],
     [stateRef?.reference, "same_run_trial_projection"],
+    [projection?.reference, "validated_same_run_projection"],
     ...(canonical ? [] : [
       [communication?.reference, "explicit_drill_immediate_correction"],
       [assertion?.reference, "attributed_drill_immediate_correction"]
@@ -93,6 +104,7 @@ export function findExactLaterUse(snapshot, sourceBindingEvidence, pathType) {
     || assessment.activeTrialRef !== active.trial.reference
     || assessment.contextRef !== context?.reference
     || assessment.stateReferenceFactRef !== stateRef?.reference
+    || assessment.stateProjectionRef !== projection?.reference
     || assessment.correctionCommunicationRef !== (canonical ? null : communication?.reference)
     || assessment.attributedAssertionRef !== (canonical ? null : assertion?.reference)
     || !hasExactKeys(assessment.controlBasisRefs, ["userGoverned", "consequence"])
@@ -120,6 +132,9 @@ export function findExactLaterUse(snapshot, sourceBindingEvidence, pathType) {
     || assessment.createdOrder >= transition.createdOrder) {
     throw checkpointError("Later-use applicability closure is malformed.");
   }
+  validateExactLaterProjection(
+    snapshot, records, projection, active.trial, stateRef, assessment.interactionRef
+  );
   const expectedFacts = [context, stateRef, ...controls, ...(canonical ? [] : [communication])];
   const expectedFactClosures = canonical ? [
     [context, "context_label", "fixture-driver"],
@@ -205,6 +220,69 @@ export function findExactLaterUse(snapshot, sourceBindingEvidence, pathType) {
     throw checkpointError("Later disposition closure is malformed.");
   }
   return { active, assessment, disposition };
+}
+
+function validateExactLaterProjection(
+  snapshot, records, projection, activeTrial, stateReferenceFact, interactionRef
+) {
+  const transition = uniqueCreator(snapshot, projection);
+  const interaction = records.get(interactionRef);
+  const ingestion = uniqueCreator(snapshot, interaction);
+  const outward = snapshot.relations.filter((relation) => (
+    relation.fromRef === projection?.reference
+  ));
+  const projections = outward.filter((relation) => relation.relationKind === "projection_of");
+  const bases = outward.filter((relation) => relation.relationKind === "basis");
+  const competing = snapshot.records.filter((record) => (
+    record.family === "lineage_preserving_projection"
+    && record.sourceReferenceFactRef === stateReferenceFact?.reference
+    && record.interactionRef === interactionRef
+  ));
+  const effectiveTargetState = {
+    targetRef: activeTrial.reference,
+    lifecycleVersion: activeTrial.lifecycleVersion,
+    currentStatus: activeTrial.currentStatus,
+    activeScope: structuredClone(activeTrial.activeScope),
+    correctionPath: activeTrial.correctionPath
+  };
+  if (!hasExactKeys(projection, PROJECTION_KEYS)
+    || projection.family !== "lineage_preserving_projection" || projection.origin !== "sut"
+    || projection.projectionType !== "active_delayed_trial_reference"
+    || projection.projectionTargetRef !== activeTrial.reference
+    || projection.sourceReferenceFactRef !== stateReferenceFact.reference
+    || projection.projectionRule !== "same_run_opaque_reference_identity"
+    || projection.viewIdentity !== "active_delayed_trial_effective_state"
+    || projection.semanticContribution !== "none_reference_only"
+    || JSON.stringify(projection.effectiveTargetState) !== JSON.stringify(effectiveTargetState)
+    || projection.statusOrigin !== "sut_transition"
+    || projection.interactionRef !== interactionRef
+    || projection.effectiveOrder !== projection.createdOrder
+    || competing.length !== 1 || competing[0].reference !== projection.reference
+    || !hasExactKeys(transition, TRANSITION_KEYS)
+    || transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
+    || transition.transitionKind !== "validate_later_state_projection"
+    || transition.interactionRef !== interactionRef
+    || transition.result !== "later_state_projection_validated"
+    || JSON.stringify(transition.inputReferences) !== JSON.stringify([
+      stateReferenceFact.reference, activeTrial.reference
+    ])
+    || JSON.stringify(transition.resultReferences) !== JSON.stringify([projection.reference])
+    || projections.length !== 1
+    || projections[0].toRef !== activeTrial.reference
+    || projections[0].targetRole !== "active_delayed_correction_trial"
+    || bases.length !== 1 || bases[0].toRef !== stateReferenceFact.reference
+    || bases[0].targetRole !== "opaque_state_reference_fact"
+    || outward.length !== 2
+    || outward.some((relation) => !exactRelationMetadata(
+      relation, projection.createdOrder, transition.createdOrder, "sut"
+    ))
+    || records.get(activeTrial.createdByTransitionRef)?.createdOrder
+      >= stateReferenceFact.createdOrder
+    || stateReferenceFact.createdOrder >= interaction.createdOrder
+    || ingestion.createdOrder >= projection.createdOrder
+    || projection.createdOrder >= transition.createdOrder) {
+    throw checkpointError("Later state projection exact closure is malformed.");
+  }
 }
 
 export function findExactLaterRealization(snapshot, sourceBindingEvidence) {

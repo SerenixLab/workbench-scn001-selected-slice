@@ -1191,7 +1191,8 @@ test("CP-DELAY-ACTIVE rejects malformed assessment and trial closure passively",
 });
 
 test("formal later-use path rechecks scope, emits, and records exact realization", () => {
-  const harness = createEvaluationHarness(createSutBoundary());
+  const boundary = createSutBoundary();
+  const harness = createEvaluationHarness(boundary);
   const runRef = harness.startRun();
   completeDirectCorrection(harness, runRef);
   const active = harness.inspectActiveDelayedCorrectionCheckpoint(runRef)[0];
@@ -1207,6 +1208,34 @@ test("formal later-use path rechecks scope, emits, and records exact realization
   assert.equal(
     disposition[0].requestedBehavior, "delay_minor_correction_until_turn_completion"
   );
+  const snapshot = boundary.captureInspectionSnapshot(runRef);
+  const assessment = snapshot.records.find((record) => (
+    record.family === "later_use_applicability"
+  ));
+  const projection = snapshot.records.find((record) => (
+    record.reference === assessment.stateProjectionRef
+  ));
+  assert.deepEqual({
+    family: projection.family,
+    projectionTargetRef: projection.projectionTargetRef,
+    sourceReferenceFactRef: projection.sourceReferenceFactRef,
+    projectionRule: projection.projectionRule,
+    viewIdentity: projection.viewIdentity,
+    semanticContribution: projection.semanticContribution
+  }, {
+    family: "lineage_preserving_projection",
+    projectionTargetRef: active.activeTrialRef,
+    sourceReferenceFactRef: assessment.stateReferenceFactRef,
+    projectionRule: "same_run_opaque_reference_identity",
+    viewIdentity: "active_delayed_trial_effective_state",
+    semanticContribution: "none_reference_only"
+  });
+  assert.deepEqual(snapshot.relations.filter((relation) => (
+    relation.fromRef === projection.reference
+  )).map((relation) => [relation.relationKind, relation.toRef, relation.targetRole]), [
+    ["projection_of", active.activeTrialRef, "active_delayed_correction_trial"],
+    ["basis", assessment.stateReferenceFactRef, "opaque_state_reference_fact"]
+  ]);
   const outputs = harness.emitAvailableOutputs(runRef);
   assert.equal(outputs.length, 1);
   assert.equal(outputs[0].kind, "later_delayed_correction_request");
@@ -1221,7 +1250,8 @@ test("formal later-use path rechecks scope, emits, and records exact realization
 });
 
 test("CF-DRILL-OPT-IN keeps the same active trial but forbids delayed use", () => {
-  const harness = createEvaluationHarness(createSutBoundary());
+  const boundary = createSutBoundary();
+  const harness = createEvaluationHarness(boundary);
   const runRef = harness.startRun();
   completeDirectCorrection(harness, runRef);
   const active = harness.inspectActiveDelayedCorrectionCheckpoint(runRef)[0];
@@ -1239,6 +1269,20 @@ test("CF-DRILL-OPT-IN keeps the same active trial but forbids delayed use", () =
   );
   assert.deepEqual(harness.emitAvailableOutputs(runRef), []);
   assert.deepEqual(harness.inspectLaterDispositionCheckpoint(runRef), []);
+  const snapshot = boundary.captureInspectionSnapshot(runRef);
+  const assessment = snapshot.records.find((record) => (
+    record.family === "later_use_applicability"
+  ));
+  const projection = snapshot.records.find((record) => (
+    record.reference === assessment.stateProjectionRef
+  ));
+  assert.equal(projection.projectionTargetRef, active.activeTrialRef);
+  assert.equal(snapshot.relations.some((relation) => (
+    relation.fromRef === projection.reference
+    && relation.relationKind === "projection_of"
+    && relation.toRef === active.activeTrialRef
+    && relation.targetRole === "active_delayed_correction_trial"
+  )), true);
 });
 
 test("CP-LATER-DISPOSITION rejects malformed closure without mutating SUT state", async (t) => {
@@ -1263,6 +1307,81 @@ test("CP-LATER-DISPOSITION rejects malformed closure without mutating SUT state"
       stateRef.payload.stateRef = snapshot.records.find((record) => (
         record.family === "active_trial"
       )).reference;
+    }],
+    ["rewritten projection rule", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "lineage_preserving_projection"
+      )).projectionRule = "trust_fixture_state";
+    }],
+    ["rewritten projection view", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "lineage_preserving_projection"
+      )).viewIdentity = "fixture_declared_state";
+    }],
+    ["rewritten projection target state", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "lineage_preserving_projection"
+      )).effectiveTargetState.currentStatus = "retired";
+    }],
+    ["retargeted projection", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "lineage_preserving_projection"
+      )).projectionTargetRef = "state_00000000-0000-0000-0000-000000000001";
+    }],
+    ["missing projection relation", (snapshot) => {
+      const projection = snapshot.records.find((record) => (
+        record.family === "lineage_preserving_projection"
+      ));
+      snapshot.relations.splice(snapshot.relations.findIndex((relation) => (
+        relation.fromRef === projection.reference && relation.relationKind === "projection_of"
+      )), 1);
+    }],
+    ["retargeted projection relation", (snapshot) => {
+      const projection = snapshot.records.find((record) => (
+        record.family === "lineage_preserving_projection"
+      ));
+      snapshot.relations.find((relation) => (
+        relation.fromRef === projection.reference && relation.relationKind === "projection_of"
+      )).toRef = "state_00000000-0000-0000-0000-000000000001";
+    }],
+    ["backdated projection relation", (snapshot) => {
+      const projection = snapshot.records.find((record) => (
+        record.family === "lineage_preserving_projection"
+      ));
+      snapshot.relations.find((relation) => (
+        relation.fromRef === projection.reference && relation.relationKind === "projection_of"
+      )).createdOrder -= 1;
+    }],
+    ["projection creator pointer rewrite", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "lineage_preserving_projection"
+      )).createdByTransitionRef = "transition_00000000-0000-0000-0000-000000000001";
+    }],
+    ["duplicate projection creator", (snapshot) => {
+      const projection = snapshot.records.find((record) => (
+        record.family === "lineage_preserving_projection"
+      ));
+      const original = snapshot.records.find((record) => (
+        record.reference === projection.createdByTransitionRef
+      ));
+      snapshot.records.push({
+        ...structuredClone(original),
+        reference: "transition_00000000-0000-0000-0000-000000000001"
+      });
+    }],
+    ["duplicate projection record", (snapshot) => {
+      const projection = snapshot.records.find((record) => (
+        record.family === "lineage_preserving_projection"
+      ));
+      snapshot.records.push({
+        ...structuredClone(projection),
+        reference: "state_00000000-0000-0000-0000-000000000001"
+      });
+    }],
+    ["assessment projection substitution", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "later_use_applicability"
+      )).stateProjectionRef = "state_00000000-0000-0000-0000-000000000001";
     }],
     ["missing applicability relation", (snapshot) => {
       const assessment = snapshot.records.find((record) => (

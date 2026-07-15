@@ -2689,6 +2689,18 @@ canonical spontaneous-production context records `applicable`, selects
 later behavior disposition. The disposition retains no global policy or durable
 adaptation claim and leaves the active trial and formed candidate unchanged.
 
+The opaque fixture state reference is not itself accepted as the effective
+active-trial state. The SUT first creates a separate
+`lineage_preserving_projection` with exact source-reference and active-trial
+targets, named projection rule and view identity, `none_reference_only`
+semantic contribution, captured effective target state, exact creator
+transition, and a typed `projection_of` edge to the active delayed-correction
+trial. A separate typed `basis` edge retains the raw state-reference fact. The
+applicability assessment consumes both identities. SUT and evaluation each
+require the complete two-edge projection relation set, exact transition
+envelope, unique creator pointer, unique projection family member, effective
+state, and chronology.
+
 The later output/simulator seam transports only that SUT-selected disposition.
 The simulator records requested and realized behavior plus fidelity without
 selecting policy. The SUT then records one exact realization relation and one
@@ -2710,15 +2722,19 @@ supersession, retirement, or erasure.
 Evaluation independently reconstructs the active prefix, later applicability,
 canonical disposition, counterfactual exclusion, and realization fidelity.
 Passive attacks cover stored-label promotion, widened scope, state-reference
-retargeting, missing or undeclared relations, transition-envelope corruption,
-invented counterfactual dispositions, duplicate recording evidence, premature
-relation effect, fidelity mutation, and attribution/ingestion corruption. Every
-inspection attack leaves the real SUT snapshot unchanged. SUT closure attacks
-cover the corresponding retained envelopes, supports, attribution, and
+retargeting, projection rule/view/effective-state rewrites, projection and
+relation retargeting, missing or undeclared relations, duplicate projection and
+creator evidence, creator-pointer substitution, backdated relations,
+transition-envelope corruption, invented counterfactual dispositions,
+duplicate recording evidence, premature relation effect, fidelity mutation,
+and attribution/ingestion corruption. Every inspection attack leaves the real
+SUT snapshot unchanged. SUT closure attacks cover the corresponding retained
+envelopes, projection closure, supports, attribution creator identity, and
 realization ambiguity without repair or order allocation.
 
 Affected rows are `ENG-BASE-001`, `ENG-CHANGE-001`, `ENG-CLAIM-001`,
-`ENG-CONF-CAPTURE-001`, `ENG-CONF-DEP-001`, `ENG-CONF-HARNESS-001`,
+`ENG-CONF-CAPTURE-001`, `ENG-CONF-DEP-001`, `ENG-CONF-DEP-002`,
+`ENG-CONF-HARNESS-001`,
 `ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`, `ENG-CONF-PAYLOAD-002`,
 `ENG-CONF-REF-001`, `ENG-CONF-ROLE-001`, `ENG-CONF-RUN-001`,
 `ENG-CONF-STATE-001`, `ENG-CONF-STATE-002`,
@@ -2728,13 +2744,31 @@ Affected rows are `ENG-BASE-001`, `ENG-CHANGE-001`, `ENG-CLAIM-001`,
 `ENG-HEALTH-TEST-002`. Applicability, revisions, promotion mappings, public SUT
 methods, runtime dependencies, and active exceptions do not change.
 
-Local verification at implementation completion includes 196 boundary tests,
-100 SUT state tests, every aggregate gate, and all 296 aggregate tests. Fresh
-independent review of the exact Phase 6C commit remains pending. Until it is
-recorded, `ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-ABSTRACTION-001`, and
-`ENG-HEALTH-STRUCTURE-001` return to `uncovered`: 44 rules are applicable, 5
-not applicable, 7 review-only, 37 uncovered, none revalidation-required, and
-none enforced.
+Local verification of initial implementation commit `8285c83` included 196
+boundary tests, 100 SUT state tests, every aggregate gate, and all 296 aggregate
+tests.
+
+A fresh independent review of exact stack `6728a9d..8285c83` returned
+**blocking / failed**. It found that L-002 and CF2-L-003 were linked directly to
+the later-use assessment without the ADR-007 lineage-preserving projection
+record and typed `projection_of` closure. It also found that the SUT drill
+attribution validator could accept an assertion whose
+`createdByTransitionRef` was rewritten to a nonexistent transition while the
+sole actual transition still claimed that assertion as a result. The evaluator
+already rejected that pointer mismatch. This failed review is preserved as
+failed and does not attest the correction.
+
+The corrective increment adds the projection closure described above, makes
+the SUT attribution creator pointer equal the unique actual creator, and
+narrows later-use dispatch so unrelated contexts do not trigger active-trial
+validation. Eleven additional public-boundary projection corruptions and the
+corresponding SUT attacks fail closed. Corrective local verification includes
+207 boundary tests, 100 SUT state tests, every aggregate gate, and all 307
+aggregate tests. Fresh independent review of the corrected exact Phase 6C
+stack remains pending. Until it is recorded, `ENG-HEALTH-CHANGE-001`,
+`ENG-HEALTH-ABSTRACTION-001`, and `ENG-HEALTH-STRUCTURE-001` remain
+`uncovered`: 44 rules are applicable, 5 not applicable, 7 review-only, 37
+uncovered, none revalidation-required, and none enforced.
 
 No later outcome, canonical-intervention assessment, explanation, formal
 evaluation, scoring, behavioral-compatibility, milestone-completion, broader
