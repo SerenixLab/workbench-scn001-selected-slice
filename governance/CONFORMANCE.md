@@ -652,6 +652,16 @@ direct or delayed state blocks new canonical staging. This is a structural
 delivery gate, not a scenario checkpoint, scoring record, or authority for the
 new current correction.
 
+The post-realization checkpoint revalidates that complete prefix rather than
+trusting the earlier staging decision. It also proves that the direct
+correction reuses the exact retained user-governed, consequence, and
+reversibility controls from the active-trial closure; occurs after the retained
+focused outcome; and introduces no conflict, narrowing, retirement, revocation,
+or supersession edge between the differently scoped focused and spontaneous
+objects. Corrupting the retained focused outcome or inserting a false
+cross-scope supersession relation therefore invalidates
+`CP-DIRECT-CORRECTION-REALIZED`.
+
 `V-001` through `V-004` cross ingress only as raw declared context, supplied
 interruption evidence, attributable communication, and chronology. The raw
 communication contains no interpreted timing, authority, applicability, path,
@@ -725,8 +735,9 @@ passive evaluation-private `CP-DIRECT-CORRECTION-REALIZED` reconstruction.
 Exact formal replay reuses one staged bundle, correction state, disposition,
 and realization closure and emits no post-realization output. Independent runs
 share no references. Malformed creator, source, actor, interaction, ingestion,
-transition, relation, order, target, scope, timing, fidelity, or competing-state
-evidence fails closed without inspection-time repair. Candidate lifecycle
+transition, relation, order, target, scope, timing, fidelity, prior focused
+closure, false cross-scope lifecycle edge, or competing-state evidence fails
+closed without inspection-time repair. Candidate lifecycle
 remains `formed_non_active` version 1; the active production trial, focused
 instruction, focused disposition/realization, and focused outcome remain
 structurally unchanged.

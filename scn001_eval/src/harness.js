@@ -279,11 +279,16 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
     },
 
     inspectDirectCorrectionRealizedCheckpoint(runRef) {
+      const snapshot = sutBoundary.captureInspectionSnapshot(runRef);
+      const sourceBindings = sourceBindingEvidenceForRun(runRef);
       const closure = findExactDirectCorrectionRealization(
-        sutBoundary.captureInspectionSnapshot(runRef),
-        sourceBindingEvidenceForRun(runRef)
+        snapshot, sourceBindings
       );
       if (!closure) return Object.freeze([]);
+      const focusedPrefix = findExactCompletedFocusedDrillPrefix(
+        snapshot, sourceBindings, { allowDirectCorrectionState: true }
+      );
+      validateDirectCorrectionTrajectory(snapshot, focusedPrefix, closure);
       return deepFreeze([{
         correctionStateRef: closure.state.reference,
         dispositionRef: closure.disposition.reference,
@@ -367,6 +372,61 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
     const ledger = runSourceBindings.get(runRef);
     if (!ledger) throw new Error(`Unknown or closed evaluation run: ${runRef}.`);
     return ledger.readOnlyEvidence();
+  }
+}
+
+function validateDirectCorrectionTrajectory(snapshot, focusedPrefix, closure) {
+  if (!focusedPrefix) {
+    throw new Error(
+      "Direct-correction checkpoint requires the exact completed focused-drill prefix."
+    );
+  }
+  const records = new Map(snapshot.records.map((record) => [record.reference, record]));
+  const focusedOutcomeTransition = records.get(
+    focusedPrefix.outcome.createdByTransitionRef
+  );
+  const directIngestion = records.get(closure.state.ingestionTransitionRef);
+  const activationAssessment = records.get(
+    focusedPrefix.activeTrial.activationAssessmentRef
+  );
+  const retainedControlRefs = new Set(
+    Object.values(activationAssessment?.controlBasisRefs ?? {})
+      .flatMap((inventory) => Object.values(inventory ?? {}))
+      .flat()
+  );
+  const directControlRefs = Object.values(closure.state.controlBasisRefs ?? {});
+  const priorFocusedRefs = new Set([
+    focusedPrefix.activeTrial.reference,
+    focusedPrefix.instruction.reference,
+    focusedPrefix.disposition.reference,
+    focusedPrefix.realizationFact.reference,
+    focusedPrefix.outcome.realizationTransitionRef,
+    focusedPrefix.outcome.reference
+  ]);
+  const directRefs = new Set([
+    closure.state.reference,
+    closure.disposition.reference,
+    closure.fact.reference,
+    closure.realizationTransition.reference
+  ]);
+  const lifecycleKinds = new Set([
+    "conflict", "correction", "deletion", "erasure", "forgetting", "narrowing",
+    "redaction", "retirement", "revocation", "supersession"
+  ]);
+  const collapsedScopes = snapshot.relations.some((relation) => (
+    lifecycleKinds.has(relation.relationKind)
+      && ((priorFocusedRefs.has(relation.fromRef) && directRefs.has(relation.toRef))
+        || (directRefs.has(relation.fromRef) && priorFocusedRefs.has(relation.toRef)))
+  ));
+  if (!focusedOutcomeTransition
+    || !directIngestion
+    || focusedOutcomeTransition.createdOrder >= directIngestion.createdOrder
+    || directControlRefs.length !== 3
+    || directControlRefs.some((reference) => !retainedControlRefs.has(reference))
+    || collapsedScopes) {
+    throw new Error(
+      "Direct-correction checkpoint does not preserve the exact prior focused-drill trajectory."
+    );
   }
 }
 

@@ -1239,6 +1239,28 @@ test("CP-DIRECT-CORRECTION-REALIZED rejects identity, relation, and order substi
       ));
       snapshot.records.push({ ...structuredClone(disposition), reference:
         "state_99999999-9999-9999-9999-999999999999" });
+    },
+    (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "focused_drill_outcome"
+      )).futureApplicability = "applicable_to_current_spontaneous_session";
+    },
+    (snapshot) => {
+      const focusedInstruction = snapshot.records.find((record) => (
+        record.family === "focused_drill_instruction"
+      ));
+      const directState = snapshot.records.find((record) => (
+        record.family === "scoped_current_correction_control"
+      ));
+      snapshot.relations.push({
+        relationKind: "supersession",
+        fromRef: directState.reference,
+        toRef: focusedInstruction.reference,
+        targetRole: "superseded_focused_instruction",
+        effectiveOrder: directState.createdOrder,
+        createdOrder: directState.createdOrder,
+        assertedByRole: "sut"
+      });
     }
   ];
   for (const attack of attacks) {

@@ -29,7 +29,9 @@ const FOCUSED_OUTCOME_KEYS = Object.freeze([
   "interactionRef", "createdOrder", "createdByTransitionRef"
 ]);
 
-export function findExactCompletedFocusedDrillPrefix(snapshot, sourceBindingEvidence) {
+export function findExactCompletedFocusedDrillPrefix(
+  snapshot, sourceBindingEvidence, { allowDirectCorrectionState = false } = {}
+) {
   const activeTrial = findExactActiveProductionTrial(snapshot, sourceBindingEvidence);
   if (!activeTrial) return undefined;
   const records = indexRecords(snapshot);
@@ -170,10 +172,13 @@ export function findExactCompletedFocusedDrillPrefix(snapshot, sourceBindingEvid
   validateBoundFact(snapshot, sourceBindingEvidence, realizationFact, "simulator");
   validateBoundFact(snapshot, sourceBindingEvidence, observation, "fixture");
   validateBoundFact(snapshot, sourceBindingEvidence, feedback, "fixture");
-  if (snapshot.records.some((record) => (
-    ["scoped_current_correction_control", "direct_current_session_correction_disposition",
-      "delayed_correction_candidate", "active_delayed_correction_trial"].includes(record.family)
-  ))) {
+  const forbiddenLaterFamilies = [
+    "delayed_correction_candidate", "active_delayed_correction_trial",
+    ...(allowDirectCorrectionState ? [] : [
+      "scoped_current_correction_control", "direct_current_session_correction_disposition"
+    ])
+  ];
+  if (snapshot.records.some((record) => forbiddenLaterFamilies.includes(record.family))) {
     throw checkpointError("Focused-drill prefix must precede direct or delayed correction state.");
   }
   return { activeTrial, instruction, disposition, realizationFact, outcome, observation, feedback };
