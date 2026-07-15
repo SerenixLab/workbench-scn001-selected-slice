@@ -775,6 +775,89 @@ broader acceptance, and production readiness. No exception, formal behavioral
 evidence, obligation satisfaction, compatibility, scoreability, milestone,
 broader `SCN-001`, or readiness claim is introduced.
 
+## Direct-Correction Checkpoint Parity Blocking Review And Corrective Increment
+
+An independent review of the combined direct-correction stack ending at
+`11789d80c34ef2b2b9a03baae5e94770d1798a00` found two blocking evaluation-
+checkpoint parity defects. Review outcome: **blocking / failed**.
+
+The review accepted the bounded SUT semantic design but found that:
+
+1. post-realization focused-prefix validation checked selected focused
+   instruction and disposition properties without independently proving their
+   complete source, attribution, context, basis, creator, transition, original-
+   ingestion, and ordering closures; and
+2. the direct checkpoint consumed the current V-003 attributed assertion by
+   reference without independently proving that assertion's exact creator,
+   actor, source, communication basis, epistemic/status origin, interaction,
+   transition participants, and causal order.
+
+This failed result is preserved and is not rewritten as passing by the
+corrective implementation below.
+
+The corrective increment based on `11789d80c34ef2b2b9a03baae5e94770d1798a00`
+has one primary purpose: make the passive focused-prefix and direct-attribution
+checkpoint authority reconstruct the complete retained closures already
+required by the SUT. It does not redesign or extend the direct-correction
+trajectory.
+
+The shared focused-prefix authority used by spontaneous-correction staging and
+post-realization inspection now requires:
+
+* the complete active-production-trial closure;
+* exact closed focused instruction and disposition records;
+* exact D-001 context and D-002 communication source-binding identities and
+  first-ingestion interactions/transitions;
+* exact current D-002 attributed assertion, expected user actor, source and
+  communication-basis relations, creator, transition inputs/results, and
+  causal order;
+* exact instruction source plus active-trial/context/communication/assertion
+  bases and creator inputs/result;
+* exact disposition active-trial/context/instruction bases and creator
+  inputs/result;
+* exact focused realization interaction, ingestion, transition, bases, source
+  binding, relation, fidelity, and order; and
+* exact focused outcome observation/feedback ingestion, transition,
+  participant relations, limitations, and order.
+
+The direct checkpoint separately reconstructs the V-003 attribution before it
+accepts the scoped correction state. The assertion must have one exact
+`attribute_current_communications` creator, exact V-003 input and assertion
+result, expected-user source relation, V-003 communication-basis relation,
+copied context and occurrence order, `attributed_user_assertion` epistemic
+status, SUT transition status origin, exact current interaction, and strict
+ingestion/assertion/transition order. A downstream correction-state reference
+is not treated as proof of that upstream closure.
+
+The negative suite passively attacks historical H-004 and equal-payload D-002
+substitution; focused context, assertion, actor, scope, interaction, authority,
+and applicability; removed, duplicated, retargeted, or role-rewritten source
+and basis relations; duplicate or rewritten instruction/disposition creators;
+D-001/D-002 source identity and original ingestion; and every material V-003
+assertion field, creator pointer/claimant, transition input/result, relation,
+role, and order. Each failed inspection leaves the real SUT snapshot unchanged.
+
+The existing post-realization control-identity reuse, focused-outcome-before-
+direct ordering, cross-scope lifecycle rejection, direct state/disposition and
+realization closures, replay, run isolation, and later-family exclusions remain
+unchanged. No delayed-correction candidate, public SUT method, simulator policy,
+dependency, formal artifact, scoring record, or broader claim is introduced.
+
+Affected rows are `ENG-CONF-CAPTURE-001`, `ENG-CONF-DEP-001`,
+`ENG-CONF-HARNESS-001`, `ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`,
+`ENG-CONF-PAYLOAD-002`, `ENG-CONF-REF-001`, `ENG-CONF-STATE-001`,
+`ENG-CONF-STATE-002`, `ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-FAILURE-001`,
+`ENG-HEALTH-TEST-001`, and `ENG-HEALTH-TEST-002`. Applicability, rule
+revisions, promotion mappings, active exceptions, and status counts do not
+change.
+
+At corrective implementation completion, `ENG-HEALTH-CHANGE-001`,
+`ENG-HEALTH-ABSTRACTION-001`, and `ENG-HEALTH-STRUCTURE-001` remain
+`uncovered`. Counts remain 44 applicable, 5 not applicable, 7 review-only, 37
+uncovered, none revalidation-required, and none enforced. Fresh independent
+review of the corrected pushed commit remains pending; this implementing task
+does not self-attest a passing review.
+
 ## Production Activation Assessment Increment
 
 The working-tree increment based on starting `HEAD` `e05f57f83e12b2b84e3630992c5838ad75e10e74` has one primary purpose: add the SUT-owned production activation chain

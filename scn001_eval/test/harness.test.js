@@ -403,6 +403,16 @@ function completeFocusedDrill(harness, runRef) {
   harness.processCurrentInteraction(runRef);
 }
 
+function completeDirectCorrection(harness, runRef) {
+  completeFocusedDrill(harness, runRef);
+  harness.deliverSpontaneousCorrectionInputsIfEligible(
+    runRef, spontaneousCorrectionRecords()
+  );
+  harness.processCurrentInteraction(runRef);
+  harness.realizeAvailableOutputs(runRef);
+  harness.processCurrentInteraction(runRef);
+}
+
 function sourceBindingEvidenceFrom(snapshot) {
   const records = new Map(snapshot.records.map((record) => [record.reference, record]));
   return snapshot.records
@@ -1285,6 +1295,328 @@ test("CP-DIRECT-CORRECTION-REALIZED rejects identity, relation, and order substi
     harness.processCurrentInteraction(runRef);
     corrupt = true;
     assert.throws(() => harness.inspectDirectCorrectionRealizedCheckpoint(runRef));
+  }
+});
+
+test("direct checkpoint reconstructs complete focused and current attribution closures", async (t) => {
+  const record = (snapshot, predicate) => snapshot.records.find(predicate);
+  const family = (snapshot, name) => record(snapshot, (item) => item.family === name);
+  const creator = (snapshot, item) => record(
+    snapshot, (candidate) => candidate.reference === item.createdByTransitionRef
+  );
+  const relation = (snapshot, item, kind, role) => snapshot.relations.find((candidate) => (
+    candidate.fromRef === item.reference
+      && candidate.relationKind === kind
+      && (!role || candidate.targetRole === role)
+  ));
+  const removeRelation = (snapshot, target) => {
+    snapshot.relations.splice(snapshot.relations.indexOf(target), 1);
+  };
+  const duplicateCreator = (snapshot, item, suffix) => {
+    snapshot.records.push({
+      ...structuredClone(creator(snapshot, item)),
+      reference: `transition_${suffix}`
+    });
+  };
+  const focusedInstruction = (snapshot) => family(snapshot, "focused_drill_instruction");
+  const focusedDisposition = (snapshot) => (
+    family(snapshot, "focused_drill_behavior_disposition")
+  );
+  const directState = (snapshot) => family(snapshot, "scoped_current_correction_control");
+  const directAssertion = (snapshot) => {
+    const state = directState(snapshot);
+    return record(snapshot, (item) => item.reference === state.attributedAssertionRef);
+  };
+  const directCommunication = (snapshot) => {
+    const state = directState(snapshot);
+    return record(snapshot, (item) => item.reference === state.sourceCommunicationRef);
+  };
+  const directContext = (snapshot) => {
+    const state = directState(snapshot);
+    return record(snapshot, (item) => item.reference === state.contextRef);
+  };
+  const attacks = [
+    ["focused instruction rejects H-004 substitution", (snapshot) => {
+      const instruction = focusedInstruction(snapshot);
+      const communication = record(
+        snapshot, (item) => item.reference === instruction.sourceCommunicationRef
+      );
+      const historical = {
+        ...structuredClone(communication),
+        reference: "state_h004_historical",
+        sourceFactRef: "source_h004_historical",
+        payload: {
+          ...structuredClone(communication.payload),
+          sourceFactRef: "source_h004_historical",
+          content: "Correct me immediately in focused text drills.",
+          context: "focused_text_drill",
+          semanticStatusOrigin: "fixture_initialized"
+        }
+      };
+      snapshot.records.push(historical);
+      instruction.sourceCommunicationRef = historical.reference;
+    }],
+    ["focused instruction rejects equal-payload communication substitution", (snapshot) => {
+      const instruction = focusedInstruction(snapshot);
+      const communication = record(
+        snapshot, (item) => item.reference === instruction.sourceCommunicationRef
+      );
+      const clone = {
+        ...structuredClone(communication),
+        reference: "state_equal_payload_d002",
+        sourceFactRef: "source_equal_payload_d002",
+        payload: {
+          ...structuredClone(communication.payload),
+          sourceFactRef: "source_equal_payload_d002"
+        }
+      };
+      snapshot.records.push(clone);
+      instruction.sourceCommunicationRef = clone.reference;
+    }],
+    ["focused instruction rejects context substitution", (snapshot) => {
+      focusedInstruction(snapshot).contextRef = directContext(snapshot).reference;
+    }],
+    ["focused instruction rejects assertion substitution", (snapshot) => {
+      focusedInstruction(snapshot).attributedAssertionRef = directAssertion(snapshot).reference;
+    }],
+    ["focused instruction rejects actor substitution", (snapshot) => {
+      focusedInstruction(snapshot).sourceActorRef = directContext(snapshot).sourceActorRef;
+    }],
+    ["focused instruction rejects drill-scope rewrite", (snapshot) => {
+      focusedInstruction(snapshot).drillScope.consequence = "high";
+    }],
+    ["focused instruction rejects interaction rewrite", (snapshot) => {
+      focusedInstruction(snapshot).interactionRef = directState(snapshot).interactionRef;
+    }],
+    ["focused instruction rejects authority rewrite", (snapshot) => {
+      focusedInstruction(snapshot).authority = "inferred_preference";
+    }],
+    ["focused instruction rejects applicability rewrite", (snapshot) => {
+      focusedInstruction(snapshot).applicability = "all_future_drills";
+    }],
+    ["focused instruction rejects removed source relation", (snapshot) => {
+      removeRelation(snapshot, relation(snapshot, focusedInstruction(snapshot), "source"));
+    }],
+    ["focused instruction rejects duplicated source relation", (snapshot) => {
+      snapshot.relations.push(structuredClone(
+        relation(snapshot, focusedInstruction(snapshot), "source")
+      ));
+    }],
+    ["focused instruction rejects retargeted source relation", (snapshot) => {
+      relation(snapshot, focusedInstruction(snapshot), "source").toRef
+        = directContext(snapshot).sourceActorRef;
+    }],
+    ["focused instruction rejects rewritten source role", (snapshot) => {
+      relation(snapshot, focusedInstruction(snapshot), "source").targetRole
+        = "substituted_source";
+    }],
+    ["focused instruction rejects removed basis relation", (snapshot) => {
+      removeRelation(snapshot, relation(
+        snapshot, focusedInstruction(snapshot), "basis", "explicit_request_communication"
+      ));
+    }],
+    ["focused instruction rejects duplicated basis relation", (snapshot) => {
+      snapshot.relations.push(structuredClone(relation(
+        snapshot, focusedInstruction(snapshot), "basis", "explicit_request_communication"
+      )));
+    }],
+    ["focused instruction rejects retargeted basis relation", (snapshot) => {
+      relation(
+        snapshot, focusedInstruction(snapshot), "basis", "explicit_request_communication"
+      ).toRef = directCommunication(snapshot).reference;
+    }],
+    ["focused instruction rejects rewritten basis role", (snapshot) => {
+      relation(
+        snapshot, focusedInstruction(snapshot), "basis", "explicit_request_communication"
+      ).targetRole = "historical_request_communication";
+    }],
+    ["focused instruction rejects duplicate creator", (snapshot) => {
+      duplicateCreator(snapshot, focusedInstruction(snapshot), "duplicate_focused_instruction");
+    }],
+    ["focused instruction rejects creator-input rewrite", (snapshot) => {
+      creator(snapshot, focusedInstruction(snapshot)).inputReferences.reverse();
+    }],
+    ["focused instruction rejects creator-result rewrite", (snapshot) => {
+      creator(snapshot, focusedInstruction(snapshot)).resultReferences = [
+        focusedDisposition(snapshot).reference
+      ];
+    }],
+    ["D-001 rejects source-identity rewrite", (snapshot) => {
+      const context = record(
+        snapshot, (item) => item.reference === focusedInstruction(snapshot).contextRef
+      );
+      context.sourceFactRef += "-rewritten";
+      context.payload.sourceFactRef = context.sourceFactRef;
+    }],
+    ["D-001 rejects original-ingestion rewrite", (snapshot) => {
+      const context = record(
+        snapshot, (item) => item.reference === focusedInstruction(snapshot).contextRef
+      );
+      context.firstInteractionRef = directState(snapshot).interactionRef;
+    }],
+    ["D-002 rejects source-identity rewrite", (snapshot) => {
+      const communication = record(
+        snapshot, (item) => item.reference === focusedInstruction(snapshot).sourceCommunicationRef
+      );
+      communication.sourceFactRef += "-rewritten";
+      communication.payload.sourceFactRef = communication.sourceFactRef;
+    }],
+    ["D-002 rejects original-ingestion rewrite", (snapshot) => {
+      const communication = record(
+        snapshot, (item) => item.reference === focusedInstruction(snapshot).sourceCommunicationRef
+      );
+      communication.firstInteractionRef = directState(snapshot).interactionRef;
+    }],
+    ["focused disposition rejects active-trial substitution", (snapshot) => {
+      focusedDisposition(snapshot).activeTrialRef = focusedInstruction(snapshot).reference;
+    }],
+    ["focused disposition rejects instruction substitution", (snapshot) => {
+      focusedDisposition(snapshot).instructionRef = directState(snapshot).reference;
+    }],
+    ["focused disposition rejects context substitution", (snapshot) => {
+      focusedDisposition(snapshot).contextRef = directContext(snapshot).reference;
+    }],
+    ["focused disposition rejects drill-scope rewrite", (snapshot) => {
+      focusedDisposition(snapshot).drillScope.taskMode = "spontaneous_production";
+    }],
+    ["focused disposition rejects removed basis relation", (snapshot) => {
+      removeRelation(snapshot, relation(
+        snapshot, focusedDisposition(snapshot), "basis", "explicit_focused_drill_instruction"
+      ));
+    }],
+    ["focused disposition rejects duplicated basis relation", (snapshot) => {
+      snapshot.relations.push(structuredClone(relation(
+        snapshot, focusedDisposition(snapshot), "basis", "explicit_focused_drill_instruction"
+      )));
+    }],
+    ["focused disposition rejects retargeted basis relation", (snapshot) => {
+      relation(
+        snapshot, focusedDisposition(snapshot), "basis", "explicit_focused_drill_instruction"
+      ).toRef = directState(snapshot).reference;
+    }],
+    ["focused disposition rejects rewritten basis role", (snapshot) => {
+      relation(
+        snapshot, focusedDisposition(snapshot), "basis", "explicit_focused_drill_instruction"
+      ).targetRole = "substituted_instruction";
+    }],
+    ["focused disposition rejects duplicate creator", (snapshot) => {
+      duplicateCreator(snapshot, focusedDisposition(snapshot), "duplicate_focused_disposition");
+    }],
+    ["focused disposition rejects creator-input rewrite", (snapshot) => {
+      creator(snapshot, focusedDisposition(snapshot)).inputReferences.reverse();
+    }],
+    ["focused disposition rejects creator-result rewrite", (snapshot) => {
+      creator(snapshot, focusedDisposition(snapshot)).resultReferences = [
+        focusedInstruction(snapshot).reference
+      ];
+    }],
+    ["current assertion rejects epistemic-status rewrite", (snapshot) => {
+      directAssertion(snapshot).epistemicStatus = "inferred_preference";
+    }],
+    ["current assertion rejects status-origin rewrite", (snapshot) => {
+      directAssertion(snapshot).statusOrigin = "fixture_initialized";
+    }],
+    ["current assertion rejects actor rewrite", (snapshot) => {
+      directAssertion(snapshot).sourceActorRef = directContext(snapshot).sourceActorRef;
+    }],
+    ["current assertion rejects context rewrite", (snapshot) => {
+      directAssertion(snapshot).context = "focused_production_drill";
+    }],
+    ["current assertion rejects occurrence-order rewrite", (snapshot) => {
+      directAssertion(snapshot).occurrenceOrder -= 1;
+    }],
+    ["current assertion rejects interaction rewrite", (snapshot) => {
+      directAssertion(snapshot).interactionRef = focusedInstruction(snapshot).interactionRef;
+    }],
+    ["current assertion rejects creator-pointer rewrite", (snapshot) => {
+      directAssertion(snapshot).createdByTransitionRef
+        = creator(snapshot, directState(snapshot)).reference;
+    }],
+    ["current assertion rejects unresolvable creator-pointer rewrite", (snapshot) => {
+      directAssertion(snapshot).createdByTransitionRef = "transition_missing_attribution";
+    }],
+    ["current assertion rejects duplicate creator", (snapshot) => {
+      duplicateCreator(snapshot, directAssertion(snapshot), "duplicate_current_attribution");
+    }],
+    ["current assertion rejects transition-kind rewrite", (snapshot) => {
+      creator(snapshot, directAssertion(snapshot)).transitionKind = "infer_preference";
+    }],
+    ["current assertion rejects missing attribution input", (snapshot) => {
+      creator(snapshot, directAssertion(snapshot)).inputReferences = [];
+    }],
+    ["current assertion rejects duplicate attribution input", (snapshot) => {
+      const transition = creator(snapshot, directAssertion(snapshot));
+      transition.inputReferences.push(directCommunication(snapshot).reference);
+    }],
+    ["current assertion rejects missing attribution result", (snapshot) => {
+      creator(snapshot, directAssertion(snapshot)).resultReferences = [];
+    }],
+    ["current assertion rejects duplicate attribution result", (snapshot) => {
+      const assertion = directAssertion(snapshot);
+      creator(snapshot, assertion).resultReferences.push(assertion.reference);
+    }],
+    ["current assertion rejects removed source relation", (snapshot) => {
+      removeRelation(snapshot, relation(snapshot, directAssertion(snapshot), "source"));
+    }],
+    ["current assertion rejects duplicated source relation", (snapshot) => {
+      snapshot.relations.push(structuredClone(
+        relation(snapshot, directAssertion(snapshot), "source")
+      ));
+    }],
+    ["current assertion rejects retargeted source relation", (snapshot) => {
+      relation(snapshot, directAssertion(snapshot), "source").toRef
+        = directContext(snapshot).sourceActorRef;
+    }],
+    ["current assertion rejects rewritten source role", (snapshot) => {
+      relation(snapshot, directAssertion(snapshot), "source").targetRole
+        = "substituted_source";
+    }],
+    ["current assertion rejects removed communication basis", (snapshot) => {
+      removeRelation(snapshot, relation(snapshot, directAssertion(snapshot), "basis"));
+    }],
+    ["current assertion rejects duplicated communication basis", (snapshot) => {
+      snapshot.relations.push(structuredClone(
+        relation(snapshot, directAssertion(snapshot), "basis")
+      ));
+    }],
+    ["current assertion rejects retargeted communication basis", (snapshot) => {
+      relation(snapshot, directAssertion(snapshot), "basis").toRef
+        = focusedInstruction(snapshot).sourceCommunicationRef;
+    }],
+    ["current assertion rejects rewritten communication-basis role", (snapshot) => {
+      relation(snapshot, directAssertion(snapshot), "basis").targetRole
+        = "inferred_communication";
+    }],
+    ["current assertion rejects assertion-order rewrite", (snapshot) => {
+      directAssertion(snapshot).createdOrder = directCommunication(snapshot).createdOrder;
+    }],
+    ["current assertion rejects attribution-transition order rewrite", (snapshot) => {
+      const assertion = directAssertion(snapshot);
+      creator(snapshot, assertion).createdOrder = assertion.createdOrder;
+    }]
+  ];
+
+  for (const [name, attack] of attacks) {
+    await t.test(name, () => {
+      const real = createSutBoundary();
+      let corrupt = false;
+      const boundary = Object.freeze({
+        ...real,
+        captureInspectionSnapshot(runRef) {
+          const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+          if (corrupt) attack(snapshot);
+          return snapshot;
+        }
+      });
+      const harness = createEvaluationHarness(boundary);
+      const runRef = harness.startRun();
+      completeDirectCorrection(harness, runRef);
+      const before = real.captureInspectionSnapshot(runRef);
+      corrupt = true;
+      assert.throws(() => harness.inspectDirectCorrectionRealizedCheckpoint(runRef));
+      corrupt = false;
+      assert.deepEqual(real.captureInspectionSnapshot(runRef), before);
+    });
   }
 });
 
