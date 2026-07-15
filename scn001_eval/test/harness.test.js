@@ -1620,6 +1620,179 @@ test("direct checkpoint reconstructs complete focused and current attribution cl
   }
 });
 
+test("realization checkpoints reject selected-closure ambiguity", async (t) => {
+  const directParts = (snapshot) => {
+    const disposition = snapshot.records.find((record) => (
+      record.family === "direct_current_session_correction_disposition"
+    ));
+    const fact = snapshot.records.find((record) => (
+      record.role === "simulator_behavior_realization"
+      && record.payload?.requestedRef === disposition.reference
+    ));
+    const transition = snapshot.records.find((record) => (
+      record.transitionKind === "record_direct_current_session_correction_realization"
+      && record.inputReferences?.includes(disposition.reference)
+    ));
+    const relation = snapshot.relations.find((candidate) => (
+      candidate.relationKind === "realization"
+      && candidate.toRef === disposition.reference
+    ));
+    return { disposition, fact, transition, relation };
+  };
+  const focusedParts = (snapshot) => {
+    const outcome = snapshot.records.find((record) => record.family === "focused_drill_outcome");
+    const disposition = snapshot.records.find((record) => (
+      record.reference === outcome.behaviorDispositionRef
+    ));
+    const fact = snapshot.records.find((record) => record.reference === outcome.realizationFactRef);
+    const transition = snapshot.records.find((record) => (
+      record.reference === outcome.realizationTransitionRef
+    ));
+    const relation = snapshot.relations.find((candidate) => (
+      candidate.relationKind === "realization"
+      && candidate.fromRef === fact.reference
+      && candidate.toRef === disposition.reference
+    ));
+    return { outcome, disposition, fact, transition, relation };
+  };
+  const addCompetingFact = (snapshot, parts, suffix) => {
+    const sourceFactRef = `source_competing_${suffix}`;
+    const fact = {
+      ...structuredClone(parts.fact),
+      reference: `state_competing_${suffix}`,
+      sourceFactRef,
+      payload: { ...structuredClone(parts.fact.payload), sourceFactRef }
+    };
+    snapshot.records.push(fact);
+    return fact;
+  };
+  const addTransition = (snapshot, transition, suffix, inputReferences) => {
+    const competing = {
+      ...structuredClone(transition),
+      reference: `transition_competing_${suffix}`,
+      inputReferences
+    };
+    snapshot.records.push(competing);
+    return competing;
+  };
+  const addRelation = (snapshot, relation, suffix, overrides = {}) => {
+    const competing = {
+      ...structuredClone(relation),
+      targetRole: `competing_${suffix}`,
+      ...overrides
+    };
+    snapshot.relations.push(competing);
+    return competing;
+  };
+  const attacks = [
+    ["direct rejects an additional fact claiming the disposition", (snapshot) => {
+      const parts = directParts(snapshot);
+      addCompetingFact(snapshot, parts, "direct_fact");
+    }],
+    ["direct rejects an indirect recording transition", (snapshot) => {
+      const parts = directParts(snapshot);
+      addTransition(
+        snapshot, parts.transition, "direct_indirect_transition", [parts.fact.reference]
+      );
+    }],
+    ["direct rejects a transition consuming a competing claiming fact", (snapshot) => {
+      const parts = directParts(snapshot);
+      const fact = addCompetingFact(snapshot, parts, "direct_transition_fact");
+      addTransition(snapshot, parts.transition, "direct_transition_fact", [fact.reference]);
+    }],
+    ["direct rejects a malformed relation owned through requestedRef", (snapshot) => {
+      const parts = directParts(snapshot);
+      addRelation(snapshot, parts.relation, "direct_wrong_target", {
+        toRef: parts.fact.reference
+      });
+    }],
+    ["direct rejects combined indirect relation and transition claims", (snapshot) => {
+      const parts = directParts(snapshot);
+      addTransition(snapshot, parts.transition, "direct_combined", [parts.fact.reference]);
+      addRelation(snapshot, parts.relation, "direct_combined", {
+        toRef: parts.fact.reference
+      });
+    }],
+    ["direct rejects a duplicate relevant transition", (snapshot) => {
+      const parts = directParts(snapshot);
+      addTransition(
+        snapshot, parts.transition, "direct_duplicate_transition",
+        structuredClone(parts.transition.inputReferences)
+      );
+    }],
+    ["direct rejects a duplicate relevant relation", (snapshot) => {
+      const parts = directParts(snapshot);
+      snapshot.relations.push(structuredClone(parts.relation));
+    }],
+    ["focused rejects another transition consuming the disposition", (snapshot) => {
+      const parts = focusedParts(snapshot);
+      addTransition(
+        snapshot, parts.transition, "focused_extra_transition",
+        structuredClone(parts.transition.inputReferences)
+      );
+    }],
+    ["focused outcome cannot select one of two realization transitions", (snapshot) => {
+      const parts = focusedParts(snapshot);
+      const competing = addTransition(
+        snapshot, parts.transition, "focused_outcome_selection",
+        structuredClone(parts.transition.inputReferences)
+      );
+      assert.notEqual(parts.outcome.realizationTransitionRef, competing.reference);
+    }],
+    ["focused rejects a partial transition claimant", (snapshot) => {
+      const parts = focusedParts(snapshot);
+      addTransition(
+        snapshot, parts.transition, "focused_partial_transition", [parts.disposition.reference]
+      );
+    }],
+    ["focused rejects combined competing relation and transition evidence", (snapshot) => {
+      const parts = focusedParts(snapshot);
+      addTransition(
+        snapshot, parts.transition, "focused_combined",
+        structuredClone(parts.transition.inputReferences)
+      );
+      addRelation(snapshot, parts.relation, "focused_combined", {
+        toRef: parts.disposition.reference
+      });
+    }]
+  ];
+
+  for (const [name, attack] of attacks) {
+    await t.test(name, () => {
+      const real = createSutBoundary();
+      let corrupt = false;
+      const boundary = Object.freeze({
+        ...real,
+        captureInspectionSnapshot(runRef) {
+          const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+          if (corrupt) attack(snapshot);
+          return snapshot;
+        }
+      });
+      const harness = createEvaluationHarness(boundary);
+      const runRef = harness.startRun();
+      completeDirectCorrection(harness, runRef);
+      const before = real.captureInspectionSnapshot(runRef);
+      corrupt = true;
+      assert.throws(() => harness.inspectDirectCorrectionRealizedCheckpoint(runRef));
+      corrupt = false;
+      assert.deepEqual(real.captureInspectionSnapshot(runRef), before);
+    });
+  }
+
+  await t.test("exact checkpoint replay remains passive and stable", () => {
+    const real = createSutBoundary();
+    const harness = createEvaluationHarness(real);
+    const runRef = harness.startRun();
+    completeDirectCorrection(harness, runRef);
+    const before = real.captureInspectionSnapshot(runRef);
+    const first = harness.inspectDirectCorrectionRealizedCheckpoint(runRef);
+    const second = harness.inspectDirectCorrectionRealizedCheckpoint(runRef);
+    assert.deepEqual(second, first);
+    assert.deepEqual(real.captureInspectionSnapshot(runRef), before);
+  });
+});
+
 test("independent runs never share direct-correction state", () => {
   const harness = createEvaluationHarness(createSutBoundary());
   const run = () => {

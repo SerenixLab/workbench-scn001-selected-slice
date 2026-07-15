@@ -2222,3 +2222,101 @@ Current applicability/status counts are:
 * 37 applicable rules `uncovered`;
 * no applicable rule `revalidation-required`;
 * no rule claimed `enforced`.
+
+## Realization-Ownership Ambiguity Blocking Review And Corrective Increment
+
+On 2026-07-15, an independent review of pre-existing workbench baseline
+`99772a8343c4fb01ba85618fbace6b0c8f20b263` examined the complete focused-drill
+and direct current-session correction paths rather than only that commit's diff.
+The review compared SUT realization ownership and ambiguity rules with passive
+evaluation reconstruction at staging and `CP-DIRECT-CORRECTION-REALIZED`.
+
+Review outcome for `99772a8`: **blocking / failed**.
+
+The review found two concrete selected-closure defects:
+
+1. direct checkpoint candidate enumeration recognized realization relations
+   only when they directly targeted the direct disposition and recording
+   transitions only when they directly listed that disposition. The SUT also
+   treats a relation as relevant when its source record claims the disposition
+   through `payload.requestedRef`, and treats a recording transition as relevant
+   when any input record makes that claim. Evaluation could therefore validate
+   one canonical-looking closure while ignoring an indirect competing claimant;
+2. the completed focused-drill checkpoint validated the realization transition
+   selected by the retained outcome but did not independently enumerate every
+   `record_focused_drill_realization` transition consuming the focused
+   disposition. An outcome pointer could therefore select one transition from
+   an ambiguous retained set.
+
+The failed review is preserved as a failed review. It is not converted into a
+passing disposition by the corrective implementation below.
+
+The correction containing this addendum has one primary purpose: require one
+unambiguous realization ownership closure before exact-content validation. It
+changes evaluation-owned passive reconstruction only. No SUT semantic path,
+public boundary, fixture projection, simulator policy, runtime dependency, or
+later semantic family changes.
+
+For direct correction, evaluation now enumerates:
+
+* every simulator behavior-realization fact claiming the exact disposition;
+* every realization relation directly targeting the disposition or owned
+  indirectly through its source record's `payload.requestedRef`; and
+* every direct-realization recording transition directly consuming the
+  disposition or indirectly consuming a record that claims it.
+
+Exactly one relevant fact, relation, and recording transition must remain, and
+their identities must form the exact already-required closure. No earliest,
+latest, most complete, best-matching, or outcome-selected claimant is chosen.
+
+For focused drill, evaluation now independently enumerates every simulator fact
+claiming the focused disposition and every focused-realization recording
+transition directly consuming it. Exactly one of each must exist; the unique
+transition and fact must be the exact identities retained by the focused
+outcome. Relevant realization relations remain exhaustively checked, including
+malformed relations sourced from any fact claiming the disposition.
+
+The regression suite adds eleven passive hostile cases covering a distinct
+claiming fact; an indirect direct transition; an indirect transition consuming
+a competing fact; a requested-reference-owned malformed relation; combined
+relation/transition ambiguity; duplicate direct relations and transitions;
+extra and partial focused transition claimants; outcome-pointer selection from
+two focused claimants; and combined focused relation/transition ambiguity. A
+separate exact-replay case proves stable repeated reconstruction. Every hostile
+case drives the successful trajectory through the declared public SUT boundary,
+corrupts only a cloned inspection snapshot, requires checkpoint rejection, and
+then proves the actual retained SUT snapshot is unchanged.
+
+The broader parity inspection compared focused instruction, disposition,
+realization and outcome closure; direct correction state, disposition and
+realization; attribution and creator resolution; original interaction and
+ingestion identity; proposal realization and response binding; replay; staging;
+and cross-run isolation. No additional concrete selected-closure defect was
+found in the proposal-realization, response-binding, attribution,
+instruction/disposition creator, or ingestion paths. Their SUT and evaluation
+candidate predicates already agree for the responsibilities reviewed. The new
+fact-cardinality checks additionally prevent an unprocessed distinct simulator
+claim from being ignored by an otherwise complete checkpoint.
+
+Affected rows are `ENG-CONF-CAPTURE-001`, `ENG-CONF-DEP-001`,
+`ENG-CONF-HARNESS-001`, `ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`,
+`ENG-CONF-REF-001`, `ENG-CONF-STATE-001`, `ENG-CONF-STATE-002`,
+`ENG-HEALTH-ABSTRACTION-001`, `ENG-HEALTH-CHANGE-001`,
+`ENG-HEALTH-FAILURE-001`, `ENG-HEALTH-STRUCTURE-001`,
+`ENG-HEALTH-TEST-001`, and `ENG-HEALTH-TEST-002`. Applicability, rule
+revisions, promotion mappings, active exceptions, and status counts do not
+change.
+
+At corrective implementation completion, `ENG-HEALTH-CHANGE-001`,
+`ENG-HEALTH-ABSTRACTION-001`, and `ENG-HEALTH-STRUCTURE-001` remain
+`uncovered`. The implementing task cannot independently approve the corrected
+commit it creates. Fresh qualifying independent review of that exact corrected
+commit is pending, and no passing review is claimed.
+
+Current counts remain 44 applicable, 5 not applicable, 7 review-only, 37
+uncovered, none revalidation-required, and none enforced. Residual risk consists
+of the pending independent change, abstraction, structure, and test-validity
+dispositions; unverified protected required-check configuration; intentionally
+absent delayed-correction and later semantic families; and absent formal
+evaluation, scoring, milestone-completion, broader compatibility, or production
+evidence. No exception or stronger claim is introduced.

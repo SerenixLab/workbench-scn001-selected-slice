@@ -100,10 +100,21 @@ export function findExactCompletedFocusedDrillPrefix(
   const instructionTransition = instructionClosure.transition;
   const dispositionTransition = dispositionClosure.transition;
   const outcomeTransition = uniqueCreator(snapshot, outcome, "focused outcome");
+  const realizationFacts = snapshot.records.filter((record) => (
+    record.family === "input_fact"
+    && record.origin === "simulator"
+    && record.role === "simulator_behavior_realization"
+    && record.payload?.requestedRef === disposition.reference
+  ));
+  const realizationFactRefs = new Set(realizationFacts.map((record) => record.reference));
   const realizationRelations = snapshot.relations.filter((relation) => (
     relation.relationKind === "realization"
-    && (relation.fromRef === realizationFact?.reference
+    && (realizationFactRefs.has(relation.fromRef)
       || relation.toRef === disposition.reference)
+  ));
+  const realizationTransitions = snapshot.records.filter((record) => (
+    record.transitionKind === "record_focused_drill_realization"
+    && record.inputReferences?.includes(disposition.reference)
   ));
   const outcomeRelations = snapshot.relations.filter((relation) => (
     relation.fromRef === outcome.reference && relation.relationKind === "outcome"
@@ -118,7 +129,11 @@ export function findExactCompletedFocusedDrillPrefix(
   const outcomeIngestionBases = snapshot.relations.filter((relation) => (
     relation.fromRef === outcomeIngestion?.reference && relation.relationKind === "basis"
   ));
-  if (realizationFact?.family !== "input_fact" || realizationFact.origin !== "simulator"
+  if (realizationFacts.length !== 1
+    || realizationFacts[0].reference !== realizationFact?.reference
+    || realizationTransitions.length !== 1
+    || realizationTransitions[0].reference !== realizationTransition?.reference
+    || realizationFact?.family !== "input_fact" || realizationFact.origin !== "simulator"
     || realizationFact.role !== "simulator_behavior_realization"
     || realizationFact.payload?.requestedRef !== disposition.reference
     || realizationFact.payload.requestedBehavior !== "immediate_correction"
@@ -323,20 +338,31 @@ export function findExactDirectCorrectionRealization(snapshot, sourceBindingEvid
   const controlsByType = new Map(controls.map((control) => [
     control?.payload?.control, control?.reference
   ]));
+  const realizationFacts = snapshot.records.filter((record) => (
+    record.family === "input_fact"
+    && record.origin === "simulator"
+    && record.role === "simulator_behavior_realization"
+    && record.payload?.requestedRef === disposition.reference
+  ));
   const realizationRelations = snapshot.relations.filter((relation) => (
     relation.relationKind === "realization"
-    && relation.toRef === disposition.reference
+    && (relation.toRef === disposition.reference
+      || records.get(relation.fromRef)?.payload?.requestedRef === disposition.reference)
   ));
   const realizationTransitions = snapshot.records.filter((record) => (
     record.transitionKind === "record_direct_current_session_correction_realization"
-    && record.inputReferences?.includes(disposition.reference)
+    && (record.inputReferences?.includes(disposition.reference)
+      || record.inputReferences?.some((reference) => (
+        records.get(reference)?.payload?.requestedRef === disposition.reference
+      )))
   ));
   if (realizationRelations.length === 0 && realizationTransitions.length === 0) return undefined;
-  if (realizationRelations.length !== 1 || realizationTransitions.length !== 1) {
+  if (realizationFacts.length !== 1
+    || realizationRelations.length !== 1 || realizationTransitions.length !== 1) {
     throw checkpointError("Direct realization closure is ambiguous.");
   }
   const relation = realizationRelations[0];
-  const fact = records.get(relation.fromRef);
+  const fact = realizationFacts[0];
   const realizationTransition = realizationTransitions[0];
   const factInteraction = records.get(fact?.firstInteractionRef);
   const factIngestion = records.get(factInteraction?.createdByTransitionRef);
