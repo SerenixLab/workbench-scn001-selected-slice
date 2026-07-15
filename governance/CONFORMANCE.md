@@ -2372,3 +2372,56 @@ applicable, 5 not applicable, 7 review-only, 37 uncovered, none
 revalidation-required, and none enforced. No delayed-correction or later semantic
 family, formal evidence, scoring, completion, broader compatibility, or production
 claim is introduced.
+
+## Direct-Realization Ingestion-Parity Independent Review Closure
+
+On 2026-07-15, a fresh independent ChatGPT review examined exact corrective
+commit `adf756a6765e433047574acec1d40e8da74005f4` against parent
+`3efb7ca057369dd835f70fc120ced1ac5c175e0f`, the preceding blocking finding,
+the SUT and evaluation direct-realization predicates, and the complete retained
+focused/direct path.
+
+Independent review outcome: **pass for exact corrective commit `adf756a`**.
+
+The review confirmed that evaluation's exact singleton
+`factInteraction.inputReferences` predicate now matches the SUT predicate.
+Existing evaluation closure checks propagate that same singleton set through the
+ingestion transition and its exact basis cardinality. The public-boundary hostile
+reproduction that previously passed now fails closed with a malformed-checkpoint
+error, while the real retained SUT snapshot remains unchanged.
+
+The review also confirmed that the earlier correction's exhaustive direct
+`payload.requestedRef` ownership enumeration, focused outcome-pointer uniqueness,
+exact replay, and passive-inspection properties remain intact. It found no new
+blocking defect.
+
+Independent verification against the exact commit reported:
+
+* the exact hostile reproduction rejected with retained SUT state unchanged;
+* 17 focused direct/focused/replay/isolation tests passed;
+* `npm run check:boundary` passed all 152 tests;
+* `npm run check` passed governance, conformance coverage, formatting, syntax,
+  dependency boundaries, and all 245 tests;
+* `git diff --check 3efb7ca..adf756a` passed;
+* the reviewed worktree was clean.
+
+This is the qualifying independent review outcome for
+`ENG-HEALTH-CHANGE-001 R2`, `ENG-HEALTH-ABSTRACTION-001 R2`, and
+`ENG-HEALTH-STRUCTURE-001 R2` for the complete bounded direct-correction
+corrective stack. The review also passed the bounded regression and fail-closed
+correction under `ENG-HEALTH-TEST-001 R2`, `ENG-HEALTH-TEST-002 R2`, and
+`ENG-HEALTH-FAILURE-001 R2`.
+
+This closure preserves both prior blocking reviews as failed. It does not establish
+automated enforcement, protected required-check configuration, formal evaluation
+evidence, behavioral compatibility, scoreability, milestone completion, broader
+`SCN-001` acceptance, obligation satisfaction, production readiness, or deployment.
+The reviewed commit was local because external push permission was denied.
+
+With this review recorded, current applicability/status counts return to:
+
+* 44 rules `applicable` and 5 `not-applicable`;
+* 10 applicable rules `review-only`;
+* 34 applicable rules `uncovered`;
+* no applicable rule `revalidation-required`;
+* no rule claimed `enforced`.
