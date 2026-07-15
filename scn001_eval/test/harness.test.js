@@ -687,6 +687,21 @@ test("dedicated simulator projection strips evaluation-only fields and stabilize
     "fidelity", "kind", "occurrenceOrder", "realizedBehavior", "requestedRef", "sourceActor", "sourceFactRef"
   ].sort());
   assert.doesNotMatch(JSON.stringify(first), /requestedOutputRef|candidateRef|MaterialIntent|Scope|mismatchOrigin|oracle|branch/i);
+  const laterRecord = realizeAvailableOutput({
+    kind: "later_delayed_correction_request",
+    outputRef: "transition_00000000-0000-0000-0000-000000000001",
+    requestedRef: "state_00000000-0000-0000-0000-000000000001",
+    requestedBehavior: "delay_minor_correction_until_turn_completion",
+    useScope: {
+      activity: "japanese_practice", taskMode: "spontaneous_production",
+      surfaceLabel: "voice_simulated", consequence: "low", scenarioDay: 145,
+      sessionId: "spontaneous-outcome-later"
+    }
+  });
+  const laterProjected = projector.project(laterRecord);
+  assert.equal(laterRecord.canonicalInterventionPremiseMatch, true);
+  assert.equal(Object.hasOwn(laterProjected, "canonicalInterventionPremise"), false);
+  assert.equal(Object.hasOwn(laterProjected, "canonicalInterventionPremiseMatch"), false);
 });
 
 test("public proposal output routes once and SUT records exact realization without response or activation", () => {
@@ -1506,47 +1521,40 @@ test("later outcome and explanation identities remain isolated across runs", () 
   );
 });
 
-test("CP-CANONICAL-INTERVENTION requires premise fidelity, not only behavior fidelity", async (t) => {
-  const attacks = [
-    ["premise match flag", (snapshot) => {
-      snapshot.records.find((record) => (
-        record.role === "simulator_behavior_realization"
-        && record.payload.sessionId === "spontaneous-outcome-later"
-      )).payload.canonicalInterventionPremiseMatch = false;
-    }],
-    ["premise timing", (snapshot) => {
-      snapshot.records.find((record) => (
-        record.role === "simulator_behavior_realization"
-        && record.payload.sessionId === "spontaneous-outcome-later"
-      )).payload.canonicalInterventionPremise.timing = "mid_sentence";
-    }]
-  ];
-  for (const [name, attack] of attacks) {
-    await t.test(name, () => {
-      const real = createSutBoundary();
-      let corrupt = false;
-      const boundary = Object.freeze({
-        ...real,
-        captureInspectionSnapshot(runRef) {
-          const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
-          if (corrupt) attack(snapshot);
-          return snapshot;
-        }
+test("CP-CANONICAL-INTERVENTION keeps premise verdict evaluation-side", () => {
+  const boundary = createSutBoundary();
+  const harness = createHarnessForMechanismTests(boundary, {
+    renderOutput(output, occurrenceOrder) {
+      const record = realizeAvailableOutput(output, occurrenceOrder);
+      if (record.requestedBehavior !== "delay_minor_correction_until_turn_completion") {
+        return record;
+      }
+      return Object.freeze({
+        ...record,
+        canonicalInterventionPremise: Object.freeze({
+          ...record.canonicalInterventionPremise,
+          timing: "mid_sentence"
+        }),
+        canonicalInterventionPremiseMatch: false
       });
-      const harness = createEvaluationHarness(boundary);
-      const runRef = harness.startRun();
-      completeDirectCorrection(harness, runRef);
-      completeLaterRealization(harness, runRef);
-      const before = real.captureInspectionSnapshot(runRef);
-      corrupt = true;
-      assert.throws(() => harness.inspectCanonicalInterventionCheckpoint(runRef));
-      assert.throws(() => harness.deliverLaterOutcomeIfEligible(
-        runRef, laterOutcomeRecords()
-      ));
-      corrupt = false;
-      assert.deepEqual(real.captureInspectionSnapshot(runRef), before);
-    });
-  }
+    }
+  });
+  const runRef = harness.startRun();
+  completeDirectCorrection(harness, runRef);
+  completeLaterRealization(harness, runRef);
+  const before = boundary.captureInspectionSnapshot(runRef);
+  const fact = before.records.find((record) => (
+    record.role === "simulator_behavior_realization"
+    && record.payload.requestedBehavior
+      === "delay_minor_correction_until_turn_completion"
+  ));
+  assert.equal(Object.hasOwn(fact.payload, "canonicalInterventionPremise"), false);
+  assert.equal(Object.hasOwn(fact.payload, "canonicalInterventionPremiseMatch"), false);
+  assert.throws(() => harness.inspectCanonicalInterventionCheckpoint(runRef));
+  assert.throws(() => harness.deliverLaterOutcomeIfEligible(
+    runRef, laterOutcomeRecords()
+  ));
+  assert.deepEqual(boundary.captureInspectionSnapshot(runRef), before);
 });
 
 test("CP-LATER-OUTCOME rejects causal promotion and malformed closure passively", async (t) => {
@@ -1587,6 +1595,21 @@ test("CP-LATER-OUTCOME rejects causal promotion and malformed closure passively"
         relation.fromRef === uncertainty.reference
         && relation.targetRole === "reported_feedback"
       )), 1);
+    }],
+    ["undeclared uncertainty relation", (snapshot) => {
+      const uncertainty = snapshot.records.find(
+        (record) => record.family === "outcome_uncertainty"
+      );
+      const outcome = snapshot.records.find((record) => record.family === "later_outcome");
+      snapshot.relations.push({
+        relationKind: "support", fromRef: uncertainty.reference,
+        toRef: outcome.reference, targetRole: "undeclared_uncertainty_support",
+        effectiveOrder: uncertainty.createdOrder,
+        createdOrder: snapshot.records.find(
+          (record) => record.reference === uncertainty.createdByTransitionRef
+        ).createdOrder,
+        assertedByRole: "sut"
+      });
     }],
     ["transition input rewrite", (snapshot) => {
       snapshot.records.find((record) => (
@@ -1662,6 +1685,15 @@ test("CP-EXPLANATION rejects missing provenance and unsupported claims passively
         ...structuredClone(creator),
         reference: "transition_00000000-0000-0000-0000-000000000095"
       });
+    }],
+    ["duplicate stale assessment result", (snapshot) => {
+      const assessment = snapshot.records.find((record) => (
+        record.family === "temporal_eligibility_assessment"
+        && record.dimension === "particle_pattern_a"
+      ));
+      snapshot.records.find(
+        (record) => record.reference === assessment.createdByTransitionRef
+      ).resultReferences.push(assessment.reference);
     }],
     ["focused instruction substituted", (snapshot) => {
       const support = snapshot.records.find(

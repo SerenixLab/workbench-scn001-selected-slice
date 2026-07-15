@@ -8,14 +8,6 @@ import {
 
 export const LATER_DELAYED_BEHAVIOR = "delay_minor_correction_until_turn_completion";
 
-export const CANONICAL_LATER_INTERVENTION_PREMISE = Object.freeze({
-  activity: "japanese_practice",
-  taskMode: "spontaneous_production",
-  correctionClass: "minor_correction",
-  timing: "turn_completion",
-  sessionId: "spontaneous-outcome-later"
-});
-
 export const LATER_SPONTANEOUS_SCOPE = Object.freeze({
   activity: "japanese_practice",
   taskMode: "spontaneous_production",
@@ -444,11 +436,6 @@ export function resolveLaterRealizationClosure({
     || fact.payload.requestedBehavior !== LATER_DELAYED_BEHAVIOR
     || fact.payload.realizedBehavior !== LATER_DELAYED_BEHAVIOR
     || fact.payload.fidelity !== "match"
-    || !isDeepStrictEqual(
-      fact.payload.canonicalInterventionPremise,
-      CANONICAL_LATER_INTERVENTION_PREMISE
-    )
-    || fact.payload.canonicalInterventionPremiseMatch !== true
     || fact.payload.mismatchOrigin !== null
     || realizationRelations[0].fromRef !== fact.reference
     || realizationRelations[0].toRef !== disposition.reference

@@ -71,8 +71,12 @@ const LIMITS = Object.freeze([
   Object.freeze(["unsupported_generalization", "no_long_term_learning_fixed_style_global_preference_or_fatigue_conclusion"])
 ]);
 
-export function findExactLaterOutcome(snapshot, sourceBindingEvidence) {
-  const canonical = findExactCanonicalIntervention(snapshot, sourceBindingEvidence);
+export function findExactLaterOutcome(
+  snapshot, sourceBindingEvidence, simulatorRoutingEvidence
+) {
+  const canonical = findExactCanonicalIntervention(
+    snapshot, sourceBindingEvidence, simulatorRoutingEvidence
+  );
   if (!canonical) return undefined;
   const records = indexRecords(snapshot);
   const outcomes = snapshot.records.filter((record) => record.family === "later_outcome");
@@ -120,9 +124,9 @@ export function findExactLaterOutcome(snapshot, sourceBindingEvidence) {
   const outward = snapshot.relations.filter(
     (relation) => relation.fromRef === outcome.reference
   );
-  const uncertaintyBases = snapshot.relations.filter((relation) => (
-    relation.fromRef === uncertainty.reference && relation.relationKind === "basis"
-  ));
+  const uncertaintyBases = snapshot.relations.filter(
+    (relation) => relation.fromRef === uncertainty.reference
+  );
   if (!hasExactKeys(outcome, OUTCOME_KEYS)
     || outcome.origin !== "sut"
     || outcome.outcomeType !== "intervention_conditioned_later_behavior"
@@ -208,8 +212,12 @@ export function findExactLaterOutcome(snapshot, sourceBindingEvidence) {
   return { canonical, outcome, uncertainty, transition, comparative, feedback, coIntervention };
 }
 
-export function findExactExplanation(snapshot, sourceBindingEvidence) {
-  const later = findExactLaterOutcome(snapshot, sourceBindingEvidence);
+export function findExactExplanation(
+  snapshot, sourceBindingEvidence, simulatorRoutingEvidence
+) {
+  const later = findExactLaterOutcome(
+    snapshot, sourceBindingEvidence, simulatorRoutingEvidence
+  );
   if (!later) return undefined;
   const records = indexRecords(snapshot);
   const supports = snapshot.records.filter(

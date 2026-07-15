@@ -196,12 +196,6 @@ function laterRealizationInput(requestedRef, overrides = {}) {
     sourceActor: "simulated-dependency", occurrenceOrder: 33, requestedRef,
     requestedBehavior: "delay_minor_correction_until_turn_completion",
     realizedBehavior: "delay_minor_correction_until_turn_completion",
-    canonicalInterventionPremise: {
-      activity: "japanese_practice", taskMode: "spontaneous_production",
-      correctionClass: "minor_correction", timing: "turn_completion",
-      sessionId: "spontaneous-outcome-later"
-    },
-    canonicalInterventionPremiseMatch: true,
     fidelity: "match", mismatchOrigin: null, ...overrides
   };
 }
@@ -3717,12 +3711,6 @@ test("later spontaneous use rechecks applicability before selecting delayed corr
     requestedRef: later.laterDisposition.reference,
     requestedBehavior: "delay_minor_correction_until_turn_completion",
     realizedBehavior: "delay_minor_correction_until_turn_completion",
-    canonicalInterventionPremise: {
-      activity: "japanese_practice", taskMode: "spontaneous_production",
-      correctionClass: "minor_correction", timing: "turn_completion",
-      sessionId: "spontaneous-outcome-later"
-    },
-    canonicalInterventionPremiseMatch: true,
     fidelity: "match", mismatchOrigin: null
   };
   later.run.assertSourceFactConsistency([realization]);
@@ -3877,12 +3865,6 @@ test("later realization has one ingestion creator and rejects competing evidence
     requestedRef: later.laterDisposition.reference,
     requestedBehavior: "delay_minor_correction_until_turn_completion",
     realizedBehavior: "delay_minor_correction_until_turn_completion",
-    canonicalInterventionPremise: {
-      activity: "japanese_practice", taskMode: "spontaneous_production",
-      correctionClass: "minor_correction", timing: "turn_completion",
-      sessionId: "spontaneous-outcome-later"
-    },
-    canonicalInterventionPremiseMatch: true,
     fidelity: "match", mismatchOrigin: null
   };
   later.run.assertSourceFactConsistency([input]);
@@ -3952,10 +3934,10 @@ test("later outcome remains intervention-conditioned with non-exhaustive uncerta
   ]);
 });
 
-test("later outcome creation requires the exact realized premise and complete raw bundle", () => {
+test("later outcome creation requires exact realized behavior and complete raw bundle", () => {
   {
     const realized = laterRealizedRun();
-    realized.realizationFact.payload.canonicalInterventionPremiseMatch = false;
+    realized.realizationFact.payload.realizedBehavior = "mid_sentence_correction";
     const inputs = laterOutcomeInputs();
     realized.run.assertSourceFactConsistency(inputs);
     realized.run.ingest(inputs);
@@ -3994,6 +3976,15 @@ test("later outcome closure rejects promotion, substitution, and creator ambigui
         relation.fromRef === uncertainty.reference
         && relation.targetRole === "reported_feedback"
       )), 1);
+    },
+    ({ run, uncertainty, outcome }) => {
+      run.relations.push({
+        relationKind: "support", fromRef: uncertainty.reference,
+        toRef: outcome.reference, targetRole: "undeclared_uncertainty_support",
+        effectiveOrder: uncertainty.createdOrder,
+        createdOrder: run.records.get(uncertainty.createdByTransitionRef).createdOrder,
+        assertedByRole: "sut"
+      });
     },
     ({ run, uncertainty }) => {
       cloneRetainedTransition(run, run.records.get(uncertainty.createdByTransitionRef));
@@ -4044,6 +4035,15 @@ test("explanation closure rejects lineage gaps, hidden reasoning, and creator am
         && record.dimension === "particle_pattern_a"
       ));
       cloneRetainedTransition(run, run.records.get(assessment.createdByTransitionRef));
+    },
+    ({ run }) => {
+      const assessment = [...run.records.values()].find((record) => (
+        record.family === "temporal_eligibility_assessment"
+        && record.dimension === "particle_pattern_a"
+      ));
+      run.records.get(assessment.createdByTransitionRef).resultReferences.push(
+        assessment.reference
+      );
     },
     ({ support }) => { support.focusedInstructionRef = support.focusedOutcomeRef; },
     ({ support }) => { support.hiddenChainOfThought = "retained"; },

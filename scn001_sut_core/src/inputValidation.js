@@ -107,15 +107,9 @@ const inputValidators = {
   },
   simulator_behavior_realization: (input, path) => {
     assertCommonInputFields(input, path);
-    const later = input.requestedBehavior
-      === "delay_minor_correction_until_turn_completion";
     assertExactKeys(input, [
       "sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "requestedRef",
-      "requestedBehavior", "realizedBehavior", "fidelity",
-      ...(later ? [
-        "canonicalInterventionPremise", "canonicalInterventionPremiseMatch"
-      ] : []),
-      "mismatchOrigin"
+      "requestedBehavior", "realizedBehavior", "fidelity", "mismatchOrigin"
     ], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
@@ -123,22 +117,6 @@ const inputValidators = {
     assertString(input.requestedBehavior, `${path}.requestedBehavior`);
     assertString(input.realizedBehavior, `${path}.realizedBehavior`);
     assertOneOf(input.fidelity, ["match", "mismatch"], `${path}.fidelity`);
-    if (later) {
-      assertExactKeys(input.canonicalInterventionPremise, [
-        "activity", "taskMode", "correctionClass", "timing", "sessionId"
-      ], `${path}.canonicalInterventionPremise`);
-      for (const key of Object.keys(input.canonicalInterventionPremise)) {
-        assertString(
-          input.canonicalInterventionPremise[key],
-          `${path}.canonicalInterventionPremise.${key}`
-        );
-      }
-      if (typeof input.canonicalInterventionPremiseMatch !== "boolean") {
-        throw new SutBoundaryValidationError(
-          `${path}.canonicalInterventionPremiseMatch must be a boolean.`
-        );
-      }
-    }
     if (input.mismatchOrigin !== null) {
       assertString(input.mismatchOrigin, `${path}.mismatchOrigin`);
     }

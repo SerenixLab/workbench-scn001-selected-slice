@@ -333,9 +333,6 @@ export function findExactLaterRealization(snapshot, sourceBindingEvidence) {
     || fact.payload?.sourceActor !== "simulated-dependency"
     || fact.payload.requestedBehavior !== BEHAVIOR
     || fact.payload.realizedBehavior !== BEHAVIOR || fact.payload.fidelity !== "match"
-    || JSON.stringify(fact.payload.canonicalInterventionPremise)
-      !== JSON.stringify(CANONICAL_INTERVENTION_PREMISE)
-    || fact.payload.canonicalInterventionPremiseMatch !== true
     || fact.payload.mismatchOrigin !== null
     || JSON.stringify(transitions[0].inputReferences) !== JSON.stringify([
       later.disposition.reference, fact.reference, fact.firstInteractionRef
@@ -359,9 +356,21 @@ export function findExactLaterRealization(snapshot, sourceBindingEvidence) {
   return { ...later, fact, realizationTransition: transitions[0] };
 }
 
-export function findExactCanonicalIntervention(snapshot, sourceBindingEvidence) {
+export function findExactCanonicalIntervention(
+  snapshot, sourceBindingEvidence, simulatorRoutingEvidence
+) {
   const closure = findExactLaterRealization(snapshot, sourceBindingEvidence);
   if (!closure) return undefined;
+  if (!Array.isArray(simulatorRoutingEvidence)) {
+    throw checkpointError("Canonical intervention requires evaluation-side simulator evidence.");
+  }
+  const matchingEvidence = simulatorRoutingEvidence.filter((item) => (
+    item?.simulatorFactRef === closure.fact.reference
+  ));
+  if (matchingEvidence.length !== 1) {
+    throw checkpointError("Canonical intervention simulator evidence is ambiguous.");
+  }
+  const record = matchingEvidence[0].record;
   const actualPremise = {
     activity: closure.disposition.useScope.activity,
     taskMode: closure.disposition.useScope.taskMode,
@@ -372,12 +381,21 @@ export function findExactCanonicalIntervention(snapshot, sourceBindingEvidence) 
     sessionId: closure.disposition.useScope.sessionId
   };
   if (JSON.stringify(actualPremise) !== JSON.stringify(CANONICAL_INTERVENTION_PREMISE)
-    || JSON.stringify(closure.fact.payload.canonicalInterventionPremise)
+    || record?.role !== "simulated_behavior_realization_fact"
+    || record.sourceActor !== "simulated-dependency"
+    || record.requestedOutputRef !== closure.disposition.createdByTransitionRef
+    || record.requestedRef !== closure.disposition.reference
+    || record.requestedBehavior !== BEHAVIOR || record.realizedBehavior !== BEHAVIOR
+    || record.fidelity !== "match" || record.mismatchOrigin !== null
+    || JSON.stringify(record.canonicalInterventionPremise)
       !== JSON.stringify(actualPremise)
-    || closure.fact.payload.canonicalInterventionPremiseMatch !== true) {
+    || record.canonicalInterventionPremiseMatch !== true) {
     throw checkpointError("Canonical later-intervention premise is malformed.");
   }
-  return { ...closure, canonicalInterventionPremise: actualPremise };
+  return {
+    ...closure, canonicalInterventionPremise: actualPremise,
+    simulatorEvaluationRecord: record
+  };
 }
 
 function validateCurrentInteractionClosure(snapshot, interactionRef, expectedInputRefs) {

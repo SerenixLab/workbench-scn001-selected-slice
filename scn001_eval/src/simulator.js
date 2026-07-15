@@ -46,6 +46,20 @@ export function realizeLaterDelayedCorrectionOutput(output, occurrenceOrder = 1)
     || output.useScope.sessionId !== "spontaneous-outcome-later") {
     throw new Error("Unsupported later delayed-correction request material.");
   }
+  const canonicalInterventionPremise = Object.freeze({
+    activity: output.useScope.activity,
+    taskMode: output.useScope.taskMode,
+    correctionClass: "minor_correction",
+    timing: "turn_completion",
+    sessionId: output.useScope.sessionId
+  });
+  const canonicalInterventionPremiseMatch = (
+    canonicalInterventionPremise.activity === "japanese_practice"
+    && canonicalInterventionPremise.taskMode === "spontaneous_production"
+    && canonicalInterventionPremise.correctionClass === "minor_correction"
+    && canonicalInterventionPremise.timing === "turn_completion"
+    && canonicalInterventionPremise.sessionId === "spontaneous-outcome-later"
+  );
   return Object.freeze({
     simulatorRecordId: `simulator_${randomUUID()}`,
     role: "simulated_behavior_realization_fact",
@@ -56,14 +70,8 @@ export function realizeLaterDelayedCorrectionOutput(output, occurrenceOrder = 1)
     requestedBehavior: output.requestedBehavior,
     realizedBehavior: output.requestedBehavior,
     fidelity: "match",
-    canonicalInterventionPremise: Object.freeze({
-      activity: output.useScope.activity,
-      taskMode: output.useScope.taskMode,
-      correctionClass: "minor_correction",
-      timing: "turn_completion",
-      sessionId: output.useScope.sessionId
-    }),
-    canonicalInterventionPremiseMatch: true,
+    canonicalInterventionPremise,
+    canonicalInterventionPremiseMatch,
     mismatchOrigin: null
   });
 }

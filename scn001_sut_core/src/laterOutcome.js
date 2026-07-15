@@ -236,9 +236,9 @@ export function validateLaterOutcomeClosure({
   const expectedInputs = laterOutcomeInputReferences(participants);
   const expectedRelations = laterOutcomeRelationPairs(participants, uncertainty);
   const outward = relations.filter((relation) => relation.fromRef === outcome?.reference);
-  const uncertaintyBases = relations.filter((relation) => (
-    relation.fromRef === uncertainty?.reference && relation.relationKind === "basis"
-  ));
+  const uncertaintyBases = relations.filter(
+    (relation) => relation.fromRef === uncertainty?.reference
+  );
   const competing = [...records.values()].filter(
     (record) => record.family === "later_outcome"
   );
@@ -749,6 +749,10 @@ function validateTemporalAssessmentClosure({
     || transition.result !== "accepted"
     || !isDeepStrictEqual(transition.inputReferences, expectedInputRefs)
     || resultAssessments.length === 0
+    || new Set(transition.resultReferences).size !== transition.resultReferences.length
+    || transition.resultReferences.filter(
+      (reference) => reference === assessment.reference
+    ).length !== 1
     || resultAssessments.some((item) => (
       item?.family !== "temporal_eligibility_assessment"
       || item.createdByTransitionRef !== transition.reference

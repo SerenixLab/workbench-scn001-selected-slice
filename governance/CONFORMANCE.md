@@ -2848,14 +2848,18 @@ purpose: finish the selected engineering path through `DP-OUTCOME-UPDATE` and
 `DP-EXPLAIN`, after exact `CP-CANONICAL-INTERVENTION`, without creating a
 formal evaluation record, compatibility claim, campaign result, or score.
 
-The simulator-visible `L-003R` record now preserves both exact behavior
-fidelity and the canonical intervention premise: Japanese spontaneous
-production, minor correction, turn-completion timing, and the D10 session.
-The harness independently reconstructs that premise from the retained active
-trial, applicability assessment, disposition, realized behavior, and context.
-It withholds `L-003` through `L-005` unless both behavior fidelity and premise
-match close. Raw outcome or explanation material cannot bypass those gates
-through generic fixture delivery.
+The full evaluation-side `L-003R` simulator record preserves both exact
+behavior fidelity and the canonical intervention premise: Japanese spontaneous
+production, minor correction, turn-completion timing, and the D10 session. Its
+premise and derived match result are evaluator-owned and are stripped by the
+simulator projection. The SUT-visible realization contains only the requested
+and realized behavior, fidelity, and mismatch origin; it neither consumes nor
+echoes an evaluation verdict. The harness independently reconstructs the
+premise from the retained active trial, applicability assessment, disposition,
+realized behavior, and context, then compares it with the private routed
+simulator record. It withholds `L-003` through `L-005` unless both behavior
+fidelity and premise match close. Raw outcome or explanation material cannot
+bypass those gates through generic fixture delivery.
 
 `DP-OUTCOME-UPDATE` consumes exactly three raw facts after the matched
 realization: a comparative longer-speaking observation, current positive pacing
@@ -2883,17 +2887,20 @@ chain-of-thought is neither required nor retained. The passive explanation
 oracle validates semantic scope/causal markers and the typed support graph; it
 does not require exact natural-language wording.
 
-Hostile checks cover premature outcome and explanation delivery, canonical
-premise flag and content drift, fixture substitution, partial raw bundles,
+Hostile checks cover premature outcome and explanation delivery,
+evaluation-private canonical-premise result and content drift, fixture
+substitution, partial raw bundles,
 causal and global-preference promotion, exhaustive co-intervention claims,
 excluded alternative causes, raw comparison rewrites, missing or duplicate
-relations, transition-envelope corruption, duplicate result creators,
-ambiguous result identity, stale-history omission, focused-instruction
-substitution, limitation rewrites, hidden-reasoning claims, causal explanation
-text, request-attribution substitution, result omission, extra limitation
-records, generic-delivery bypass, no-mutation failure behavior, and independent
-run isolation. The complete positive path also proves that no formal-evaluation,
-compatibility, or scoring family is emitted.
+relations, undeclared outbound uncertainty relations, transition-envelope
+corruption, duplicate result creators, ambiguous result identity,
+stale-history omission, duplicated temporal-assessment result occurrence,
+focused-instruction substitution, limitation rewrites, hidden-reasoning
+claims, causal explanation text, request-attribution substitution, result
+omission, extra limitation records, generic-delivery bypass, no-mutation
+failure behavior, and independent run isolation. The complete positive path
+also proves that no formal-evaluation, compatibility, or scoring family is
+emitted.
 
 The feedback roadmap was strengthened in three material ways. `L-003R` premise
 match is an independently reconstructed gate rather than a trusted label;

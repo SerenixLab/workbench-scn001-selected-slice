@@ -41,15 +41,6 @@ export function createSimulatorProjector() {
             requestedBehavior: record.requestedBehavior,
             realizedBehavior: record.realizedBehavior,
             fidelity: record.fidelity,
-            ...(record.requestedBehavior === "delay_minor_correction_until_turn_completion"
-              ? {
-                  canonicalInterventionPremise: structuredClone(
-                    record.canonicalInterventionPremise
-                  ),
-                  canonicalInterventionPremiseMatch:
-                    record.canonicalInterventionPremiseMatch
-                }
-              : {}),
             mismatchOrigin: record.mismatchOrigin
           }
         : {
@@ -138,13 +129,19 @@ function assertBehaviorSimulatorRecord(record) {
     assertExactKeys(record.canonicalInterventionPremise, [
       "activity", "taskMode", "correctionClass", "timing", "sessionId"
     ], "canonicalInterventionPremise");
-    if (record.canonicalInterventionPremise.activity !== "japanese_practice"
-      || record.canonicalInterventionPremise.taskMode !== "spontaneous_production"
-      || record.canonicalInterventionPremise.correctionClass !== "minor_correction"
-      || record.canonicalInterventionPremise.timing !== "turn_completion"
-      || record.canonicalInterventionPremise.sessionId !== "spontaneous-outcome-later"
-      || record.canonicalInterventionPremiseMatch !== true) {
-      throw new Error("Invalid canonical later-intervention premise.");
+    for (const value of Object.values(record.canonicalInterventionPremise)) {
+      if (typeof value !== "string" || value.length === 0) {
+        throw new Error("Invalid canonical later-intervention premise.");
+      }
+    }
+    const exactCanonicalPremise = record.canonicalInterventionPremise.activity
+        === "japanese_practice"
+      && record.canonicalInterventionPremise.taskMode === "spontaneous_production"
+      && record.canonicalInterventionPremise.correctionClass === "minor_correction"
+      && record.canonicalInterventionPremise.timing === "turn_completion"
+      && record.canonicalInterventionPremise.sessionId === "spontaneous-outcome-later";
+    if (record.canonicalInterventionPremiseMatch !== exactCanonicalPremise) {
+      throw new Error("Inconsistent canonical later-intervention premise result.");
     }
   }
   for (const field of ["requestedOutputRef", "requestedRef"]) {

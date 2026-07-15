@@ -452,7 +452,8 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
     inspectCanonicalInterventionCheckpoint(runRef) {
       const closure = findExactCanonicalIntervention(
         sutBoundary.captureInspectionSnapshot(runRef),
-        sourceBindingEvidenceForRun(runRef)
+        sourceBindingEvidenceForRun(runRef),
+        simulatorRoutingEvidenceForRun(runRef)
       );
       if (!closure) return Object.freeze([]);
       return deepFreeze([{
@@ -471,7 +472,8 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
       );
       const canonical = findExactCanonicalIntervention(
         sutBoundary.captureInspectionSnapshot(runRef),
-        sourceBindingEvidenceForRun(runRef)
+        sourceBindingEvidenceForRun(runRef),
+        simulatorRoutingEvidenceForRun(runRef)
       );
       if (!canonical) return Object.freeze([]);
       const prior = transport.laterOutcomeDeliveries.get(canonical.disposition.reference);
@@ -489,7 +491,8 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
     inspectLaterOutcomeCheckpoint(runRef) {
       const closure = findExactLaterOutcome(
         sutBoundary.captureInspectionSnapshot(runRef),
-        sourceBindingEvidenceForRun(runRef)
+        sourceBindingEvidenceForRun(runRef),
+        simulatorRoutingEvidenceForRun(runRef)
       );
       if (!closure) return Object.freeze([]);
       return deepFreeze([{
@@ -510,7 +513,8 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
       );
       const outcome = findExactLaterOutcome(
         sutBoundary.captureInspectionSnapshot(runRef),
-        sourceBindingEvidenceForRun(runRef)
+        sourceBindingEvidenceForRun(runRef),
+        simulatorRoutingEvidenceForRun(runRef)
       );
       if (!outcome) return Object.freeze([]);
       const prior = transport.explanationDeliveries.get(outcome.outcome.reference);
@@ -527,7 +531,8 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
     inspectExplanationCheckpoint(runRef) {
       const closure = findExactExplanation(
         sutBoundary.captureInspectionSnapshot(runRef),
-        sourceBindingEvidenceForRun(runRef)
+        sourceBindingEvidenceForRun(runRef),
+        simulatorRoutingEvidenceForRun(runRef)
       );
       if (!closure) return Object.freeze([]);
       return deepFreeze([{
@@ -592,6 +597,15 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
         sourceReferences.set(fixtureRecordId, created);
         return created;
       };
+  }
+
+  function simulatorRoutingEvidenceForRun(runRef) {
+    const transport = runTransport.get(runRef);
+    if (!transport) throw new Error(`Unknown or closed evaluation run: ${runRef}.`);
+    return [...transport.routed.values()].map((entry) => ({
+      simulatorFactRef: entry.simulatorFactRef,
+      record: structuredClone(entry.record)
+    }));
   }
 
   function deliverProjectedFixtureRecords(runRef, fixtureRecords) {
