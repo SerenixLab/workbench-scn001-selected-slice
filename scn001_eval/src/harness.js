@@ -77,6 +77,8 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
   assertPublicBoundary(sutBoundary);
   const renderOutput = dependencies.renderOutput ?? realizeAvailableOutput;
   const createProjector = dependencies.createProjector ?? createSimulatorProjector;
+  const createBindingLedger = dependencies.createSourceBindingLedger
+    ?? createSourceBindingLedger;
   const runSourceFactReferences = new Map();
   const runSourceBindings = new Map();
   const runTransport = new Map();
@@ -85,7 +87,7 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
     startRun() {
       const runRef = sutBoundary.startRun();
       runSourceFactReferences.set(runRef, new Map());
-      runSourceBindings.set(runRef, createSourceBindingLedger());
+      runSourceBindings.set(runRef, createBindingLedger());
       runTransport.set(runRef, {
         routed: new Map(), projector: createProjector(), nextOrder: 1,
         acceptanceDeliveries: new Map(), focusedOpenDeliveries: new Map(),
@@ -261,7 +263,8 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
     if (!ledger) throw new Error(`Unknown or closed evaluation run: ${runRef}.`);
     ledger.assertDeliveryCompatible(inputs);
     const result = sutBoundary.ingestSutVisibleInputs(runRef, { inputs });
-    ledger.recordSuccessfulIngress(inputs, result.acceptedInputRefs);
+    const snapshot = sutBoundary.captureInspectionSnapshot(runRef);
+    ledger.recordSuccessfulIngress(inputs, result, snapshot);
     return result;
   }
 

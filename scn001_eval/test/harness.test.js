@@ -357,20 +357,81 @@ function activateProductionTrial(harness, runRef) {
 }
 
 function sourceBindingEvidenceFrom(snapshot) {
+  const records = new Map(snapshot.records.map((record) => [record.reference, record]));
   return snapshot.records
     .filter((record) => record.family === "input_fact")
-    .map((fact) => ({
-      sourceFactRef: fact.sourceFactRef,
-      projectedMeaning: structuredClone(fact.payload),
-      acceptedInputFactRef: fact.reference,
-      deliveryOrigin: fact.origin,
-      role: fact.role
-    }));
+    .map((fact) => {
+      const firstInteraction = records.get(fact.firstInteractionRef);
+      return {
+        sourceFactRef: fact.sourceFactRef,
+        projectedMeaning: structuredClone(fact.payload),
+        acceptedInputFactRef: fact.reference,
+        firstInteractionRef: fact.firstInteractionRef,
+        firstIngestionTransitionRef: firstInteraction.createdByTransitionRef,
+        deliveryOrigin: fact.origin,
+        role: fact.role
+      };
+    });
 }
 
 function rewriteSourceIdentity(fact, suffix) {
   fact.sourceFactRef = `${fact.sourceFactRef}-${suffix}`;
   fact.payload.sourceFactRef = fact.sourceFactRef;
+}
+
+function sharedControlClosure(snapshot, control) {
+  const fact = snapshot.records.find((record) => (
+    record.role === "fixture_control_fact" && record.payload.control === control
+  ));
+  const containingInteractions = snapshot.records
+    .filter((record) => record.family === "interaction_segment"
+      && record.inputReferences.includes(fact.reference))
+    .sort((left, right) => left.createdOrder - right.createdOrder);
+  assert.equal(containingInteractions.length, 2);
+  const [candidateInteraction, bindingInteraction] = containingInteractions;
+  return {
+    fact,
+    candidateInteraction,
+    bindingInteraction,
+    candidateIngestion: snapshot.records.find((record) => (
+      record.reference === candidateInteraction.createdByTransitionRef
+    )),
+    bindingIngestion: snapshot.records.find((record) => (
+      record.reference === bindingInteraction.createdByTransitionRef
+    ))
+  };
+}
+
+function retargetSharedControlToBinding(snapshot, control) {
+  const closure = sharedControlClosure(snapshot, control);
+  closure.fact.firstInteractionRef = closure.bindingInteraction.reference;
+  snapshot.relations.find((relation) => (
+    relation.fromRef === closure.fact.reference && relation.relationKind === "source"
+  )).createdOrder = closure.bindingIngestion.createdOrder;
+  return closure;
+}
+
+function redeliveredControlEvidence(evidence, snapshot, control) {
+  const closure = sharedControlClosure(snapshot, control);
+  return {
+    entry: evidence.find((item) => item.acceptedInputFactRef === closure.fact.reference),
+    laterInteraction: closure.bindingInteraction
+  };
+}
+
+function appendConflictingBinding(evidence, snapshot, conflictingIdentity) {
+  const { entry, laterInteraction } = redeliveredControlEvidence(
+    evidence, snapshot, "consequence"
+  );
+  const duplicate = structuredClone(entry);
+  duplicate.sourceFactRef = `${duplicate.sourceFactRef}-second-source`;
+  duplicate.projectedMeaning.sourceFactRef = duplicate.sourceFactRef;
+  if (conflictingIdentity === "interaction") {
+    duplicate.firstInteractionRef = laterInteraction.reference;
+  } else {
+    duplicate.firstIngestionTransitionRef = laterInteraction.createdByTransitionRef;
+  }
+  evidence.push(duplicate);
 }
 
 test("simulator validates the closed request and deterministically preserves material meaning", () => {
@@ -1094,6 +1155,177 @@ test("CP-PROD-ACTIVE rejects coordinated source-identity rewrites before D-001/D
   }
 });
 
+test("CP-PROD-ACTIVE rejects coherent original-ingestion rewrites before D-001/D-002 ingress", async (t) => {
+  const attacks = [
+    ["redelivered consequence retargeted to its binding interaction", (snapshot) => {
+      retargetSharedControlToBinding(snapshot, "consequence");
+    }],
+    ["redelivered reversibility retargeted to its binding interaction", (snapshot) => {
+      retargetSharedControlToBinding(snapshot, "reversibility");
+    }],
+    ["first-interaction and source-relation order rewritten together", (snapshot) => {
+      retargetSharedControlToBinding(snapshot, "consequence");
+    }],
+    ["candidate interaction and ingestion moved after the binding interaction", (snapshot) => {
+      const closure = retargetSharedControlToBinding(snapshot, "consequence");
+      closure.candidateInteraction.createdOrder = closure.bindingInteraction.createdOrder + 1;
+      closure.candidateIngestion.createdOrder = closure.candidateInteraction.createdOrder + 1;
+    }],
+    ["candidate-ingestion bases move with the candidate ingestion", (snapshot) => {
+      const closure = retargetSharedControlToBinding(snapshot, "consequence");
+      closure.candidateInteraction.createdOrder = closure.bindingInteraction.createdOrder + 1;
+      closure.candidateIngestion.createdOrder = closure.candidateInteraction.createdOrder + 1;
+      for (const relation of snapshot.relations.filter((item) => (
+        item.fromRef === closure.candidateIngestion.reference
+          && item.relationKind === "basis"
+      ))) {
+        relation.createdOrder = closure.candidateIngestion.createdOrder;
+        relation.effectiveOrder = closure.candidateIngestion.createdOrder;
+      }
+    }],
+    ["both redelivered controls retargeted together", (snapshot) => {
+      retargetSharedControlToBinding(snapshot, "consequence");
+      retargetSharedControlToBinding(snapshot, "reversibility");
+    }],
+    ["original interaction stripped with matching ingestion input and bases", (snapshot) => {
+      const closure = retargetSharedControlToBinding(snapshot, "consequence");
+      closure.candidateInteraction.inputReferences = closure.candidateInteraction.inputReferences
+        .filter((reference) => reference !== closure.fact.reference);
+      closure.candidateIngestion.inputReferences = [...closure.candidateInteraction.inputReferences];
+      snapshot.relations = snapshot.relations.filter((relation) => !(
+        relation.fromRef === closure.candidateIngestion.reference
+          && relation.toRef === closure.fact.reference
+          && relation.relationKind === "basis"
+      ));
+    }],
+    ["first interaction creator retargeted to another valid-shaped ingestion", (snapshot) => {
+      const closure = sharedControlClosure(snapshot, "consequence");
+      const clone = structuredClone(closure.candidateIngestion);
+      clone.reference = `${clone.reference}-alternate`;
+      closure.candidateInteraction.createdByTransitionRef = clone.reference;
+      snapshot.records.push(clone);
+      for (const relation of snapshot.relations.filter((item) => (
+        item.fromRef === closure.candidateIngestion.reference
+          && item.relationKind === "basis"
+      ))) {
+        snapshot.relations.push({ ...structuredClone(relation), fromRef: clone.reference });
+      }
+    }]
+  ];
+
+  for (const [name, mutate] of attacks) {
+    await t.test(name, () => {
+      const real = createSutBoundary();
+      let corrupt = false;
+      let ingressCalls = 0;
+      const boundary = Object.freeze({
+        ...real,
+        ingestSutVisibleInputs(...args) {
+          ingressCalls += 1;
+          return real.ingestSutVisibleInputs(...args);
+        },
+        captureInspectionSnapshot(runRef) {
+          const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+          if (corrupt) mutate(snapshot);
+          return snapshot;
+        }
+      });
+      const harness = createEvaluationHarness(boundary);
+      const runRef = harness.startRun();
+      activateProductionTrial(harness, runRef);
+      const before = ingressCalls;
+      corrupt = true;
+      assert.throws(
+        () => harness.deliverFocusedDrillInputsIfEligible(
+          runRef, focusedDrillOpeningRecords()
+        ),
+        /CP-PROD-ACTIVE/
+      );
+      assert.equal(ingressCalls, before);
+      assert.equal(real.captureInspectionSnapshot(runRef).records.some((record) => (
+        record.family === "input_fact" && record.payload.occurrenceOrder >= 15
+      )), false);
+    });
+  }
+});
+
+test("CP-PROD-ACTIVE rejects corrupted original-ingestion ledger evidence before ingress", async (t) => {
+  const attacks = [
+    ["firstInteractionRef missing", (evidence) => {
+      delete evidence[0].firstInteractionRef;
+    }],
+    ["firstIngestionTransitionRef missing", (evidence) => {
+      delete evidence[0].firstIngestionTransitionRef;
+    }],
+    ["two bindings claim different original interactions for one retained fact", (
+      evidence, snapshot
+    ) => {
+      appendConflictingBinding(evidence, snapshot, "interaction");
+    }],
+    ["two bindings claim different original ingestions for one retained fact", (
+      evidence, snapshot
+    ) => {
+      appendConflictingBinding(evidence, snapshot, "ingestion");
+    }],
+    ["binding cites a later redelivery interaction", (evidence, snapshot) => {
+      const { entry, laterInteraction } = redeliveredControlEvidence(
+        evidence, snapshot, "consequence"
+      );
+      entry.firstInteractionRef = laterInteraction.reference;
+      entry.firstIngestionTransitionRef = laterInteraction.createdByTransitionRef;
+    }],
+    ["binding cites the right interaction but a later redelivery ingestion", (
+      evidence, snapshot
+    ) => {
+      const { entry, laterInteraction } = redeliveredControlEvidence(
+        evidence, snapshot, "consequence"
+      );
+      entry.firstIngestionTransitionRef = laterInteraction.createdByTransitionRef;
+    }]
+  ];
+
+  for (const [name, mutate] of attacks) {
+    await t.test(name, () => {
+      const real = createSutBoundary();
+      let runRef;
+      let ingressCalls = 0;
+      const boundary = Object.freeze({
+        ...real,
+        ingestSutVisibleInputs(...args) {
+          ingressCalls += 1;
+          return real.ingestSutVisibleInputs(...args);
+        }
+      });
+      const harness = createHarnessForMechanismTests(boundary, {
+        createSourceBindingLedger() {
+          const ledger = createSourceBindingLedger();
+          return Object.freeze({
+            ...ledger,
+            readOnlyEvidence() {
+              const evidence = structuredClone(ledger.readOnlyEvidence());
+              mutate(evidence, real.captureInspectionSnapshot(runRef));
+              return evidence;
+            }
+          });
+        }
+      });
+      runRef = harness.startRun();
+      activateProductionTrial(harness, runRef);
+      const before = ingressCalls;
+      assert.throws(
+        () => harness.deliverFocusedDrillInputsIfEligible(
+          runRef, focusedDrillOpeningRecords()
+        ),
+        /CP-PROD-ACTIVE/
+      );
+      assert.equal(ingressCalls, before);
+      assert.equal(real.captureInspectionSnapshot(runRef).records.some((record) => (
+        record.family === "input_fact" && record.payload.occurrenceOrder >= 15
+      )), false);
+    });
+  }
+});
+
 test("CP-PROD-ACTIVE rejects missing, rebound, duplicated, or changed original bindings", async (t) => {
   const harness = createEvaluationHarness(createSutBoundary());
   const runRef = harness.startRun();
@@ -1173,9 +1405,54 @@ test("failed SUT ingress records no successful evaluation source binding", () =>
   assert.equal(deliveredFacts(harness, runRef)[0].payload.content, changed.data.content);
 });
 
+test("failed post-ingress identity resolution commits no partial source bindings", () => {
+  const real = createSutBoundary();
+  const ledger = createSourceBindingLedger();
+  let corruptInspection = true;
+  let acceptedInputRefs = [];
+  let ingressCalls = 0;
+  const boundary = Object.freeze({
+    ...real,
+    ingestSutVisibleInputs(...args) {
+      ingressCalls += 1;
+      const result = real.ingestSutVisibleInputs(...args);
+      acceptedInputRefs = result.acceptedInputRefs;
+      return result;
+    },
+    captureInspectionSnapshot(runRef) {
+      const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+      if (corruptInspection) {
+        snapshot.records = snapshot.records.filter((record) => (
+          record.reference !== acceptedInputRefs.at(-1)
+        ));
+      }
+      return snapshot;
+    }
+  });
+  const harness = createHarnessForMechanismTests(boundary, {
+    createSourceBindingLedger: () => ledger
+  });
+  const runRef = harness.startRun();
+  const records = productionProposalRecords().slice(0, 2);
+  assert.throws(
+    () => harness.deliverFixtureRecords(runRef, records),
+    /Successful ingress retained fact identity is malformed/
+  );
+  assert.equal(ingressCalls, 1);
+  assert.deepEqual(ledger.readOnlyEvidence(), []);
+
+  corruptInspection = false;
+  assert.equal(harness.deliverFixtureRecords(runRef, records).acceptedInputRefs.length, 2);
+  assert.equal(ingressCalls, 2);
+  assert.equal(ledger.readOnlyEvidence().length, 2);
+});
+
 test("source-binding ledgers preserve replay identity, isolate runs, and clear on end-run", () => {
   const first = createSourceBindingLedger();
   const second = createSourceBindingLedger();
+  const sameDelivery = createSourceBindingLedger();
+  const boundary = createSutBoundary();
+  const runRef = boundary.startRun();
   const input = {
     sourceFactRef: "source_00000000-0000-0000-0000-000000000001",
     kind: "affordance_fact",
@@ -1184,20 +1461,46 @@ test("source-binding ledgers preserve replay identity, isolate runs, and clear o
     direction: "TRIAL-PROD-FOCUS",
     description: "Production-focused practice."
   };
-  const retainedRef = "state_00000000-0000-0000-0000-000000000001";
   first.assertDeliveryCompatible([input]);
-  first.recordSuccessfulIngress([input], [retainedRef]);
+  const firstIngress = boundary.ingestSutVisibleInputs(runRef, { inputs: [input] });
+  first.recordSuccessfulIngress(
+    [input], firstIngress, boundary.captureInspectionSnapshot(runRef)
+  );
+  const original = first.readOnlyEvidence()[0];
   first.assertDeliveryCompatible([structuredClone(input)]);
-  first.recordSuccessfulIngress([structuredClone(input)], [retainedRef]);
+  const redelivery = boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [structuredClone(input)]
+  });
+  first.recordSuccessfulIngress(
+    [structuredClone(input)], redelivery, boundary.captureInspectionSnapshot(runRef)
+  );
   assert.equal(first.readOnlyEvidence().length, 1);
+  assert.notEqual(redelivery.transitionRef, original.firstIngestionTransitionRef);
+  assert.equal(first.readOnlyEvidence()[0].firstInteractionRef, original.firstInteractionRef);
+  assert.equal(
+    first.readOnlyEvidence()[0].firstIngestionTransitionRef,
+    original.firstIngestionTransitionRef
+  );
   assert.equal(Object.isFrozen(first.readOnlyEvidence()[0].projectedMeaning), true);
-  assert.deepEqual(second.readOnlyEvidence(), []);
+  const independentRunRef = boundary.startRun();
+  const independentIngress = boundary.ingestSutVisibleInputs(independentRunRef, {
+    inputs: [structuredClone(input)]
+  });
+  second.recordSuccessfulIngress(
+    [structuredClone(input)], independentIngress,
+    boundary.captureInspectionSnapshot(independentRunRef)
+  );
+  assert.notEqual(second.readOnlyEvidence()[0].firstInteractionRef, original.firstInteractionRef);
+  assert.notEqual(
+    second.readOnlyEvidence()[0].firstIngestionTransitionRef,
+    original.firstIngestionTransitionRef
+  );
   assert.throws(
     () => first.assertDeliveryCompatible([{ ...input, description: "Replacement." }]),
     /cannot be rebound/
   );
   assert.throws(
-    () => second.assertDeliveryCompatible([
+    () => sameDelivery.assertDeliveryCompatible([
       input, { ...input, description: "Same-delivery replacement." }
     ]),
     /cannot rebind/
@@ -1205,6 +1508,22 @@ test("source-binding ledgers preserve replay identity, isolate runs, and clear o
   assert.equal(first.readOnlyEvidence()[0].projectedMeaning.description, input.description);
   first.clear();
   assert.deepEqual(first.readOnlyEvidence(), []);
+
+  let lifecycleLedger;
+  const harness = createHarnessForMechanismTests(createSutBoundary(), {
+    createSourceBindingLedger() {
+      lifecycleLedger = createSourceBindingLedger();
+      return lifecycleLedger;
+    }
+  });
+  const lifecycleRunRef = harness.startRun();
+  harness.deliverFixtureRecords(lifecycleRunRef, [communicationFixtureRecord()]);
+  assert.equal(typeof lifecycleLedger.readOnlyEvidence()[0].firstInteractionRef, "string");
+  assert.equal(
+    typeof lifecycleLedger.readOnlyEvidence()[0].firstIngestionTransitionRef, "string"
+  );
+  harness.endRun(lifecycleRunRef);
+  assert.deepEqual(lifecycleLedger.readOnlyEvidence(), []);
 });
 
 test("focused-drill mismatch remains separate and blocks outcome delivery", () => {

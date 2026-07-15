@@ -623,6 +623,8 @@ function validateRetainedFact(
     || !sourceBinding || retainedBinding !== sourceBinding
     || sourceBinding.sourceFactRef !== fact.sourceFactRef
     || sourceBinding.acceptedInputFactRef !== fact.reference
+    || sourceBinding.firstInteractionRef !== fact.firstInteractionRef
+    || sourceBinding.firstIngestionTransitionRef !== firstIngestion.reference
     || sourceBinding.deliveryOrigin !== fact.origin || sourceBinding.role !== fact.role
     || !isDeepStrictEqual(sourceBinding.projectedMeaning, fact.payload)
     || matchingActors.length !== 1 || matchingActors[0].reference !== actor.reference
@@ -651,9 +653,13 @@ function indexSourceBindingEvidence(evidence) {
   const byRetainedFactRef = new Map();
   for (const entry of evidence) {
     if (!hasExactKeys(entry, [
-      "sourceFactRef", "projectedMeaning", "acceptedInputFactRef", "deliveryOrigin", "role"
+      "sourceFactRef", "projectedMeaning", "acceptedInputFactRef", "firstInteractionRef",
+      "firstIngestionTransitionRef", "deliveryOrigin", "role"
     ]) || typeof entry.sourceFactRef !== "string" || entry.sourceFactRef.length === 0
       || typeof entry.acceptedInputFactRef !== "string" || entry.acceptedInputFactRef.length === 0
+      || typeof entry.firstInteractionRef !== "string" || entry.firstInteractionRef.length === 0
+      || typeof entry.firstIngestionTransitionRef !== "string"
+      || entry.firstIngestionTransitionRef.length === 0
       || !entry.projectedMeaning
       || Object.getPrototypeOf(entry.projectedMeaning) !== Object.prototype
       || entry.projectedMeaning.sourceFactRef !== entry.sourceFactRef
