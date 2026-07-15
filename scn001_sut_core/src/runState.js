@@ -36,6 +36,15 @@ import {
   validateFocusedDrillOutcomeClosure
 } from "./focusedDrill.js";
 import {
+  deriveLaterUseParticipants,
+  LATER_DELAYED_BEHAVIOR,
+  laterUseInputReferences,
+  laterUseRelationPairs,
+  resolveLaterRealizationClosure,
+  validateLaterDispositionClosure,
+  validateLaterUseAssessmentClosure
+} from "./laterUse.js";
+import {
   assertEligibleProductionCandidate,
   classifyProposalResponse,
   PRODUCTION_FOCUSED_TRIAL_DIRECTION,
@@ -343,6 +352,14 @@ export class RunState {
       interaction,
       delayedActivationAssessmentTransitionRef
     );
+    const laterUseTransitionRefs = this.deriveLaterUseDecision(
+      interaction,
+      interactionFacts
+    );
+    const laterRealizationTransitionRef = this.recordLaterUseRealization(
+      interaction,
+      interactionFacts
+    );
     const semanticTransitionRefs = [
       attributionTransitionRef,
       temporalAssessmentTransitionRef,
@@ -361,7 +378,9 @@ export class RunState {
       directCorrectionRealizationTransitionRef,
       delayedCorrectionCandidateTransitionRef,
       delayedActivationAssessmentTransitionRef,
-      activeDelayedTrialTransitionRef
+      activeDelayedTrialTransitionRef,
+      ...laterUseTransitionRefs,
+      laterRealizationTransitionRef
     ].filter(Boolean);
     const processingTransition = this.createTransition(
       "process_interaction_segment",
@@ -456,8 +475,23 @@ export class RunState {
         };
       })
       .filter(Boolean);
+    const laterUseOutputs = [...this.records.values()]
+      .filter((record) => record.family === "later_behavior_disposition")
+      .map((disposition) => {
+        this.validateLaterDispositionClosure(disposition);
+        const realization = this.resolveLaterRealizationClosure(disposition.reference);
+        return realization ? undefined : {
+          kind: "later_delayed_correction_request",
+          outputRef: disposition.createdByTransitionRef,
+          requestedRef: disposition.reference,
+          requestedBehavior: disposition.requestedBehavior,
+          useScope: structuredClone(disposition.useScope)
+        };
+      })
+      .filter(Boolean);
     const outstanding = [
-      ...proposalOutputs, ...focusedDrillOutputs, ...directCorrectionOutputs
+      ...proposalOutputs, ...focusedDrillOutputs, ...directCorrectionOutputs,
+      ...laterUseOutputs
     ];
     if (outstanding.length !== 1) {
       return Object.freeze([]);
@@ -1548,7 +1582,8 @@ export class RunState {
     ));
     if (behaviorFacts.some((fact) => ![
       "focused_drill_behavior_disposition",
-      "direct_current_session_correction_disposition"
+      "direct_current_session_correction_disposition",
+      "later_behavior_disposition"
     ].includes(this.records.get(fact.payload.requestedRef)?.family))) {
       throw new SutStateIntegrityError(
         "Focused-drill realization must target an exact SUT behavior disposition."
@@ -2259,6 +2294,209 @@ export class RunState {
       validateFocusedOutcome: (outcome) => this.validateFocusedDrillOutcomeClosure(outcome),
       resolveDirectRealization: (dispositionRef, expectedFactRef) => (
         this.resolveDirectCorrectionRealizationClosure(dispositionRef, expectedFactRef)
+      )
+    });
+  }
+
+  deriveLaterUseDecision(interaction, interactionFacts) {
+    const participants = deriveLaterUseParticipants({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      interaction,
+      interactionFacts,
+      validateActiveDelayedTrial: (trial) => (
+        this.validateActiveDelayedCorrectionTrialClosure(trial)
+      )
+    });
+    if (!participants) return [];
+    const existing = [...this.records.values()].filter((record) => (
+      record.family === "later_use_applicability"
+      && record.activeTrialRef === participants.activeTrial.reference
+      && record.interactionRef === interaction.reference
+    ));
+    if (existing.length > 1) {
+      throw new SutStateIntegrityError("Later-use applicability is ambiguous.");
+    }
+    if (existing.length === 1) {
+      this.validateLaterUseAssessmentClosure(existing[0]);
+      return [];
+    }
+    const assessment = {
+      reference: createReference("state"),
+      family: "later_use_applicability",
+      origin: "sut",
+      assessmentType: "active_delayed_trial_current_applicability",
+      pathType: participants.pathType,
+      useTarget: "current_later_correction_timing",
+      activeTrialRef: participants.activeTrial.reference,
+      contextRef: participants.context.reference,
+      stateReferenceFactRef: participants.stateReferenceFact.reference,
+      correctionCommunicationRef: participants.communication?.reference ?? null,
+      attributedAssertionRef: participants.assertion?.reference ?? null,
+      controlBasisRefs: {
+        userGoverned: participants.controls.userGoverned.reference,
+        consequence: participants.controls.consequence.reference
+      },
+      applicabilityResult: participants.applicabilityResult,
+      reason: participants.reason,
+      activeScope: structuredClone(participants.activeTrial.activeScope),
+      currentScope: {
+        activity: participants.context.payload.activity,
+        taskMode: participants.context.payload.taskMode,
+        surfaceLabel: participants.context.payload.surfaceLabel,
+        consequence: participants.context.payload.consequence,
+        scenarioDay: participants.context.payload.scenarioDay,
+        sessionId: participants.context.payload.sessionId
+      },
+      selectedBehavior: participants.applicabilityResult === "applicable"
+        ? LATER_DELAYED_BEHAVIOR : null,
+      behaviorInfluence: participants.applicabilityResult === "applicable"
+        ? "permits_bounded_disposition" : "prohibits_delayed_correction_here",
+      statusOrigin: "sut_transition",
+      interactionRef: interaction.reference,
+      createdOrder: this.allocateOrder()
+    };
+    const inputReferences = laterUseInputReferences(participants);
+    const assessmentTransition = this.createTransition(
+      "assess_active_delayed_trial_applicability",
+      inputReferences,
+      [assessment.reference],
+      interaction.reference
+    );
+    assessmentTransition.result = "later_use_applicability_assessed";
+    attachCreatingTransition([assessment], assessmentTransition);
+    this.commitDerivedRecords([assessment], assessmentTransition);
+    for (const [reference, role] of laterUseRelationPairs(participants)) {
+      this.relations.push({
+        relationKind: "applicability",
+        fromRef: assessment.reference,
+        toRef: reference,
+        targetRole: role,
+        effectiveOrder: assessment.createdOrder,
+        createdOrder: assessmentTransition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    if (participants.applicabilityResult !== "applicable") {
+      return [assessmentTransition.reference];
+    }
+    const disposition = {
+      reference: createReference("state"),
+      family: "later_behavior_disposition",
+      origin: "sut",
+      dispositionType: "active_delayed_trial_later_use",
+      activeTrialRef: participants.activeTrial.reference,
+      applicabilityAssessmentRef: assessment.reference,
+      contextRef: participants.context.reference,
+      materialIntent: LATER_DELAYED_BEHAVIOR,
+      requestedBehavior: LATER_DELAYED_BEHAVIOR,
+      behaviorEffect: "apply_only_in_exact_later_spontaneous_context",
+      useScope: structuredClone(assessment.currentScope),
+      globalPolicy: "not_established",
+      durableAdaptation: "unsupported_in_selected_slice",
+      statusOrigin: "sut_transition",
+      interactionRef: interaction.reference,
+      createdOrder: this.allocateOrder()
+    };
+    disposition.effectiveOrder = disposition.createdOrder;
+    const dispositionTransition = this.createTransition(
+      "derive_later_delayed_correction_disposition",
+      [participants.activeTrial.reference, assessment.reference, participants.context.reference],
+      [disposition.reference],
+      interaction.reference
+    );
+    dispositionTransition.result = "later_delayed_correction_disposition_derived";
+    attachCreatingTransition([disposition], dispositionTransition);
+    this.commitDerivedRecords([disposition], dispositionTransition);
+    for (const [reference, role] of [
+      [participants.activeTrial.reference, "applicable_active_trial"],
+      [assessment.reference, "later_use_applicability"],
+      [participants.context.reference, "later_spontaneous_context"]
+    ]) {
+      this.relations.push({
+        relationKind: "basis",
+        fromRef: disposition.reference,
+        toRef: reference,
+        targetRole: role,
+        effectiveOrder: disposition.createdOrder,
+        createdOrder: dispositionTransition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    return [assessmentTransition.reference, dispositionTransition.reference];
+  }
+
+  recordLaterUseRealization(interaction, interactionFacts) {
+    const facts = interactionFacts.filter((fact) => (
+      fact.role === "simulator_behavior_realization"
+      && this.records.get(fact.payload?.requestedRef)?.family === "later_behavior_disposition"
+    ));
+    if (facts.length === 0) return undefined;
+    if (facts.length !== 1 || interactionFacts.length !== 1) {
+      throw new SutStateIntegrityError("Later realization requires one exact fact.");
+    }
+    const fact = facts[0];
+    const disposition = this.validateLaterDispositionClosure(
+      this.records.get(fact.payload.requestedRef)
+    );
+    const existing = this.resolveLaterRealizationClosure(
+      disposition.reference, fact.reference
+    );
+    if (existing) return undefined;
+    const transition = this.createTransition(
+      "record_later_delayed_correction_realization",
+      [disposition.reference, fact.reference, interaction.reference],
+      [],
+      interaction.reference
+    );
+    transition.result = "later_delayed_correction_realization_recorded";
+    this.records.set(transition.reference, transition);
+    this.relations.push({
+      relationKind: "realization",
+      fromRef: fact.reference,
+      toRef: disposition.reference,
+      targetRole: "later_behavior_disposition",
+      effectiveOrder: transition.createdOrder,
+      createdOrder: transition.createdOrder,
+      assertedByRole: "sut"
+    });
+    return transition.reference;
+  }
+
+  validateLaterUseAssessmentClosure(assessment) {
+    return validateLaterUseAssessmentClosure({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      assessment,
+      validateActiveDelayedTrial: (trial) => (
+        this.validateActiveDelayedCorrectionTrialClosure(trial)
+      )
+    });
+  }
+
+  validateLaterDispositionClosure(disposition) {
+    return validateLaterDispositionClosure({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      disposition,
+      validateActiveDelayedTrial: (trial) => (
+        this.validateActiveDelayedCorrectionTrialClosure(trial)
+      )
+    });
+  }
+
+  resolveLaterRealizationClosure(dispositionRef, expectedFactRef) {
+    return resolveLaterRealizationClosure({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      dispositionRef,
+      expectedFactRef,
+      validateLaterDisposition: (disposition) => (
+        this.validateLaterDispositionClosure(disposition)
       )
     });
   }

@@ -7,6 +7,7 @@ import {
 } from "./directCorrectionCheckpoint.js";
 import { findExactDelayedCorrectionCandidate } from "./delayedCandidateCheckpoint.js";
 import { findExactActiveDelayedCorrectionTrial } from "./delayedActiveCheckpoint.js";
+import { findExactLaterRealization, findExactLaterUse } from "./laterUseCheckpoint.js";
 import { findExactActiveProductionTrial } from "./productionActiveCheckpoint.js";
 import { realizeAvailableOutput } from "./simulator.js";
 import { createSimulatorProjector } from "./simulatorProjection.js";
@@ -132,7 +133,8 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
       runTransport.set(runRef, {
         routed: new Map(), projector: createProjector(), nextOrder: 1,
         acceptanceDeliveries: new Map(), focusedOpenDeliveries: new Map(),
-        focusedOutcomeDeliveries: new Map(), directOpenDeliveries: new Map()
+        focusedOutcomeDeliveries: new Map(), directOpenDeliveries: new Map(),
+        laterUseDeliveries: new Map()
       });
       return runRef;
     },
@@ -335,6 +337,59 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
       }]);
     },
 
+    deliverLaterUseInputsIfEligible(runRef, fixtureRecords) {
+      return deliverLaterUseBranch(runRef, fixtureRecords, "canonical_spontaneous_later_use");
+    },
+
+    deliverDrillOptInInputsIfEligible(runRef, fixtureRecords) {
+      return deliverLaterUseBranch(runRef, fixtureRecords, "drill_opt_in_counterfactual");
+    },
+
+    inspectLaterDispositionCheckpoint(runRef) {
+      const closure = findExactLaterUse(
+        sutBoundary.captureInspectionSnapshot(runRef),
+        sourceBindingEvidenceForRun(runRef),
+        "canonical_spontaneous_later_use"
+      );
+      if (!closure) return Object.freeze([]);
+      return deepFreeze([{
+        activeTrialRef: closure.active.trial.reference,
+        applicabilityAssessmentRef: closure.assessment.reference,
+        dispositionRef: closure.disposition.reference,
+        applicabilityResult: closure.assessment.applicabilityResult,
+        requestedBehavior: closure.disposition.requestedBehavior
+      }]);
+    },
+
+    inspectDrillOptInCheckpoint(runRef) {
+      const closure = findExactLaterUse(
+        sutBoundary.captureInspectionSnapshot(runRef),
+        sourceBindingEvidenceForRun(runRef),
+        "drill_opt_in_counterfactual"
+      );
+      if (!closure) return Object.freeze([]);
+      return deepFreeze([{
+        activeTrialRef: closure.active.trial.reference,
+        applicabilityAssessmentRef: closure.assessment.reference,
+        applicabilityResult: closure.assessment.applicabilityResult,
+        reason: closure.assessment.reason
+      }]);
+    },
+
+    inspectLaterRealizationCheckpoint(runRef) {
+      const closure = findExactLaterRealization(
+        sutBoundary.captureInspectionSnapshot(runRef),
+        sourceBindingEvidenceForRun(runRef)
+      );
+      if (!closure) return Object.freeze([]);
+      return deepFreeze([{
+        activeTrialRef: closure.active.trial.reference,
+        dispositionRef: closure.disposition.reference,
+        realizationFactRef: closure.fact.reference,
+        realizationTransitionRef: closure.realizationTransition.reference
+      }]);
+    },
+
     processCurrentInteraction(runRef) {
       return sutBoundary.processCurrentInteraction(runRef);
     },
@@ -411,6 +466,87 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
     if (!ledger) throw new Error(`Unknown or closed evaluation run: ${runRef}.`);
     return ledger.readOnlyEvidence();
   }
+
+  function deliverLaterUseBranch(runRef, fixtureRecords, pathType) {
+    const transport = runTransport.get(runRef);
+    if (!transport) throw new Error(`Unknown or closed evaluation run: ${runRef}.`);
+    const snapshot = sutBoundary.captureInspectionSnapshot(runRef);
+    const active = findExactActiveDelayedCorrectionTrial(
+      snapshot, sourceBindingEvidenceForRun(runRef)
+    );
+    if (!active) return Object.freeze([]);
+    validateLaterUseFixtureSet(fixtureRecords, pathType, active.trial.reference);
+    const key = `${pathType}:${active.trial.reference}`;
+    const prior = transport.laterUseDeliveries.get(key);
+    if (prior) return prior;
+    const result = deliverProjectedFixtureRecords(runRef, fixtureRecords);
+    const frozen = deepFreeze([{
+      activeTrialRef: active.trial.reference,
+      acceptedInputRefs: [...result.acceptedInputRefs]
+    }]);
+    transport.laterUseDeliveries.set(key, frozen);
+    return frozen;
+  }
+}
+
+function validateLaterUseFixtureSet(records, pathType, activeTrialRef) {
+  const canonical = pathType === "canonical_spontaneous_later_use";
+  const ids = canonical
+    ? ["L-001", "L-002", "FC-UGC-001", "FC-CONSEQ-001"]
+    : ["CF2-L-001", "CF2-L-002", "CF2-L-003", "FC-UGC-001", "FC-CONSEQ-001"];
+  if (!Array.isArray(records) || records.length !== ids.length
+    || new Set(records.map((record) => record.fixtureRecordId)).size !== ids.length
+    || ids.some((id) => !records.some((record) => record.fixtureRecordId === id))) {
+    throw new Error("Later-use delivery requires the exact declared bundle.");
+  }
+  const byId = new Map(records.map((record) => [record.fixtureRecordId, record]));
+  const context = byId.get(canonical ? "L-001" : "CF2-L-001");
+  const reference = byId.get(canonical ? "L-002" : "CF2-L-003");
+  const userGoverned = byId.get("FC-UGC-001");
+  const consequence = byId.get("FC-CONSEQ-001");
+  const expectedContext = canonical ? {
+    surfaceLabel: "voice_simulated", activity: "japanese_practice",
+    taskMode: "spontaneous_production", consequence: "low", scenarioDay: 145,
+    sessionId: "spontaneous-outcome-later"
+  } : {
+    surfaceLabel: "voice_simulated", activity: "focused_accuracy_drill",
+    taskMode: "focused_production_drill", consequence: "low", scenarioDay: 145,
+    sessionId: "focused-opt-in-later"
+  };
+  if (context.role !== "context_label" || context.sourceActor !== "fixture-driver"
+    || context.occurrenceOrder !== 30
+    || JSON.stringify(context.data) !== JSON.stringify(expectedContext)
+    || reference.role !== "sut_state_reference"
+    || reference.sourceActor !== "fixture-driver"
+    || reference.occurrenceOrder !== (canonical ? 31 : 32)
+    || reference.data.stateRef !== activeTrialRef
+    || userGoverned?.role !== "fixture_control_fact"
+    || userGoverned.sourceActor !== "fixture-driver"
+    || userGoverned.occurrenceOrder !== 12
+    || JSON.stringify(userGoverned.data) !== JSON.stringify({
+      control: "user_governed_constraints", value: "exhaustive_selected_slice_scope"
+    })
+    || consequence?.role !== "fixture_control_fact"
+    || consequence.sourceActor !== "fixture-driver"
+    || consequence.occurrenceOrder !== 13
+    || JSON.stringify(consequence.data) !== JSON.stringify({
+      control: "consequence", value: "low"
+    })) {
+    throw new Error("Later-use bundle does not preserve exact scope and trial identity.");
+  }
+  if (!canonical) {
+    const communication = byId.get("CF2-L-002");
+    if (communication.role !== "communication_event"
+      || communication.sourceActor !== "synthetic-user-a"
+      || communication.occurrenceOrder !== 31
+      || communication.data.content
+        !== "For this drill, correct me immediately so I can fix each attempt."
+      || communication.data.context !== "focused_production_drill"
+      || communication.data.semanticStatusOrigin !== "unclassified") {
+      throw new Error("Drill opt-in communication is malformed.");
+    }
+  }
+  projectFixtureRecords(records, () => "source_00000000-0000-0000-0000-000000000000");
 }
 
 function validateDirectCorrectionTrajectory(snapshot, focusedPrefix, closure) {

@@ -60,8 +60,9 @@ export function projectFixtureRecord(record, sourceFactRef = createSourceFactRef
   let dataKeys = definition.keys;
   if (record.role === "task_observation" && Object.hasOwn(record.data, "itemRefs")) {
     dataKeys = definition.keys.map((key) => key === "itemRef" ? "itemRefs" : key);
-  } else if (record.role === "context_label" && Object.hasOwn(record.data, "realVoiceStack")) {
-    dataKeys = [...definition.keys, "realVoiceStack", "scenarioDay", "sessionId"];
+  } else if (record.role === "context_label" && Object.hasOwn(record.data, "scenarioDay")) {
+    dataKeys = [...definition.keys, "scenarioDay", "sessionId"];
+    if (Object.hasOwn(record.data, "realVoiceStack")) dataKeys.push("realVoiceStack");
   } else if (record.role === "chronology_fact"
     && Object.hasOwn(record.data, "focusedDrillScenarioDay")) {
     dataKeys = [

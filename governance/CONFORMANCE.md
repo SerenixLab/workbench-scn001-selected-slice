@@ -4,8 +4,8 @@ This ledger is the complete applicability router for the 49 rules pinned by `gov
 
 Later change-specific addenda and independent-review closures record subsequent selected-slice semantic increments without rewriting that historical verification basis. The projected lock and snapshot digests identify the exact canonical governance basis; each change-specific record identifies its own starting commit, scope, and review disposition.
 
-The workbench contains a two-package boundary spine and a stabilized semantic segment. The SUT derives attributed current-user assertions, selected temporal eligibility, scoped recognition/spontaneous-production comparisons, immutable non-active trial candidates, distinct candidate-bound proposal intents, proposal-response binding, nine-check activation assessments, separate active trials, scoped focused-drill instructions and dispositions, exact focused behavior-realization closure, separate short-term focused-drill outcomes, a scoped current spontaneous-session correction/control state, a separate direct turn-completion behavior disposition, exact direct realization closure, a separate formed/non-active delayed-correction candidate, its separate nine-check activation assessment, a separate active delayed-correction trial, and non-activation dispositions from raw run-local source facts and exact typed local relation closure.
-It does not create current-skill facts, later-use applicability or behavior, later outcomes, explanations, or formal evaluation artifacts.
+The workbench contains a two-package boundary spine and a stabilized semantic segment. The SUT derives attributed current-user assertions, selected temporal eligibility, scoped recognition/spontaneous-production comparisons, immutable non-active trial candidates, distinct candidate-bound proposal intents, proposal-response binding, nine-check activation assessments, separate active trials, scoped focused-drill instructions and dispositions, exact focused behavior-realization closure, separate short-term focused-drill outcomes, a scoped current spontaneous-session correction/control state, a separate direct turn-completion behavior disposition, exact direct realization closure, a separate formed/non-active delayed-correction candidate, its separate nine-check activation assessment, a separate active delayed-correction trial, exact later-use applicability, a bounded later behavior disposition, exact later realization closure, and non-activation dispositions from raw run-local source facts and exact typed local relation closure.
+It does not create current-skill facts, later outcomes, explanations, or formal evaluation artifacts.
 There is no formal evaluation record, behavioral-compatibility claim, scoreability claim, milestone-acceptance claim, replay/restore path, or durable repository extraction.
 
 ## Ledger Conventions
@@ -2671,3 +2671,72 @@ With this closure recorded, current applicability/status counts return to:
 * 34 applicable rules `uncovered`;
 * no applicable rule `revalidation-required`;
 * no rule claimed `enforced`.
+
+## Later-Use and Realization Increment
+
+The implementation change based on starting `HEAD` `6728a9d` has one bounded
+purpose: implement `DP-LATER-USE` and `DP-REALIZATION` through exact
+`CP-LATER-DISPOSITION` and `CP-REALIZATION-FIDELITY`, including the mandatory
+`CF-DRILL-OPT-IN` applicability branch, without adding later outcome or
+explanation semantics.
+
+At D10 the SUT consumes the exact same-run active delayed-correction trial,
+declared current context, opaque state reference, user-governed constraint, and
+low-consequence control. It creates a separate applicability assessment rather
+than trusting the active trial as automatically applicable. Only the exact
+canonical spontaneous-production context records `applicable`, selects
+`delay_minor_correction_until_turn_completion`, and creates a separate bounded
+later behavior disposition. The disposition retains no global policy or durable
+adaptation claim and leaves the active trial and formed candidate unchanged.
+
+The later output/simulator seam transports only that SUT-selected disposition.
+The simulator records requested and realized behavior plus fidelity without
+selecting policy. The SUT then records one exact realization relation and one
+recording transition. The already-ingested simulator fact is not claimed as a
+new result of that transition; its original ingestion remains its sole source
+closure, while realization becomes effective at the later recording order.
+Creator pointers, exact transition envelopes, complete relation sets, source
+bindings, original ingestions, interaction input sets, chronology, and
+run-local identities are revalidated by both SUT and passive evaluation code.
+
+`CF-DRILL-OPT-IN` starts from its own same-run active delayed trial and includes
+the exact explicit immediate-correction communication for the focused drill.
+The SUT closes its current attribution, records `not_applicable`, creates no
+delayed disposition or output, and preserves the active trial. Because the
+selected evidence establishes non-applicability but does not establish a new
+lifecycle scope, the implementation does not fabricate narrowing,
+supersession, retirement, or erasure.
+
+Evaluation independently reconstructs the active prefix, later applicability,
+canonical disposition, counterfactual exclusion, and realization fidelity.
+Passive attacks cover stored-label promotion, widened scope, state-reference
+retargeting, missing or undeclared relations, transition-envelope corruption,
+invented counterfactual dispositions, duplicate recording evidence, premature
+relation effect, fidelity mutation, and attribution/ingestion corruption. Every
+inspection attack leaves the real SUT snapshot unchanged. SUT closure attacks
+cover the corresponding retained envelopes, supports, attribution, and
+realization ambiguity without repair or order allocation.
+
+Affected rows are `ENG-BASE-001`, `ENG-CHANGE-001`, `ENG-CLAIM-001`,
+`ENG-CONF-CAPTURE-001`, `ENG-CONF-DEP-001`, `ENG-CONF-HARNESS-001`,
+`ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`, `ENG-CONF-PAYLOAD-002`,
+`ENG-CONF-REF-001`, `ENG-CONF-ROLE-001`, `ENG-CONF-RUN-001`,
+`ENG-CONF-STATE-001`, `ENG-CONF-STATE-002`,
+`ENG-HEALTH-ABSTRACTION-001`, `ENG-HEALTH-API-001`,
+`ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-FAILURE-001`,
+`ENG-HEALTH-STRUCTURE-001`, `ENG-HEALTH-TEST-001`, and
+`ENG-HEALTH-TEST-002`. Applicability, revisions, promotion mappings, public SUT
+methods, runtime dependencies, and active exceptions do not change.
+
+Local verification at implementation completion includes 196 boundary tests,
+100 SUT state tests, every aggregate gate, and all 296 aggregate tests. Fresh
+independent review of the exact Phase 6C commit remains pending. Until it is
+recorded, `ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-ABSTRACTION-001`, and
+`ENG-HEALTH-STRUCTURE-001` return to `uncovered`: 44 rules are applicable, 5
+not applicable, 7 review-only, 37 uncovered, none revalidation-required, and
+none enforced.
+
+No later outcome, canonical-intervention assessment, explanation, formal
+evaluation, scoring, behavioral-compatibility, milestone-completion, broader
+acceptance, obligation-satisfaction, production-readiness, or deployment claim
+is introduced.

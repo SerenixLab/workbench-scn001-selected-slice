@@ -11,6 +11,9 @@ const FOCUSED_DRILL_OUTPUT_KEYS = [
 const DIRECT_CORRECTION_OUTPUT_KEYS = [
   "kind", "outputRef", "requestedRef", "requestedBehavior", "sessionScope"
 ];
+const LATER_DELAYED_OUTPUT_KEYS = [
+  "kind", "outputRef", "requestedRef", "requestedBehavior", "useScope"
+];
 
 export function realizeAvailableOutput(output, occurrenceOrder = 1) {
   if (output?.kind === "proposal_realization_request") {
@@ -22,7 +25,39 @@ export function realizeAvailableOutput(output, occurrenceOrder = 1) {
   if (output?.kind === "direct_current_session_correction_request") {
     return realizeDirectCorrectionOutput(output, occurrenceOrder);
   }
+  if (output?.kind === "later_delayed_correction_request") {
+    return realizeLaterDelayedCorrectionOutput(output, occurrenceOrder);
+  }
   throw new Error("Unsupported SUT realization request kind.");
+}
+
+export function realizeLaterDelayedCorrectionOutput(output, occurrenceOrder = 1) {
+  assertExactKeys(output, LATER_DELAYED_OUTPUT_KEYS, "later delayed-correction request");
+  assertExactKeys(output.useScope, [
+    "activity", "taskMode", "surfaceLabel", "consequence", "scenarioDay", "sessionId"
+  ], "useScope");
+  if (output.kind !== "later_delayed_correction_request"
+    || output.requestedBehavior !== "delay_minor_correction_until_turn_completion"
+    || output.useScope.activity !== "japanese_practice"
+    || output.useScope.taskMode !== "spontaneous_production"
+    || output.useScope.surfaceLabel !== "voice_simulated"
+    || output.useScope.consequence !== "low"
+    || output.useScope.scenarioDay !== 145
+    || output.useScope.sessionId !== "spontaneous-outcome-later") {
+    throw new Error("Unsupported later delayed-correction request material.");
+  }
+  return Object.freeze({
+    simulatorRecordId: `simulator_${randomUUID()}`,
+    role: "simulated_behavior_realization_fact",
+    sourceActor: "simulated-dependency",
+    occurrenceOrder,
+    requestedOutputRef: output.outputRef,
+    requestedRef: output.requestedRef,
+    requestedBehavior: output.requestedBehavior,
+    realizedBehavior: output.requestedBehavior,
+    fidelity: "match",
+    mismatchOrigin: null
+  });
 }
 
 export function realizeProposalOutput(output, occurrenceOrder = 1) {

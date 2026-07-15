@@ -133,7 +133,10 @@ function assertBehaviorSimulatorRecord(record) {
     || typeof record.simulatorRecordId !== "string" || record.simulatorRecordId.length === 0
     || record.sourceActor !== "simulated-dependency"
     || !Number.isSafeInteger(record.occurrenceOrder) || record.occurrenceOrder < 1
-    || !["immediate_correction", "turn_completion_correction"].includes(
+    || ![
+      "immediate_correction", "turn_completion_correction",
+      "delay_minor_correction_until_turn_completion"
+    ].includes(
       record.requestedBehavior
     )
     || typeof record.realizedBehavior !== "string" || record.realizedBehavior.length === 0

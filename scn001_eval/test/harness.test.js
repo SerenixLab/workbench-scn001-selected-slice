@@ -413,6 +413,44 @@ function completeDirectCorrection(harness, runRef) {
   harness.processCurrentInteraction(runRef);
 }
 
+function laterUseRecords(activeTrialRef, counterfactual = false) {
+  const definitions = counterfactual ? [
+    ["CF2-L-001", "context_label", "fixture-driver", 30, {
+      surfaceLabel: "voice_simulated", activity: "focused_accuracy_drill",
+      taskMode: "focused_production_drill", consequence: "low", scenarioDay: 145,
+      sessionId: "focused-opt-in-later"
+    }],
+    ["CF2-L-002", "communication_event", "synthetic-user-a", 31, {
+      content: "For this drill, correct me immediately so I can fix each attempt.",
+      context: "focused_production_drill", semanticStatusOrigin: "unclassified"
+    }],
+    ["CF2-L-003", "sut_state_reference", "fixture-driver", 32, {
+      stateRef: activeTrialRef
+    }]
+  ] : [
+    ["L-001", "context_label", "fixture-driver", 30, {
+      surfaceLabel: "voice_simulated", activity: "japanese_practice",
+      taskMode: "spontaneous_production", consequence: "low", scenarioDay: 145,
+      sessionId: "spontaneous-outcome-later"
+    }],
+    ["L-002", "sut_state_reference", "fixture-driver", 31, {
+      stateRef: activeTrialRef
+    }]
+  ];
+  definitions.push(
+    ["FC-UGC-001", "fixture_control_fact", "fixture-driver", 12, {
+      control: "user_governed_constraints", value: "exhaustive_selected_slice_scope"
+    }],
+    ["FC-CONSEQ-001", "fixture_control_fact", "fixture-driver", 13, {
+      control: "consequence", value: "low"
+    }]
+  );
+  return definitions.map(([fixtureRecordId, role, sourceActor, occurrenceOrder, data]) => ({
+    fixtureRecordId, role, sourceActor, occurrenceOrder, data,
+    oracleAnnotations: { checkpoint: counterfactual ? "CF-DRILL-OPT-IN" : "CP-LATER-DISPOSITION" }
+  }));
+}
+
 function sourceBindingEvidenceFrom(snapshot) {
   const records = new Map(snapshot.records.map((record) => [record.reference, record]));
   return snapshot.records
@@ -1149,6 +1187,316 @@ test("CP-DELAY-ACTIVE rejects malformed assessment and trial closure passively",
       corrupt = false;
       assert.deepEqual(real.captureInspectionSnapshot(runRef), before);
     });
+  }
+});
+
+test("formal later-use path rechecks scope, emits, and records exact realization", () => {
+  const harness = createEvaluationHarness(createSutBoundary());
+  const runRef = harness.startRun();
+  completeDirectCorrection(harness, runRef);
+  const active = harness.inspectActiveDelayedCorrectionCheckpoint(runRef)[0];
+  const delivery = harness.deliverLaterUseInputsIfEligible(
+    runRef, laterUseRecords(active.activeTrialRef)
+  );
+  assert.equal(delivery.length, 1);
+  harness.processCurrentInteraction(runRef);
+  const disposition = harness.inspectLaterDispositionCheckpoint(runRef);
+  assert.equal(disposition.length, 1);
+  assert.equal(disposition[0].activeTrialRef, active.activeTrialRef);
+  assert.equal(disposition[0].applicabilityResult, "applicable");
+  assert.equal(
+    disposition[0].requestedBehavior, "delay_minor_correction_until_turn_completion"
+  );
+  const outputs = harness.emitAvailableOutputs(runRef);
+  assert.equal(outputs.length, 1);
+  assert.equal(outputs[0].kind, "later_delayed_correction_request");
+  harness.realizeAvailableOutputs(runRef);
+  assert.deepEqual(harness.inspectLaterRealizationCheckpoint(runRef), []);
+  harness.processCurrentInteraction(runRef);
+  const realized = harness.inspectLaterRealizationCheckpoint(runRef);
+  assert.equal(realized.length, 1);
+  assert.equal(realized[0].activeTrialRef, active.activeTrialRef);
+  assert.equal(realized[0].dispositionRef, disposition[0].dispositionRef);
+  assert.equal(Object.isFrozen(realized), true);
+});
+
+test("CF-DRILL-OPT-IN keeps the same active trial but forbids delayed use", () => {
+  const harness = createEvaluationHarness(createSutBoundary());
+  const runRef = harness.startRun();
+  completeDirectCorrection(harness, runRef);
+  const active = harness.inspectActiveDelayedCorrectionCheckpoint(runRef)[0];
+  const delivery = harness.deliverDrillOptInInputsIfEligible(
+    runRef, laterUseRecords(active.activeTrialRef, true)
+  );
+  assert.equal(delivery.length, 1);
+  harness.processCurrentInteraction(runRef);
+  const checkpoint = harness.inspectDrillOptInCheckpoint(runRef);
+  assert.equal(checkpoint.length, 1);
+  assert.equal(checkpoint[0].activeTrialRef, active.activeTrialRef);
+  assert.equal(checkpoint[0].applicabilityResult, "not_applicable");
+  assert.equal(
+    checkpoint[0].reason, "focused_drill_explicit_immediate_correction_excluded"
+  );
+  assert.deepEqual(harness.emitAvailableOutputs(runRef), []);
+  assert.deepEqual(harness.inspectLaterDispositionCheckpoint(runRef), []);
+});
+
+test("CP-LATER-DISPOSITION rejects malformed closure without mutating SUT state", async (t) => {
+  const attacks = [
+    ["stored applicability result", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "later_use_applicability"
+      )).applicabilityResult = "not_applicable";
+    }],
+    ["broadened current scope", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "later_use_applicability"
+      )).currentScope.taskMode = "any_production";
+    }],
+    ["retargeted state reference", (snapshot) => {
+      const assessment = snapshot.records.find((record) => (
+        record.family === "later_use_applicability"
+      ));
+      const stateRef = snapshot.records.find((record) => (
+        record.reference === assessment.stateReferenceFactRef
+      ));
+      stateRef.payload.stateRef = snapshot.records.find((record) => (
+        record.family === "active_trial"
+      )).reference;
+    }],
+    ["missing applicability relation", (snapshot) => {
+      const assessment = snapshot.records.find((record) => (
+        record.family === "later_use_applicability"
+      ));
+      snapshot.relations.splice(snapshot.relations.findIndex((relation) => (
+        relation.fromRef === assessment.reference && relation.relationKind === "applicability"
+      )), 1);
+    }],
+    ["undeclared applicability support", (snapshot) => {
+      const assessment = snapshot.records.find((record) => (
+        record.family === "later_use_applicability"
+      ));
+      const relation = snapshot.relations.find((candidate) => (
+        candidate.fromRef === assessment.reference
+        && candidate.relationKind === "applicability"
+      ));
+      snapshot.relations.push(structuredClone(relation));
+    }],
+    ["assessment transition envelope", (snapshot) => {
+      const assessment = snapshot.records.find((record) => (
+        record.family === "later_use_applicability"
+      ));
+      snapshot.records.find((record) => (
+        record.reference === assessment.createdByTransitionRef
+      )).oracleResult = "applicable";
+    }],
+    ["current ingestion envelope", (snapshot) => {
+      const assessment = snapshot.records.find((record) => (
+        record.family === "later_use_applicability"
+      ));
+      snapshot.records.find((record) => (
+        record.reference === assessment.interactionRef
+      )).oracleBranch = "later_use";
+    }],
+    ["disposition scope", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "later_behavior_disposition"
+      )).useScope.activity = "all_practice";
+    }],
+    ["disposition transition result", (snapshot) => {
+      const disposition = snapshot.records.find((record) => (
+        record.family === "later_behavior_disposition"
+      ));
+      snapshot.records.find((record) => (
+        record.reference === disposition.createdByTransitionRef
+      )).result = "accepted";
+    }]
+  ];
+  for (const [name, attack] of attacks) {
+    await t.test(name, () => {
+      const real = createSutBoundary();
+      let corrupt = false;
+      const boundary = Object.freeze({
+        ...real,
+        captureInspectionSnapshot(runRef) {
+          const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+          if (corrupt) attack(snapshot);
+          return snapshot;
+        }
+      });
+      const harness = createEvaluationHarness(boundary);
+      const runRef = harness.startRun();
+      completeDirectCorrection(harness, runRef);
+      const active = harness.inspectActiveDelayedCorrectionCheckpoint(runRef)[0];
+      harness.deliverLaterUseInputsIfEligible(runRef, laterUseRecords(active.activeTrialRef));
+      harness.processCurrentInteraction(runRef);
+      const before = real.captureInspectionSnapshot(runRef);
+      corrupt = true;
+      assert.throws(() => harness.inspectLaterDispositionCheckpoint(runRef));
+      corrupt = false;
+      assert.deepEqual(real.captureInspectionSnapshot(runRef), before);
+    });
+  }
+});
+
+test("later-use fixture validation rejects control and chronology substitutions before ingress", () => {
+  for (const attack of [
+    (records) => { records.find((record) => (
+      record.fixtureRecordId === "FC-UGC-001"
+    )).data.control = "consequence"; },
+    (records) => { records.find((record) => (
+      record.fixtureRecordId === "L-001"
+    )).occurrenceOrder = 29; },
+    (records) => { records.find((record) => (
+      record.fixtureRecordId === "L-002"
+    )).occurrenceOrder = 32; }
+  ]) {
+    const real = createSutBoundary();
+    const harness = createEvaluationHarness(real);
+    const runRef = harness.startRun();
+    completeDirectCorrection(harness, runRef);
+    const active = harness.inspectActiveDelayedCorrectionCheckpoint(runRef)[0];
+    const records = laterUseRecords(active.activeTrialRef);
+    attack(records);
+    const before = real.captureInspectionSnapshot(runRef);
+    assert.throws(() => harness.deliverLaterUseInputsIfEligible(runRef, records));
+    assert.deepEqual(real.captureInspectionSnapshot(runRef), before);
+  }
+});
+
+test("CF-DRILL-OPT-IN rejects promotion and invented disposition passively", async (t) => {
+  const attacks = [
+    ["promoted applicability", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "later_use_applicability"
+      )).applicabilityResult = "applicable";
+    }],
+    ["invented delayed disposition", (snapshot) => {
+      const assessment = snapshot.records.find((record) => (
+        record.family === "later_use_applicability"
+      ));
+      snapshot.records.push({
+        reference: "state_00000000-0000-0000-0000-000000000001",
+        family: "later_behavior_disposition", interactionRef: assessment.interactionRef
+      });
+    }]
+  ];
+  for (const [name, attack] of attacks) {
+    await t.test(name, () => {
+      const real = createSutBoundary();
+      let corrupt = false;
+      const boundary = Object.freeze({
+        ...real,
+        captureInspectionSnapshot(runRef) {
+          const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+          if (corrupt) attack(snapshot);
+          return snapshot;
+        }
+      });
+      const harness = createEvaluationHarness(boundary);
+      const runRef = harness.startRun();
+      completeDirectCorrection(harness, runRef);
+      const active = harness.inspectActiveDelayedCorrectionCheckpoint(runRef)[0];
+      harness.deliverDrillOptInInputsIfEligible(
+        runRef, laterUseRecords(active.activeTrialRef, true)
+      );
+      harness.processCurrentInteraction(runRef);
+      const before = real.captureInspectionSnapshot(runRef);
+      corrupt = true;
+      assert.throws(() => harness.inspectDrillOptInCheckpoint(runRef));
+      corrupt = false;
+      assert.deepEqual(real.captureInspectionSnapshot(runRef), before);
+    });
+  }
+});
+
+test("CP-REALIZATION-FIDELITY rejects later-use ambiguity passively", async (t) => {
+  const attacks = [
+    ["recording transition claims fact creation", (snapshot) => {
+      const fact = snapshot.records.find((record) => (
+        record.role === "simulator_behavior_realization"
+        && record.payload.requestedBehavior === "delay_minor_correction_until_turn_completion"
+      ));
+      snapshot.records.find((record) => (
+        record.transitionKind === "record_later_delayed_correction_realization"
+      )).resultReferences = [fact.reference];
+    }],
+    ["premature realization relation", (snapshot) => {
+      const fact = snapshot.records.find((record) => (
+        record.role === "simulator_behavior_realization"
+        && record.payload.requestedBehavior === "delay_minor_correction_until_turn_completion"
+      ));
+      snapshot.relations.find((relation) => (
+        relation.relationKind === "realization"
+        && relation.fromRef === fact.reference
+      )).effectiveOrder = fact.createdOrder;
+    }],
+    ["competing recording transition", (snapshot) => {
+      const original = snapshot.records.find((record) => (
+        record.transitionKind === "record_later_delayed_correction_realization"
+      ));
+      snapshot.records.push({
+        ...structuredClone(original),
+        reference: "transition_00000000-0000-0000-0000-000000000001"
+      });
+    }],
+    ["mismatched simulator fact", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.role === "simulator_behavior_realization"
+        && record.payload.requestedBehavior === "delay_minor_correction_until_turn_completion"
+      )).payload.mismatchOrigin = "simulated_dependency";
+    }]
+  ];
+  for (const [name, attack] of attacks) {
+    await t.test(name, () => {
+      const real = createSutBoundary();
+      let corrupt = false;
+      const boundary = Object.freeze({
+        ...real,
+        captureInspectionSnapshot(runRef) {
+          const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+          if (corrupt) attack(snapshot);
+          return snapshot;
+        }
+      });
+      const harness = createEvaluationHarness(boundary);
+      const runRef = harness.startRun();
+      completeDirectCorrection(harness, runRef);
+      const active = harness.inspectActiveDelayedCorrectionCheckpoint(runRef)[0];
+      harness.deliverLaterUseInputsIfEligible(runRef, laterUseRecords(active.activeTrialRef));
+      harness.processCurrentInteraction(runRef);
+      harness.emitAvailableOutputs(runRef);
+      harness.realizeAvailableOutputs(runRef);
+      harness.processCurrentInteraction(runRef);
+      const before = real.captureInspectionSnapshot(runRef);
+      corrupt = true;
+      assert.throws(() => harness.inspectLaterRealizationCheckpoint(runRef));
+      corrupt = false;
+      assert.deepEqual(real.captureInspectionSnapshot(runRef), before);
+    });
+  }
+});
+
+test("later-use applicability, disposition, and realization identities are run-isolated", () => {
+  const harness = createEvaluationHarness(createSutBoundary());
+  const closures = [harness.startRun(), harness.startRun()].map((runRef) => {
+    completeDirectCorrection(harness, runRef);
+    const active = harness.inspectActiveDelayedCorrectionCheckpoint(runRef)[0];
+    harness.deliverLaterUseInputsIfEligible(runRef, laterUseRecords(active.activeTrialRef));
+    harness.processCurrentInteraction(runRef);
+    const disposition = harness.inspectLaterDispositionCheckpoint(runRef)[0];
+    harness.emitAvailableOutputs(runRef);
+    harness.realizeAvailableOutputs(runRef);
+    harness.processCurrentInteraction(runRef);
+    const realization = harness.inspectLaterRealizationCheckpoint(runRef)[0];
+    assert.deepEqual(harness.inspectLaterRealizationCheckpoint(runRef), [realization]);
+    return { disposition, realization };
+  });
+  for (const field of [
+    "applicabilityAssessmentRef", "dispositionRef"
+  ]) assert.notEqual(closures[0].disposition[field], closures[1].disposition[field]);
+  for (const field of ["realizationFactRef", "realizationTransitionRef"]) {
+    assert.notEqual(closures[0].realization[field], closures[1].realization[field]);
   }
 });
 

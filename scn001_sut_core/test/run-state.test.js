@@ -487,6 +487,47 @@ function directCorrectionRealizedRun(overrides = {}) {
   return { ...decision, input, fact };
 }
 
+function laterUseRun({ counterfactual = false } = {}) {
+  const completed = directCorrectionRealizedRun();
+  const activeTrial = [...completed.run.records.values()].find(
+    (record) => record.family === "active_delayed_correction_trial"
+  );
+  const controls = [...completed.run.records.values()].filter((record) => (
+    record.family === "input_fact" && record.role === "fixture_control_fact"
+    && ["user_governed_constraints", "consequence"].includes(record.payload.control)
+  )).map((record) => record.payload);
+  const context = {
+    sourceFactRef: sourceRef(), kind: "context_label", sourceActor: "fixture-driver",
+    occurrenceOrder: 30, surfaceLabel: "voice_simulated",
+    activity: counterfactual ? "focused_accuracy_drill" : "japanese_practice",
+    taskMode: counterfactual ? "focused_production_drill" : "spontaneous_production",
+    consequence: "low", scenarioDay: 145,
+    sessionId: counterfactual ? "focused-opt-in-later" : "spontaneous-outcome-later"
+  };
+  const reference = {
+    sourceFactRef: sourceRef(), kind: "state_reference", sourceActor: "fixture-driver",
+    occurrenceOrder: 31, stateRef: activeTrial.reference
+  };
+  const communication = counterfactual ? communicationInput({
+    occurrenceOrder: 32,
+    content: "For this drill, correct me immediately so I can fix each attempt.",
+    context: "focused_production_drill", semanticStatusOrigin: "unclassified"
+  }) : undefined;
+  const inputs = [context, reference, ...(communication ? [communication] : []), ...controls];
+  completed.run.assertSourceFactConsistency(inputs);
+  completed.run.ingest(inputs);
+  completed.run.processCurrentInteraction();
+  return {
+    ...completed, activeTrial, inputs, context, reference, communication,
+    assessment: [...completed.run.records.values()].find((record) => (
+      record.family === "later_use_applicability"
+    )),
+    laterDisposition: [...completed.run.records.values()].find((record) => (
+      record.family === "later_behavior_disposition"
+    ))
+  };
+}
+
 function cloneRetainedTransition(run, transition, overrides = {}) {
   const clone = {
     ...structuredClone(transition),
@@ -3504,6 +3545,165 @@ test("delayed candidate requires the completed focused and direct realization li
     );
     assert.deepEqual(retainedMutationSnapshot(completed.run), before);
   }
+});
+
+test("later spontaneous use rechecks applicability before selecting delayed correction", () => {
+  const later = laterUseRun();
+  assert.ok(later.assessment);
+  assert.ok(later.laterDisposition);
+  later.run.validateLaterUseAssessmentClosure(later.assessment);
+  later.run.validateLaterDispositionClosure(later.laterDisposition);
+  assert.equal(later.assessment.activeTrialRef, later.activeTrial.reference);
+  assert.equal(later.assessment.applicabilityResult, "applicable");
+  assert.equal(
+    later.assessment.selectedBehavior, "delay_minor_correction_until_turn_completion"
+  );
+  assert.equal(later.laterDisposition.activeTrialRef, later.activeTrial.reference);
+  assert.equal(later.laterDisposition.globalPolicy, "not_established");
+  const outputs = later.run.emitAvailableOutputs();
+  assert.equal(outputs.length, 1);
+  assert.equal(outputs[0].kind, "later_delayed_correction_request");
+  assert.equal(outputs[0].requestedRef, later.laterDisposition.reference);
+  const realization = {
+    sourceFactRef: sourceRef(), kind: "simulator_behavior_realization",
+    sourceActor: "simulated-dependency", occurrenceOrder: 33,
+    requestedRef: later.laterDisposition.reference,
+    requestedBehavior: "delay_minor_correction_until_turn_completion",
+    realizedBehavior: "delay_minor_correction_until_turn_completion",
+    fidelity: "match", mismatchOrigin: null
+  };
+  later.run.assertSourceFactConsistency([realization]);
+  later.run.ingest([realization]);
+  later.run.processCurrentInteraction();
+  const fact = [...later.run.records.values()].find((record) => (
+    record.role === "simulator_behavior_realization"
+    && record.payload.requestedRef === later.laterDisposition.reference
+  ));
+  const closure = later.run.resolveLaterRealizationClosure(
+    later.laterDisposition.reference, fact.reference
+  );
+  assert.equal(closure.fact.reference, fact.reference);
+  assert.deepEqual(later.run.emitAvailableOutputs(), []);
+  assert.equal([...later.run.records.values()].some((record) => (
+    ["later_outcome", "explanation_support"].includes(record.family)
+  )), false);
+});
+
+test("drill opt-in makes the same active delayed trial explicitly inapplicable", () => {
+  const later = laterUseRun({ counterfactual: true });
+  assert.ok(later.assessment);
+  later.run.validateLaterUseAssessmentClosure(later.assessment);
+  assert.equal(later.assessment.activeTrialRef, later.activeTrial.reference);
+  assert.equal(later.assessment.applicabilityResult, "not_applicable");
+  assert.equal(
+    later.assessment.reason, "focused_drill_explicit_immediate_correction_excluded"
+  );
+  assert.equal(later.assessment.selectedBehavior, null);
+  assert.equal(later.assessment.behaviorInfluence, "prohibits_delayed_correction_here");
+  assert.equal(later.laterDisposition, undefined);
+  assert.deepEqual(later.run.emitAvailableOutputs(), []);
+  assert.equal(later.activeTrial.currentStatus, "active");
+  assert.equal([...later.run.records.values()].some((record) => (
+    ["narrowing", "supersession", "retirement"].includes(record.family)
+  )), false);
+});
+
+test("later-use closures reject envelope, attribution, and support corruption passively", () => {
+  const canonicalAttacks = [
+    ({ assessment }) => { assessment.oracleResult = "applicable"; },
+    ({ run, assessment }) => {
+      run.records.get(assessment.createdByTransitionRef).oracleResult = "applicable";
+    },
+    ({ run, laterDisposition }) => {
+      run.records.get(laterDisposition.createdByTransitionRef).result = "accepted";
+    },
+    ({ run, assessment }) => {
+      const relation = run.relations.find((candidate) => (
+        candidate.fromRef === assessment.reference
+        && candidate.relationKind === "applicability"
+      ));
+      run.relations.push(structuredClone(relation));
+    },
+    ({ run, assessment }) => {
+      run.records.get(assessment.interactionRef).oracleBranch = "later_use";
+    }
+  ];
+  for (const attack of canonicalAttacks) {
+    const later = laterUseRun();
+    attack(later);
+    const before = retainedMutationSnapshot(later.run);
+    assert.throws(() => later.run.emitAvailableOutputs());
+    assert.deepEqual(retainedMutationSnapshot(later.run), before);
+  }
+
+  const counterfactual = laterUseRun({ counterfactual: true });
+  const assertion = [...counterfactual.run.records.values()].find((record) => (
+    record.family === "attributed_assertion"
+    && record.interactionRef === counterfactual.assessment.interactionRef
+  ));
+  assertion.epistemicStatus = "accepted_user_preference";
+  const before = retainedMutationSnapshot(counterfactual.run);
+  assert.throws(() => counterfactual.run.validateLaterUseAssessmentClosure(
+    counterfactual.assessment
+  ));
+  assert.deepEqual(retainedMutationSnapshot(counterfactual.run), before);
+});
+
+test("later realization has one ingestion creator and rejects competing evidence", () => {
+  const later = laterUseRun();
+  const input = {
+    sourceFactRef: sourceRef(), kind: "simulator_behavior_realization",
+    sourceActor: "simulated-dependency", occurrenceOrder: 33,
+    requestedRef: later.laterDisposition.reference,
+    requestedBehavior: "delay_minor_correction_until_turn_completion",
+    realizedBehavior: "delay_minor_correction_until_turn_completion",
+    fidelity: "match", mismatchOrigin: null
+  };
+  later.run.assertSourceFactConsistency([input]);
+  later.run.ingest([input]);
+  later.run.processCurrentInteraction();
+  const fact = [...later.run.records.values()].find((record) => (
+    record.role === "simulator_behavior_realization"
+    && record.payload.requestedRef === later.laterDisposition.reference
+  ));
+  const transition = [...later.run.records.values()].find((record) => (
+    record.transitionKind === "record_later_delayed_correction_realization"
+  ));
+  const relation = later.run.relations.find((candidate) => (
+    candidate.relationKind === "realization" && candidate.fromRef === fact.reference
+  ));
+  assert.deepEqual(transition.resultReferences, []);
+  assert.notEqual(fact.createdByTransitionRef, transition.reference);
+  assert.equal(relation.effectiveOrder, transition.createdOrder);
+  cloneRetainedTransition(later.run, transition);
+  const before = retainedMutationSnapshot(later.run);
+  assert.throws(() => later.run.resolveLaterRealizationClosure(
+    later.laterDisposition.reference, fact.reference
+  ));
+  assert.deepEqual(retainedMutationSnapshot(later.run), before);
+
+  const partial = laterUseRun();
+  const partialInput = {
+    ...input, sourceFactRef: sourceRef(), requestedRef: partial.laterDisposition.reference
+  };
+  partial.run.assertSourceFactConsistency([partialInput]);
+  partial.run.ingest([partialInput]);
+  const partialFact = [...partial.run.records.values()].find((record) => (
+    record.role === "simulator_behavior_realization"
+    && record.payload.requestedRef === partial.laterDisposition.reference
+  ));
+  const ingestion = partial.run.records.get(
+    partial.run.records.get(partialFact.firstInteractionRef).createdByTransitionRef
+  );
+  cloneRetainedTransition(partial.run, ingestion, {
+    transitionKind: "record_later_delayed_correction_realization",
+    inputReferences: [partial.laterDisposition.reference],
+    resultReferences: [],
+    result: "partial_claim"
+  });
+  const partialBefore = retainedMutationSnapshot(partial.run);
+  assert.throws(() => partial.run.processCurrentInteraction());
+  assert.deepEqual(retainedMutationSnapshot(partial.run), partialBefore);
 });
 
 test("direct closure attacks fail without allocating order or repairing state", () => {

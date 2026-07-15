@@ -52,10 +52,13 @@ const inputValidators = {
   context_label: (input, path) => {
     assertCommonInputFields(input, path);
     const directContext = Object.hasOwn(input, "realVoiceStack");
+    const timedContext = directContext
+      || Object.hasOwn(input, "scenarioDay") || Object.hasOwn(input, "sessionId");
     assertExactKeys(input, [
       "sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "surfaceLabel",
       "activity", "taskMode", "consequence",
-      ...(directContext ? ["realVoiceStack", "scenarioDay", "sessionId"] : [])
+      ...(directContext ? ["realVoiceStack"] : []),
+      ...(timedContext ? ["scenarioDay", "sessionId"] : [])
     ], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
@@ -63,8 +66,8 @@ const inputValidators = {
     assertString(input.activity, `${path}.activity`);
     assertString(input.taskMode, `${path}.taskMode`);
     assertString(input.consequence, `${path}.consequence`);
-    if (directContext) {
-      assertString(input.realVoiceStack, `${path}.realVoiceStack`);
+    if (directContext) assertString(input.realVoiceStack, `${path}.realVoiceStack`);
+    if (timedContext) {
       assertNonNegativeInteger(input.scenarioDay, `${path}.scenarioDay`);
       assertString(input.sessionId, `${path}.sessionId`);
     }
