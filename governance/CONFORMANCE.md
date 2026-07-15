@@ -2622,3 +2622,52 @@ No later-use applicability, later behavior disposition or realization, outcome,
 explanation, formal evaluation, scoring, compatibility, milestone completion,
 broader acceptance, obligation-satisfaction, production-readiness, or deployment
 claim is introduced.
+
+## Delayed-Correction Activation Independent Review Closure
+
+On 2026-07-15, fresh independent ChatGPT review examined the corrected exact
+Phase 6B stack `d9d76df..a355962`. The earlier review of
+`d9d76df..4cf6af5` remains **blocking / failed** because evaluation accepted a
+competing retained evaluation-basis fact that the SUT rejected.
+
+Independent review outcome for corrected stack `d9d76df..a355962`:
+**pass with no further blocking finding**.
+
+The reviewer reran the exact public-boundary competing-retention reproduction.
+`CP-DELAY-ACTIVE` rejected it as malformed and the real retained SUT snapshot
+remained unchanged. Review confirmed that:
+
+* the exact same immutable delayed candidate is assessed and activated;
+* all nine checks are independently recomputed with SUT/evaluation parity;
+* no second approval or direct user-response basis is used, and V-003 remains
+  correction evidence rather than future-trial approval;
+* retention basis has exact source closure and global singleton identity;
+* candidate, assessment, and trial creator pointers equal their unique creators;
+* assessment/trial transition envelopes and full outbound relation sets are
+  exact, so undeclared approval, support, or basis edges fail closed;
+* the active trial has exact ancestry to the candidate and assessment;
+* replay is non-duplicating and all three identities remain isolated by run;
+* the direct and candidate checkpoints remain valid after activation; and
+* no later use, outcome, explanation, formal evidence, or scoring artifact is
+  introduced.
+
+Independent verification reported 86 focused hostile checks, 174 boundary
+tests, and all 270 aggregate tests passing. `git diff --check
+d9d76df..a355962` passed and the reviewed worktree was clean.
+
+This is the qualifying independent review outcome for
+`ENG-HEALTH-CHANGE-001 R2`, `ENG-HEALTH-ABSTRACTION-001 R2`, and
+`ENG-HEALTH-STRUCTURE-001 R2` for Phase 6B. It also passes the bounded hostile
+regressions under `ENG-HEALTH-TEST-001 R2`, `ENG-HEALTH-TEST-002 R2`, and
+`ENG-HEALTH-FAILURE-001 R2`. It does not establish automated enforcement,
+protected required-check configuration, formal evaluation, behavioral
+compatibility, scoreability, milestone completion, broader acceptance,
+obligation satisfaction, production readiness, or deployment.
+
+With this closure recorded, current applicability/status counts return to:
+
+* 44 rules `applicable` and 5 `not-applicable`;
+* 10 applicable rules `review-only`;
+* 34 applicable rules `uncovered`;
+* no applicable rule `revalidation-required`;
+* no rule claimed `enforced`.
