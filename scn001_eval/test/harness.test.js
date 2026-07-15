@@ -1695,6 +1695,15 @@ test("CP-EXPLANATION rejects missing provenance and unsupported claims passively
         (record) => record.reference === assessment.createdByTransitionRef
       ).resultReferences.push(assessment.reference);
     }],
+    ["duplicate co-created stale distractor result", (snapshot) => {
+      const distractor = snapshot.records.find((record) => (
+        record.family === "temporal_eligibility_assessment"
+        && record.dimension === "unrelated_dimension"
+      ));
+      snapshot.records.find(
+        (record) => record.reference === distractor.createdByTransitionRef
+      ).resultReferences.push(distractor.reference);
+    }],
     ["focused instruction substituted", (snapshot) => {
       const support = snapshot.records.find(
         (record) => record.family === "explanation_support"

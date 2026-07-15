@@ -4045,6 +4045,15 @@ test("explanation closure rejects lineage gaps, hidden reasoning, and creator am
         assessment.reference
       );
     },
+    ({ run }) => {
+      const distractor = [...run.records.values()].find((record) => (
+        record.family === "temporal_eligibility_assessment"
+        && record.dimension === "unrelated_dimension"
+      ));
+      run.records.get(distractor.createdByTransitionRef).resultReferences.push(
+        distractor.reference
+      );
+    },
     ({ support }) => { support.focusedInstructionRef = support.focusedOutcomeRef; },
     ({ support }) => { support.hiddenChainOfThought = "retained"; },
     ({ explanation }) => {

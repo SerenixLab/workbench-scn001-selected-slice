@@ -2894,8 +2894,9 @@ causal and global-preference promotion, exhaustive co-intervention claims,
 excluded alternative causes, raw comparison rewrites, missing or duplicate
 relations, undeclared outbound uncertainty relations, transition-envelope
 corruption, duplicate result creators, ambiguous result identity,
-stale-history omission, duplicated temporal-assessment result occurrence,
-focused-instruction substitution, limitation rewrites, hidden-reasoning
+stale-history omission, duplicated selected or co-created distractor
+temporal-assessment result occurrence, focused-instruction substitution,
+limitation rewrites, hidden-reasoning
 claims, causal explanation text, request-attribution substitution, result
 omission, extra limitation records, generic-delivery bypass, no-mutation
 failure behavior, and independent run isolation. The complete positive path
@@ -2924,8 +2925,8 @@ Affected rows are `ENG-BASE-001`, `ENG-CHANGE-001`, `ENG-CLAIM-001`,
 dependencies, applicability, revisions, promotion mappings, and active
 exceptions do not change.
 
-Local verification includes 105 SUT state tests, 239 public-boundary and
-evaluation tests, every aggregate gate, and all 344 aggregate tests. `git diff
+Local verification includes 105 SUT state tests, 240 public-boundary and
+evaluation tests, every aggregate gate, and all 345 aggregate tests. `git diff
 --check` also passes.
 
 Fresh independent review of the exact Phase 6D implementation stack remains

@@ -448,6 +448,7 @@ function validateTemporalAssessment(snapshot, evidence, assessment) {
     || transition.result !== "accepted"
     || JSON.stringify(transition.inputReferences) !== JSON.stringify(expectedInputRefs)
     || resultAssessments.length === 0
+    || new Set(transition.resultReferences).size !== transition.resultReferences.length
     || resultAssessments.some((item) => (
       item?.family !== "temporal_eligibility_assessment"
       || item.createdByTransitionRef !== transition.reference
