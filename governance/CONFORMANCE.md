@@ -69,16 +69,16 @@ Unless a row says otherwise:
 | `ENG-CONF-SIM-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | The deterministic simulator realizes the exact SUT-requested proposal or immediate-correction disposition and the projector returns only the declared role-specific realization facts. | `ADR-002 R2`; `ADR-005 R2`; `ADR-008 R2` | Exact request/full-record validation; simulator cannot change requested timing; fidelity/mismatch consistency; no oracle/path/branch fields; narrow projections. | `scn001_eval/src/simulator.js`; `scn001_eval/src/simulatorProjection.js`; `scn001_eval/src/harness.js`; package tests | Default | uncovered | merge-blocking; claim-blocking | Proposal and focused-drill renderers are covered; no general simulator framework, formal mismatch campaign, or formal evidence exists. |
 | `ENG-CONF-STATE-001` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Proposal, activation, focused-drill output, realization, and outcome resolve exact retained identities without ranking, first/latest selection, or loose relation predicates. | `ADR-004 R3`; `ADR-006 R2`; `ADR-007 R3` | Exact proposal and focused closure; complete active-trial callback authority; canonical first-ingestion identity; competing, retargeted, cloned, and substituted evidence attacks. Contract and negative modes. | `scn001_sut_core/src/runState.js`; private closure modules; `scn001_sut_core/test/run-state.test.js` | Default | uncovered | merge-blocking; claim-blocking | Bounded focused-drill resolution is narrow and exact; later-use applicability remains unimplemented. |
 | `ENG-CONF-STATE-002` | `R2` | `profiles/SCN001_SELECTED_SLICE.md` | applicable | Focused-drill instruction, disposition, realization closure, and outcome consume exact prior state and retain attributable transitions while `RunState` alone allocates and commits. | `ADR-006 R2`; `ADR-007 R3`; `ADR-008 R2` | Exact key/input/result/order/role assertions; full upstream active-trial validation; exact unique ingestion closure; duplicate creator, missing participant, wrong target, no-mutation, replay, and provenance attacks. Contract and negative modes. | `scn001_sut_core/src/runState.js`; `scn001_sut_core/src/retainedStateClosure.js`; `scn001_sut_core/src/focusedDrill.js`; package tests | Default | uncovered | merge-blocking; claim-blocking | Focused-drill mutation is covered; direct correction, later-use applicability, and later lifecycle mutation remain absent. |
-| `ENG-HEALTH-ABSTRACTION-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Private retained-state, proposal, production-activation, focused-drill, evaluation checkpoint, and source-binding modules are non-throwaway bounded internal abstractions. | `ADR-001 R1` | `productionActiveCheckpoint.js` passively reconstructs CP-PROD-ACTIVE; `sourceBindingLedger.js` owns only immutable evaluation transport provenance after successful ingress and is not a semantic-state owner, generic repository, graph, or policy framework. | Existing private SUT modules; `scn001_sut_core/src/runState.js`; `scn001_eval/src/productionActiveCheckpoint.js`; `scn001_eval/src/sourceBindingLedger.js`; package tests; corrective addenda below | Fresh independent abstraction review of the corrected commit is pending; historical reviews remain preserved below. | uncovered | advisory or merge-blocking by condition | The bounded corrected modules have implementing-task review only; fresh qualifying independent review is required. |
+| `ENG-HEALTH-ABSTRACTION-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Private retained-state, proposal, production-activation, focused-drill, evaluation checkpoint, and source-binding modules are non-throwaway bounded internal abstractions. | `ADR-001 R1` | `productionActiveCheckpoint.js` passively reconstructs `CP-PROD-ACTIVE`; `sourceBindingLedger.js` owns only immutable evaluation transport provenance after successful ingress and is not a semantic-state owner, generic repository, graph, or policy framework. | Existing private SUT modules; `scn001_sut_core/src/runState.js`; `scn001_eval/src/productionActiveCheckpoint.js`; `scn001_eval/src/sourceBindingLedger.js`; package tests; corrective and independent-review addenda below | Passing independent ChatGPT abstraction review of corrective commit `09979e552006d85a705a57d72fdc28cd2a87f77e` is recorded below; historical reviews remain preserved. | review-only | advisory or merge-blocking by condition | The bounded evaluation checkpoint and source-binding abstractions received qualifying change-specific review. Future widening, shared ownership, generalization, or new policy responsibilities require fresh concrete-pressure justification and review. |
 | `ENG-HEALTH-API-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The SUT surface is unchanged; evaluation package root now exports only the formal one-argument harness constructor, with renderer/projector helpers and failure injection internal. | Rule entry | Exact SUT and evaluation package-root export tests; constructor override rejection; internal-only SUT resolvers and evaluation mechanism-test seam. | `scn001_sut_core/index.js`; `scn001_eval/index.js`; package tests; `scripts/check-dependency-boundary.mjs` | Default | uncovered | merge-blocking; claim-blocking | Governing consumer/need review for future API additions remains manual. |
-| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The current change has one primary purpose: close exact original first-interaction and first-ingestion parity in the evaluation-private CP-PROD-ACTIVE source binding. | Rule entry | Focused diff against corrective baseline `a5be53b7923056385b278760c5369f1e7ab03dcb`; eighteen required coherent interaction/ingestion rewrites, binding-integrity, post-ingress atomicity, redelivery, run-isolation, and clearing attacks; full local gates; hostile implementing-task review. | Current corrective commit/diff; evaluation implementation and tests; failed baseline review and first-ingestion source-binding parity addendum below | Independent review of `a5be53b7923056385b278760c5369f1e7ab03dcb` failed; fresh independent review of the corrected pushed commit is pending. | uncovered | advisory or merge-blocking by condition | The implementing task cannot independently close its own change-review condition. |
+| `ENG-HEALTH-CHANGE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The current change has one primary purpose: close exact original first-interaction and first-ingestion parity in the evaluation-private `CP-PROD-ACTIVE` source binding. | Rule entry | Focused diff against corrective baseline `a5be53b7923056385b278760c5369f1e7ab03dcb`; coherent interaction/ingestion rewrites, binding-integrity, post-ingress atomicity, redelivery, run-isolation and clearing attacks; full local gates; independent review below. | Corrective commit and diff; evaluation implementation and tests; failed baseline review and first-ingestion source-binding parity addendum; independent-review closure below | Passing independent ChatGPT review of corrective commit `09979e552006d85a705a57d72fdc28cd2a87f77e` is recorded below. The failed review of `a5be53b7923056385b278760c5369f1e7ab03dcb` and all earlier history remain preserved. | review-only | advisory or merge-blocking by condition | The bounded original-ingestion parity correction received qualifying independent review. Every future non-throwaway semantic, provenance, checkpoint, mutation or lifecycle change requires fresh change-specific review. |
 | `ENG-HEALTH-COMMENT-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No JavaScript implementation/test comment is present or used to justify behavior. Future trigger: adding, generating, or relying on a code comment. | Rule entry | Source inventory. | `rg` over `scn001_sut_core`, `scn001_eval`, `tests`, and `scripts` returned no JavaScript comment lines | Not applicable until trigger. | N/A | advisory or merge-blocking by condition | Governance prose is controlled as documentation/claims; code comments require review when introduced. |
 | `ENG-HEALTH-DEAD-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No dead, commented-out, prototype, experiment, or throwaway implementation artifact is present. Future trigger: introducing or promoting one. | Rule entry | Repository and source inventory; manual review. | Current package/source tree; no throwaway directory or commented-out implementation | Not applicable until trigger. | N/A | merge-blocking; promotion-blocking | Static gate does not comprehensively prove reachability; disposition must change if a prototype appears. |
 | `ENG-HEALTH-DEPENDENCY-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Evaluation declares a runtime dependency on the local SUT package and CI installs the workspace lock. | Rule entry | Local file dependency; lockfile; dependency-boundary static check; no external runtime dependency. | `package-lock.json`; `scn001_eval/package.json`; `scn001_sut_core/package.json`; `scripts/check-dependency-boundary.mjs`; `README.md` | Default | uncovered | merge-blocking; promotion-blocking | Dependency rationale/maintenance review is manual; future external dependencies require a new review record. |
 | `ENG-HEALTH-FAILURE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Malformed proposal, activation, focused-drill foundation, realization, outcome, provenance, source binding, target, and competing creator states fail closed without fixture ingress or semantic repair. | Rule entry | Typed integrity/checkpoint errors; exact-key/reference errors; wrong actor/target, source rewrite, missing/rebound/duplicate binding, original-meaning mismatch, failed-ingress, retarget, clone, pre-mutation, and replay attacks. | SUT/evaluation source and package tests; repository gates | Default | uncovered | merge-blocking; claim-blocking | Failure transparency is covered for the bounded focused-drill seam; no operational reporting layer exists. |
 | `ENG-HEALTH-GEN-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The projector generated new canonical snapshots, lock metadata, source closure, and checker content. | Rule entry | Transactional projector validation; local tests/gates; digest verification. Contract mode. | Projected `governance/` tree; `npm run check`; `governance/ZOEY_GOVERNANCE.lock` | Automated checks complete; qualifying independent ChatGPT generated-artifact review recorded below. | review-only | merge-blocking; promotion-blocking | Independent review found no manual divergence from the intended canonical projection; future generated-artifact changes require fresh independent review. |
 | `ENG-HEALTH-REPRO-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The repository defines local/CI quality, test, boundary, state, dependency, and governance gates. | Rule entry | Documented npm scripts; aggregate runner; CI invokes clean-install and aggregate gate. Contract mode. | `README.md`; `AGENTS.md`; `package.json`; `scripts/run-gates.mjs`; `.github/workflows/ci.yml`; `package-lock.json` | Default | uncovered | promotion-blocking; claim-blocking | Python availability is documented but not installed by CI explicitly; branch protection is unverified. |
-| `ENG-HEALTH-STRUCTURE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The SUT keeps bounded closure modules under `RunState`, while evaluation separates passive production-active reconstruction from run-local transport provenance. | Rule entry | `productionActiveCheckpoint.js` owns passive CP-PROD-ACTIVE reconstruction; `sourceBindingLedger.js` owns successful-ingress source/meaning correlation and lifecycle clearing only; fixture projection, SUT semantics, public API, and later families remain outside both. | `scn001_sut_core/src/focusedDrill.js`; `scn001_sut_core/src/runState.js`; `scn001_eval/src/productionActiveCheckpoint.js`; `scn001_eval/src/sourceBindingLedger.js`; `scn001_eval/src/harness.js`; package tests; corrective addenda below | Fresh independent structure review of the corrected commit is pending; prior reviews remain historical. | uncovered | advisory or merge-blocking by condition | The corrected module boundaries have only implementing-task review and require fresh independent review. |
+| `ENG-HEALTH-STRUCTURE-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The SUT keeps bounded closure modules under `RunState`, while evaluation separates passive production-active reconstruction from run-local transport provenance. | Rule entry | `productionActiveCheckpoint.js` owns passive `CP-PROD-ACTIVE` reconstruction; `sourceBindingLedger.js` owns successful-ingress source/meaning/original-ingestion correlation and lifecycle clearing only; fixture projection, SUT semantics, public API and later families remain outside both. | `scn001_sut_core/src/focusedDrill.js`; `scn001_sut_core/src/runState.js`; `scn001_eval/src/productionActiveCheckpoint.js`; `scn001_eval/src/sourceBindingLedger.js`; `scn001_eval/src/harness.js`; package tests; corrective and independent-review addenda below | Passing independent ChatGPT structure review of corrective commit `09979e552006d85a705a57d72fdc28cd2a87f77e` is recorded below; prior reviews remain historical. | review-only | advisory or merge-blocking by condition | The bounded separation between checkpoint reconstruction, transport provenance and SUT mutation ownership received qualifying review. Materially widened responsibilities or new mutable ownership require fresh review. |
 | `ENG-HEALTH-TEST-001` | `R2` | `ENGINEERING_STANDARD.md` | applicable | Regressions cover both focused checkpoints, independent nine-check reconstruction, original source identity, projected meaning, exact original first interaction and ingestion, complete active-trial foundations, exact ingestion evidence, five-object separation, mismatch, no-mutation, replay, run isolation, and denied later families. | Rule entry | Positive formal-harness trajectory plus prior exact-closure attacks and eighteen new coherent interaction/ingestion rewrite, missing/conflicting binding, post-ingress atomicity, redelivery, isolation, and clearing attacks. | SUT/evaluation tests; conformance tests; `package.json` | Default | uncovered | merge-blocking; promotion-blocking | The bounded focused-drill family is covered; direct correction and every later family remain future-triggered. |
 | `ENG-HEALTH-TEST-002` | `R2` | `ENGINEERING_STANDARD.md` | applicable | The canonical focused-drill trajectory uses the formal harness and public boundary; direct private-helper tests are limited to malformed checkpoint evidence and evaluation source-binding lifecycle mechanisms. | Rule entry | End-to-end checkpoint delivery and simulator routing; pre-ingress counters for coherent inspection rewrites; raw fixtures contain no SUT conclusions; direct evidence/ledger tests attack otherwise unreachable private corruption without becoming behavior evidence. | `scn001_sut_core/test/`; `scn001_eval/test/`; `tests/conformance/` | Default | uncovered | merge-blocking; claim-blocking | Fresh independent test-validity review is pending; tests remain engineering/conformance evidence only. |
 | `ENG-HEALTH-TODO-001` | `R2` | `ENGINEERING_STANDARD.md` | not-applicable | No TODO, FIXME, temporary-workaround, or deferred-work marker exists in non-throwaway implementation. Future trigger: adding any such marker. | Rule entry | Source inventory. | `rg` over implementation, tests, and scripts returned no marker | Not applicable until trigger. | N/A | merge-blocking; promotion-blocking | No dedicated TODO gate exists; the disposition must change when a marker is introduced. |
@@ -1837,3 +1837,138 @@ later-outcome, explanation, formal evaluation, scoring, completion, broader
 acceptance, and production readiness. No exception, formal behavioral evidence,
 obligation satisfaction, compatibility, scoreability, milestone, broader
 `SCN-001`, or readiness claim is introduced.
+
+## Original First-Ingestion Source-Binding Parity Independent Review Closure
+
+On 2026-07-15, an independent ChatGPT review examined corrective commit `09979e552006d85a705a57d72fdc28cd2a87f77e` against:
+
+* the blocking review of `a5be53b7923056385b278760c5369f1e7ab03dcb`;
+* the accepted source-fact identity and first-ingestion contracts;
+* the complete production-activation checkpoint contract;
+* the accepted focused-drill trajectory;
+* the applicable change, abstraction, structure, inspection, reference, run, payload, state and test obligations.
+
+The review inspected:
+
+* the evaluation-private source-binding entry;
+* successful-ingress correlation;
+* exact returned transition identity;
+* current-ingestion interaction, input, result and basis closure;
+* accepted retained input-fact identity;
+* complete original projected SUT-visible meaning;
+* original first-interaction identity;
+* original first-ingestion-transition identity;
+* semantic-source actor and source-relation closure;
+* batch atomicity;
+* exact redelivery;
+* source and retained-fact rebinding prevention;
+* checkpoint comparison against immutable evidence;
+* coordinated interaction, ingestion and relation-order rewrites;
+* run isolation;
+* end-run clearing;
+* focused-drill regression and non-scope boundaries.
+
+The review confirms that every successful evaluation source binding now immutably retains:
+
+```text
+sourceFactRef
+projectedMeaning
+acceptedInputFactRef
+firstInteractionRef
+firstIngestionTransitionRef
+deliveryOrigin
+role
+```
+
+All entries are deep-frozen.
+
+After successful public SUT ingress, the harness obtains one passive public inspection snapshot. Before ledger mutation, the source-binding ledger:
+
+* validates the ingress result’s transition reference;
+* validates that transition as the unique exact `ingest_sut_visible_inputs` creator of its interaction;
+* verifies exact interaction inputs, transition inputs, transition results and ingestion-basis relations;
+* resolves every returned retained input-fact reference;
+* verifies its source reference, complete payload, role and origin against the corresponding projected input;
+* resolves and validates the fact’s exact first interaction;
+* resolves and validates that interaction’s unique exact ingestion transition;
+* validates its semantic-source actor and source relation;
+* validates the required causal ordering.
+
+The complete batch resolves before any new ledger entry is committed. Failure during post-ingress identity resolution commits no partial evaluation source bindings.
+
+For an already bound source identity, exact redelivery must preserve:
+
+* the same accepted retained input-fact reference;
+* the same complete original projected meaning;
+* the same original first-interaction reference;
+* the same original first-ingestion-transition reference.
+
+The newly returned redelivery transition is validated as the current ingress but cannot replace either original provenance identity.
+
+The independent production-active checkpoint requires, for every material raw fact:
+
+```text
+fact.sourceFactRef
+    == binding.sourceFactRef
+
+fact.reference
+    == binding.acceptedInputFactRef
+
+fact.payload
+    == binding.projectedMeaning
+
+fact.firstInteractionRef
+    == binding.firstInteractionRef
+
+validatedFirstIngestion.reference
+    == binding.firstIngestionTransitionRef
+```
+
+The checkpoint additionally preserves the existing exact actor, source-relation, earliest-containing-interaction, current-ingestion, unique-creator, transition, relation and causal-order checks.
+
+Consequently:
+
+* coordinated source-reference and payload rewrites cannot pass;
+* a non-check-driving payload field cannot be changed;
+* a retained fact cannot receive another source binding;
+* a source identity cannot be rebound to another retained fact or meaning;
+* a redelivered consequence or reversibility control cannot be retrospectively redefined as originating in the later binding interaction;
+* moving interaction and ingestion orders does not replace immutable provenance;
+* rewriting ingestion bases and source-relation metadata does not replace immutable provenance;
+* stripping or retargeting the original interaction or ingestion fails;
+* conflicting or missing first-interaction and first-ingestion ledger evidence fails;
+* failed post-ingress resolution creates no partial binding;
+* exact redelivery preserves one original binding;
+* independent runs share no source, interaction or ingestion references;
+* `endRun` clears the ledger.
+
+The review confirms that the four previously corrected focused-drill integrity properties remain unchanged:
+
+* `CP-PROD-ACTIVE` independently recomputes the complete nine-check activation contract;
+* every focused-drill record requires the complete active-trial closure;
+* focused realization is anchored to exact first interaction and ingestion;
+* focused outcome records exact ingestion evidence.
+
+The candidate remains `formed_non_active` at lifecycle version 1. The active production trial remains separate and unchanged. Focused-drill instruction, disposition, realization and short-term outcome remain separate retained objects.
+
+No direct correction, delayed-correction trial, later-use applicability, later outcome, explanation, formal evaluation, scoring, completion, broader `SCN-001` acceptance or production-readiness state is introduced.
+
+Independent review outcome: **pass for corrective commit `09979e552006d85a705a57d72fdc28cd2a87f77e` under `ENG-HEALTH-CHANGE-001 R2`, `ENG-HEALTH-ABSTRACTION-001 R2` and `ENG-HEALTH-STRUCTURE-001 R2`.**
+
+This passing review closes only the change-specific manual-review conditions for this bounded correction. It:
+
+* preserves the blocking/failed review of `a5be53b7923056385b278760c5369f1e7ab03dcb`;
+* does not rewrite any earlier failed review as passing;
+* does not independently execute the repository gates;
+* does not establish automated enforcement;
+* does not satisfy the separate CI-required or independent formal test-evidence obligations;
+* does not verify protected required-check configuration;
+* does not establish formal behavioral evidence, obligation satisfaction, scoreability, milestone completion, broader acceptance or production readiness.
+
+With this review recorded, current applicability/status counts are:
+
+* 44 rules `applicable` and 5 `not-applicable`;
+* 10 applicable rules `review-only`;
+* 34 applicable rules `uncovered`;
+* no applicable rule `revalidation-required`;
+* no rule claimed `enforced`.
