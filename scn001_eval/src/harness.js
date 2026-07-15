@@ -1,6 +1,10 @@
 import { SUT_PUBLIC_BOUNDARY_METHODS } from "@zoey/scn001-sut-core";
 
 import { createSourceFactReference, projectFixtureRecords } from "./fixtureProjection.js";
+import {
+  findExactCompletedFocusedDrillPrefix,
+  findExactDirectCorrectionRealization
+} from "./directCorrectionCheckpoint.js";
 import { findExactActiveProductionTrial } from "./productionActiveCheckpoint.js";
 import { realizeAvailableOutput } from "./simulator.js";
 import { createSimulatorProjector } from "./simulatorProjection.js";
@@ -61,11 +65,46 @@ const FOCUSED_DRILL_OUTCOME_FIXTURES = Object.freeze({
   })
 });
 
+const DIRECT_CORRECTION_FIXTURES = Object.freeze({
+  "V-001": Object.freeze({
+    role: "context_label", sourceActor: "fixture-driver", occurrenceOrder: 19,
+    data: Object.freeze({
+      surfaceLabel: "voice_simulated", activity: "japanese_practice",
+      taskMode: "spontaneous_production", consequence: "low",
+      realVoiceStack: "absent", scenarioDay: 138,
+      sessionId: "spontaneous-correction-current"
+    })
+  }),
+  "V-002": Object.freeze({
+    role: "fixture_evidence", sourceActor: "fixture-driver", occurrenceOrder: 20,
+    data: Object.freeze({
+      event: "over_aggressive_mid_sentence_interruption",
+      context: "current_spontaneous_production_session"
+    })
+  }),
+  "V-003": Object.freeze({
+    role: "communication_event", sourceActor: "synthetic-user-a", occurrenceOrder: 21,
+    data: Object.freeze({
+      content: "Don't stop me mid-sentence like that here. Let me finish first.",
+      context: "spontaneous_production", semanticStatusOrigin: "unclassified"
+    })
+  }),
+  "V-004": Object.freeze({
+    role: "chronology_fact", sourceActor: "fixture-driver", occurrenceOrder: 22,
+    data: Object.freeze({
+      scenarioDay: 138, sessionId: "spontaneous-correction-current", sessionOrder: 4,
+      focusedDrillScenarioDay: 135, oldDrillPreferenceScenarioDay: 15
+    })
+  }),
+  "FC-UGC-001": ACCEPTANCE_FIXTURES["FC-UGC-001"],
+  "FC-CONSEQ-001": ACCEPTANCE_FIXTURES["FC-CONSEQ-001"],
+  "FC-REV-001": ACCEPTANCE_FIXTURES["FC-REV-001"]
+});
+
 const RESERVED_FOCUSED_DRILL_FIXTURE_IDS = new Set([
   ...Object.keys(FOCUSED_DRILL_OPEN_FIXTURES),
   ...Object.keys(FOCUSED_DRILL_OUTCOME_FIXTURES)
 ]);
-
 export function createEvaluationHarness(sutBoundary, ...extraArguments) {
   if (extraArguments.length !== 0) {
     throw new Error("The formal evaluation harness accepts only the SUT public boundary.");
@@ -91,7 +130,7 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
       runTransport.set(runRef, {
         routed: new Map(), projector: createProjector(), nextOrder: 1,
         acceptanceDeliveries: new Map(), focusedOpenDeliveries: new Map(),
-        focusedOutcomeDeliveries: new Map()
+        focusedOutcomeDeliveries: new Map(), directOpenDeliveries: new Map()
       });
       return runRef;
     },
@@ -116,6 +155,13 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
         || isFocusedDrillFixtureMaterial(record)
       ))) {
         throw new Error("Focused-drill fixture records require their staged checkpoint delivery.");
+      }
+      if (Array.isArray(fixtureRecords) && fixtureRecords.some((record) => (
+        isDirectCorrectionFixtureMaterial(record)
+      ))) {
+        throw new Error(
+          "Spontaneous-correction fixture records require their staged prefix delivery."
+        );
       }
       return deliverProjectedFixtureRecords(runRef, fixtureRecords);
     },
@@ -195,6 +241,55 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
       }]);
       transport.focusedOutcomeDeliveries.set(outputRef, frozen);
       return frozen;
+    },
+
+    deliverSpontaneousCorrectionInputsIfEligible(runRef, fixtureRecords) {
+      const transport = runTransport.get(runRef);
+      if (!transport) throw new Error(`Unknown or closed evaluation run: ${runRef}.`);
+      validateExactFixtureSet(
+        fixtureRecords, DIRECT_CORRECTION_FIXTURES,
+        "Spontaneous-correction opening delivery"
+      );
+      if (transport.directOpenDeliveries.size === 1) {
+        return [...transport.directOpenDeliveries.values()][0];
+      }
+      const focusedRealizations = findEligibleFocusedDrillRealizations(
+        sutBoundary, runRef, transport, sourceBindingEvidenceForRun(runRef)
+      );
+      if (focusedRealizations.length === 0) return Object.freeze([]);
+      if (focusedRealizations.length !== 1) {
+        throw new Error(
+          "Spontaneous-correction opening requires exactly one exact focused-drill realization."
+        );
+      }
+      const prefix = findExactCompletedFocusedDrillPrefix(
+        sutBoundary.captureInspectionSnapshot(runRef),
+        sourceBindingEvidenceForRun(runRef)
+      );
+      if (!prefix) return Object.freeze([]);
+      const prior = transport.directOpenDeliveries.get(prefix.outcome.reference);
+      if (prior) return prior;
+      const result = deliverProjectedFixtureRecords(runRef, fixtureRecords);
+      const frozen = deepFreeze([{
+        focusedDrillOutcomeRef: prefix.outcome.reference,
+        acceptedInputRefs: [...result.acceptedInputRefs]
+      }]);
+      transport.directOpenDeliveries.set(prefix.outcome.reference, frozen);
+      return frozen;
+    },
+
+    inspectDirectCorrectionRealizedCheckpoint(runRef) {
+      const closure = findExactDirectCorrectionRealization(
+        sutBoundary.captureInspectionSnapshot(runRef),
+        sourceBindingEvidenceForRun(runRef)
+      );
+      if (!closure) return Object.freeze([]);
+      return deepFreeze([{
+        correctionStateRef: closure.state.reference,
+        dispositionRef: closure.disposition.reference,
+        realizationFactRef: closure.fact.reference,
+        realizationTransitionRef: closure.realizationTransition.reference
+      }]);
     },
 
     processCurrentInteraction(runRef) {
@@ -732,6 +827,22 @@ function isFocusedDrillFixtureMaterial(record) {
       && record.sourceActor === "synthetic-user-a"
       && data?.observation === "That helped for this drill."
       && data.context === "focused_production_drill");
+}
+
+function isDirectCorrectionFixtureMaterial(record) {
+  const data = record?.data;
+  return (record?.role === "context_label"
+      && data?.taskMode === "spontaneous_production"
+      && data.surfaceLabel === "voice_simulated"
+      && data.sessionId === "spontaneous-correction-current")
+    || (record?.role === "fixture_evidence"
+      && data?.event === "over_aggressive_mid_sentence_interruption")
+    || (record?.role === "communication_event"
+      && data?.content?.trim().replaceAll(/\s+/g, " ").toLocaleLowerCase("en-US")
+        === "don't stop me mid-sentence like that here. let me finish first.")
+    || (record?.role === "chronology_fact"
+      && data?.focusedDrillScenarioDay === 135
+      && data.oldDrillPreferenceScenarioDay === 15);
 }
 
 function uniqueCreatingTransition(snapshot, record, label) {

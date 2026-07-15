@@ -147,6 +147,49 @@ function focusedDrillFeedbackInput(overrides = {}) {
   };
 }
 
+function directContextInput(overrides = {}) {
+  return {
+    sourceFactRef: sourceRef(), kind: "context_label", sourceActor: "fixture-driver",
+    occurrenceOrder: 19, surfaceLabel: "voice_simulated", activity: "japanese_practice",
+    taskMode: "spontaneous_production", consequence: "low", realVoiceStack: "absent",
+    scenarioDay: 138, sessionId: "spontaneous-correction-current", ...overrides
+  };
+}
+
+function directInterruptionInput(overrides = {}) {
+  return {
+    sourceFactRef: sourceRef(), kind: "fixture_evidence", sourceActor: "fixture-driver",
+    occurrenceOrder: 20, event: "over_aggressive_mid_sentence_interruption",
+    context: "current_spontaneous_production_session", ...overrides
+  };
+}
+
+function directRequestInput(overrides = {}) {
+  return communicationInput({
+    occurrenceOrder: 21,
+    content: "Don't stop me mid-sentence like that here. Let me finish first.",
+    context: "spontaneous_production", semanticStatusOrigin: "unclassified", ...overrides
+  });
+}
+
+function directChronologyInput(overrides = {}) {
+  return chronologyInput({
+    occurrenceOrder: 22, scenarioDay: 138,
+    sessionId: "spontaneous-correction-current", sessionOrder: 4,
+    focusedDrillScenarioDay: 135, oldDrillPreferenceScenarioDay: 15, ...overrides
+  });
+}
+
+function directRealizationInput(requestedRef, overrides = {}) {
+  return {
+    sourceFactRef: sourceRef(), kind: "simulator_behavior_realization",
+    sourceActor: "simulated-dependency", occurrenceOrder: 23, requestedRef,
+    requestedBehavior: "turn_completion_correction",
+    realizedBehavior: "turn_completion_correction", fidelity: "match",
+    mismatchOrigin: null, ...overrides
+  };
+}
+
 function calibrationInputs(recognitionCorrect = 4, productionCorrect = 1, overrides = {}) {
   const dimension = overrides.dimension ?? "particle_pattern_a";
   return [
@@ -389,6 +432,59 @@ function focusedDrillOutcomeRun() {
     (record) => record.family === "focused_drill_outcome"
   );
   return { ...realized, outcomeInputs: inputs, outcome };
+}
+
+function directCorrectionDecisionRun({ withFocusedPrefix = true } = {}) {
+  const run = withFocusedPrefix ? focusedDrillOutcomeRun().run : new RunState();
+  let controls = [...run.records.values()].filter((record) => (
+    record.family === "input_fact" && record.role === "fixture_control_fact"
+      && ["user_governed_constraints", "consequence", "reversibility"]
+        .includes(record.payload.control)
+  )).map((record) => record.payload);
+  if (!withFocusedPrefix) {
+    controls = [
+      fixtureControlInput({
+        control: "user_governed_constraints", value: "exhaustive_selected_slice_scope",
+        occurrenceOrder: 12
+      }),
+      fixtureControlInput({ control: "consequence", value: "low", occurrenceOrder: 13 }),
+      fixtureControlInput({
+        control: "reversibility", value: "reversible", occurrenceOrder: 14
+      })
+    ];
+    run.assertSourceFactConsistency(controls);
+    run.ingest(controls);
+    run.processCurrentInteraction();
+  }
+  const inputs = [
+    directContextInput(), directInterruptionInput(), directRequestInput(),
+    directChronologyInput(), ...controls
+  ];
+  run.assertSourceFactConsistency(inputs);
+  run.ingest(inputs);
+  run.processCurrentInteraction();
+  return {
+    run, inputs,
+    correctionState: [...run.records.values()].find(
+      (record) => record.family === "scoped_current_correction_control"
+    ),
+    disposition: [...run.records.values()].find(
+      (record) => record.family === "direct_current_session_correction_disposition"
+    )
+  };
+}
+
+function directCorrectionRealizedRun(overrides = {}) {
+  const decision = directCorrectionDecisionRun();
+  const input = directRealizationInput(decision.disposition.reference, overrides);
+  decision.run.assertSourceFactConsistency([input]);
+  decision.run.ingest([input]);
+  decision.run.processCurrentInteraction();
+  const fact = [...decision.run.records.values()].find((record) => (
+    record.role === "simulator_behavior_realization"
+      && record.payload.requestedBehavior === "turn_completion_correction"
+  ));
+  return { ...decision, input, fact };
 }
 
 function cloneRetainedTransition(run, transition, overrides = {}) {
@@ -3100,5 +3196,121 @@ test("focused-drill identities remain isolated across independent RunState insta
   for (const key of ["instruction", "disposition", "fact", "outcome"]) {
     assert.notEqual(first[key].reference, second[key].reference);
     assert.equal(second.run.records.has(first[key].reference), false);
+  }
+});
+
+test("current user correction independently authorizes separate direct state and disposition", () => {
+  const direct = directCorrectionDecisionRun({ withFocusedPrefix: false });
+  assert.ok(direct.correctionState);
+  assert.ok(direct.disposition);
+  assert.notEqual(direct.correctionState.reference, direct.disposition.reference);
+  assert.equal(direct.correctionState.authority, "explicit_current_user_correction");
+  assert.equal(direct.correctionState.correctionTiming, "turn_completion_correction");
+  assert.equal(direct.disposition.behaviorEffect, "immediate_current_session_change");
+  assert.equal(direct.disposition.requestedBehavior, "turn_completion_correction");
+  assert.equal([...direct.run.records.values()].some((record) => (
+    record.family === "active_trial" || record.family === "focused_drill_instruction"
+  )), false);
+  const output = direct.run.emitAvailableOutputs()[0];
+  assert.equal(output.requestedRef, direct.disposition.reference);
+  assert.equal(output.requestedBehavior, "turn_completion_correction");
+});
+
+test("earlier equal-payload correction evidence cannot substitute for current evidence", () => {
+  const run = new RunState();
+  const controls = [
+    fixtureControlInput({
+      control: "user_governed_constraints", value: "exhaustive_selected_slice_scope",
+      occurrenceOrder: 12
+    }),
+    fixtureControlInput({ control: "consequence", value: "low", occurrenceOrder: 13 }),
+    fixtureControlInput({
+      control: "reversibility", value: "reversible", occurrenceOrder: 14
+    })
+  ];
+  run.assertSourceFactConsistency(controls);
+  run.ingest(controls);
+  run.processCurrentInteraction();
+  const request = directRequestInput();
+  run.assertSourceFactConsistency([request]);
+  run.ingest([request]);
+  run.processCurrentInteraction();
+  const current = [
+    directContextInput(), directInterruptionInput(), request, directChronologyInput(),
+    ...controls
+  ];
+  run.assertSourceFactConsistency(current);
+  run.ingest(current);
+  const before = retainedMutationSnapshot(run);
+  assert.throws(
+    () => run.processCurrentInteraction(),
+    /exact first-ingested current-session evidence/
+  );
+  assert.deepEqual(retainedMutationSnapshot(run), before);
+  assert.equal([...run.records.values()].some((record) => [
+    "scoped_current_correction_control",
+    "direct_current_session_correction_disposition"
+  ].includes(record.family)), false);
+});
+
+test("direct realization requires exact identity and mismatch remains non-matching", () => {
+  const matched = directCorrectionRealizedRun();
+  const closure = matched.run.resolveDirectCorrectionRealizationClosure(
+    matched.disposition.reference, matched.fact.reference
+  );
+  assert.equal(closure.fact.reference, matched.fact.reference);
+  assert.equal(closure.disposition.reference, matched.disposition.reference);
+  assert.deepEqual(matched.run.emitAvailableOutputs(), []);
+
+  const mismatch = directCorrectionRealizedRun({
+    realizedBehavior: "immediate_correction", fidelity: "mismatch",
+    mismatchOrigin: "simulated_dependency"
+  });
+  const mismatchClosure = mismatch.run.resolveDirectCorrectionRealizationClosure(
+    mismatch.disposition.reference, mismatch.fact.reference
+  );
+  assert.equal(mismatchClosure.fact.payload.fidelity, "mismatch");
+  assert.notEqual(
+    mismatchClosure.fact.payload.realizedBehavior,
+    mismatchClosure.fact.payload.requestedBehavior
+  );
+});
+
+test("direct closure attacks fail without allocating order or repairing state", () => {
+  {
+    const decision = directCorrectionDecisionRun();
+    cloneRetainedTransition(
+      decision.run, decision.run.records.get(decision.disposition.createdByTransitionRef)
+    );
+    const before = retainedMutationSnapshot(decision.run);
+    assert.throws(
+      () => decision.run.emitAvailableOutputs(),
+      /requires exactly one retained creating transition/
+    );
+    assert.deepEqual(retainedMutationSnapshot(decision.run), before);
+  }
+  {
+    const realized = directCorrectionRealizedRun();
+    const transition = [...realized.run.records.values()].find((record) => (
+      record.transitionKind === "record_direct_current_session_correction_realization"
+    ));
+    realized.run.relations.splice(realized.run.relations.findIndex((relation) => (
+      relation.fromRef === transition.reference
+      && relation.targetRole === "requested_direct_correction_disposition"
+    )), 1);
+    const before = retainedMutationSnapshot(realized.run);
+    assert.throws(() => realized.run.resolveDirectCorrectionRealizationClosure(
+      realized.disposition.reference, realized.fact.reference
+    ));
+    assert.deepEqual(retainedMutationSnapshot(realized.run), before);
+  }
+  {
+    const realized = directCorrectionRealizedRun();
+    realized.fact.firstInteractionRef = realized.correctionState.interactionRef;
+    const before = retainedMutationSnapshot(realized.run);
+    assert.throws(() => realized.run.resolveDirectCorrectionRealizationClosure(
+      realized.disposition.reference, realized.fact.reference
+    ));
+    assert.deepEqual(retainedMutationSnapshot(realized.run), before);
   }
 });

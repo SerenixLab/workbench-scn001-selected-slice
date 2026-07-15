@@ -8,6 +8,9 @@ const OUTPUT_KEYS = [
 const FOCUSED_DRILL_OUTPUT_KEYS = [
   "kind", "outputRef", "requestedRef", "requestedBehavior", "drillScope"
 ];
+const DIRECT_CORRECTION_OUTPUT_KEYS = [
+  "kind", "outputRef", "requestedRef", "requestedBehavior", "sessionScope"
+];
 
 export function realizeAvailableOutput(output, occurrenceOrder = 1) {
   if (output?.kind === "proposal_realization_request") {
@@ -15,6 +18,9 @@ export function realizeAvailableOutput(output, occurrenceOrder = 1) {
   }
   if (output?.kind === "focused_drill_behavior_request") {
     return realizeFocusedDrillOutput(output, occurrenceOrder);
+  }
+  if (output?.kind === "direct_current_session_correction_request") {
+    return realizeDirectCorrectionOutput(output, occurrenceOrder);
   }
   throw new Error("Unsupported SUT realization request kind.");
 }
@@ -72,6 +78,35 @@ export function realizeFocusedDrillOutput(output, occurrenceOrder = 1) {
     || output.drillScope.surfaceLabel !== "text_simulated"
     || output.drillScope.consequence !== "low") {
     throw new Error("Unsupported focused-drill behavior request material.");
+  }
+  return Object.freeze({
+    simulatorRecordId: `simulator_${randomUUID()}`,
+    role: "simulated_behavior_realization_fact",
+    sourceActor: "simulated-dependency",
+    occurrenceOrder,
+    requestedOutputRef: output.outputRef,
+    requestedRef: output.requestedRef,
+    requestedBehavior: output.requestedBehavior,
+    realizedBehavior: output.requestedBehavior,
+    fidelity: "match",
+    mismatchOrigin: null
+  });
+}
+
+export function realizeDirectCorrectionOutput(output, occurrenceOrder = 1) {
+  assertExactKeys(output, DIRECT_CORRECTION_OUTPUT_KEYS, "direct-correction realization request");
+  assertExactKeys(output.sessionScope, [
+    "activity", "taskMode", "surfaceLabel", "realVoiceStack", "scenarioDay", "sessionId"
+  ], "sessionScope");
+  if (output.kind !== "direct_current_session_correction_request"
+    || output.requestedBehavior !== "turn_completion_correction"
+    || output.sessionScope.activity !== "japanese_practice"
+    || output.sessionScope.taskMode !== "spontaneous_production"
+    || output.sessionScope.surfaceLabel !== "voice_simulated"
+    || output.sessionScope.realVoiceStack !== "absent"
+    || output.sessionScope.scenarioDay !== 138
+    || output.sessionScope.sessionId !== "spontaneous-correction-current") {
+    throw new Error("Unsupported direct current-session correction request material.");
   }
   return Object.freeze({
     simulatorRecordId: `simulator_${randomUUID()}`,

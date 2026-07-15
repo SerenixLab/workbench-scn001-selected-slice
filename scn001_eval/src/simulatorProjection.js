@@ -133,7 +133,9 @@ function assertBehaviorSimulatorRecord(record) {
     || typeof record.simulatorRecordId !== "string" || record.simulatorRecordId.length === 0
     || record.sourceActor !== "simulated-dependency"
     || !Number.isSafeInteger(record.occurrenceOrder) || record.occurrenceOrder < 1
-    || record.requestedBehavior !== "immediate_correction"
+    || !["immediate_correction", "turn_completion_correction"].includes(
+      record.requestedBehavior
+    )
     || typeof record.realizedBehavior !== "string" || record.realizedBehavior.length === 0
     || !(match || mismatch)) {
     throw new Error("Invalid evaluation-side behavior simulator record.");

@@ -7,6 +7,7 @@ import { createEvaluationHarness } from "../index.js";
 import { createHarnessForMechanismTests } from "../src/harness.js";
 import {
   realizeAvailableOutput,
+  realizeDirectCorrectionOutput,
   realizeFocusedDrillOutput,
   realizeProposalOutput
 } from "../src/simulator.js";
@@ -347,12 +348,58 @@ function focusedDrillOutcomeRecords() {
   ];
 }
 
+function spontaneousCorrectionRecords() {
+  const definitions = [
+    ["V-001", "context_label", "fixture-driver", 19, {
+      surfaceLabel: "voice_simulated", activity: "japanese_practice",
+      taskMode: "spontaneous_production", consequence: "low",
+      realVoiceStack: "absent", scenarioDay: 138,
+      sessionId: "spontaneous-correction-current"
+    }],
+    ["V-002", "fixture_evidence", "fixture-driver", 20, {
+      event: "over_aggressive_mid_sentence_interruption",
+      context: "current_spontaneous_production_session"
+    }],
+    ["V-003", "communication_event", "synthetic-user-a", 21, {
+      content: "Don't stop me mid-sentence like that here. Let me finish first.",
+      context: "spontaneous_production", semanticStatusOrigin: "unclassified"
+    }],
+    ["V-004", "chronology_fact", "fixture-driver", 22, {
+      scenarioDay: 138, sessionId: "spontaneous-correction-current", sessionOrder: 4,
+      focusedDrillScenarioDay: 135, oldDrillPreferenceScenarioDay: 15
+    }],
+    ["FC-UGC-001", "fixture_control_fact", "fixture-driver", 12, {
+      control: "user_governed_constraints", value: "exhaustive_selected_slice_scope"
+    }],
+    ["FC-CONSEQ-001", "fixture_control_fact", "fixture-driver", 13, {
+      control: "consequence", value: "low"
+    }],
+    ["FC-REV-001", "fixture_control_fact", "fixture-driver", 14, {
+      control: "reversibility", value: "reversible"
+    }]
+  ];
+  return definitions.map(([fixtureRecordId, role, sourceActor, occurrenceOrder, data]) => ({
+    fixtureRecordId, role, sourceActor, occurrenceOrder, data,
+    oracleAnnotations: { checkpoint: "CP-DIRECT-CORRECTION-REALIZED" }
+  }));
+}
+
 function activateProductionTrial(harness, runRef) {
   harness.deliverFixtureRecords(runRef, productionProposalRecords());
   harness.processCurrentInteraction(runRef);
   harness.realizeAvailableOutputs(runRef);
   harness.processCurrentInteraction(runRef);
   harness.deliverProposalAcceptanceIfEligible(runRef, proposalAcceptanceRecords());
+  harness.processCurrentInteraction(runRef);
+}
+
+function completeFocusedDrill(harness, runRef) {
+  activateProductionTrial(harness, runRef);
+  harness.deliverFocusedDrillInputsIfEligible(runRef, focusedDrillOpeningRecords());
+  harness.processCurrentInteraction(runRef);
+  harness.realizeAvailableOutputs(runRef);
+  harness.processCurrentInteraction(runRef);
+  harness.deliverFocusedDrillOutcomeIfEligible(runRef, focusedDrillOutcomeRecords());
   harness.processCurrentInteraction(runRef);
 }
 
@@ -806,6 +853,441 @@ test("formal harness stages the complete focused-drill trajectory through both e
   );
   assert.deepEqual(harness.realizeAvailableOutputs(runRef), []);
   assert.deepEqual(harness.captureInspectionSnapshot(runRef), beforeReplay);
+});
+
+test("formal harness reaches exact CP-DIRECT-CORRECTION-REALIZED without later state", () => {
+  const harness = createEvaluationHarness(createSutBoundary());
+  const runRef = harness.startRun();
+  const directInputs = spontaneousCorrectionRecords();
+  assert.deepEqual(
+    harness.deliverSpontaneousCorrectionInputsIfEligible(runRef, directInputs), []
+  );
+  assert.throws(
+    () => harness.deliverFixtureRecords(runRef, directInputs.slice(0, 4)),
+    /staged prefix delivery/
+  );
+  completeFocusedDrill(harness, runRef);
+  const prefix = harness.captureInspectionSnapshot(runRef);
+  const candidateBefore = structuredClone(prefix.records.find(
+    (record) => record.family === "trial_candidate"
+  ));
+  const activeTrialBefore = structuredClone(prefix.records.find(
+    (record) => record.family === "active_trial"
+  ));
+  const focusedInstructionBefore = structuredClone(prefix.records.find(
+    (record) => record.family === "focused_drill_instruction"
+  ));
+  const focusedDispositionBefore = structuredClone(prefix.records.find(
+    (record) => record.family === "focused_drill_behavior_disposition"
+  ));
+  const focusedOutcomeBefore = structuredClone(prefix.records.find(
+    (record) => record.family === "focused_drill_outcome"
+  ));
+  const controlRefsBefore = new Map(prefix.records.filter((record) => (
+    record.role === "fixture_control_fact"
+  )).map((record) => [record.payload.control, record.reference]));
+
+  const delivery = harness.deliverSpontaneousCorrectionInputsIfEligible(
+    runRef, directInputs
+  );
+  assert.equal(delivery.length, 1);
+  assert.equal(delivery[0].acceptedInputRefs.length, 7);
+  assert.deepEqual(harness.processCurrentInteraction(runRef), []);
+  let snapshot = harness.captureInspectionSnapshot(runRef);
+  const rawCommunication = snapshot.records.find((record) => (
+    record.role === "communication"
+    && record.payload.content === directInputs[2].data.content
+  ));
+  const correctionState = snapshot.records.find(
+    (record) => record.family === "scoped_current_correction_control"
+  );
+  const disposition = snapshot.records.find(
+    (record) => record.family === "direct_current_session_correction_disposition"
+  );
+  assert.ok(rawCommunication);
+  assert.ok(correctionState);
+  assert.ok(disposition);
+  assert.notEqual(correctionState.reference, rawCommunication.reference);
+  assert.notEqual(disposition.reference, correctionState.reference);
+  assert.equal(correctionState.sourceCommunicationRef, rawCommunication.reference);
+  assert.equal(correctionState.authority, "explicit_current_user_correction");
+  assert.equal(correctionState.correctionTiming, "turn_completion_correction");
+  assert.equal(correctionState.currentApplicability, "applicable_to_exact_current_session");
+  assert.equal(correctionState.futureApplicability, "not_established");
+  assert.equal(correctionState.globalPreference, "not_established");
+  assert.equal(disposition.behaviorEffect, "immediate_current_session_change");
+  assert.equal(disposition.requestedBehavior, "turn_completion_correction");
+  assert.equal(disposition.correctionControlRef, correctionState.reference);
+  assert.equal(
+    correctionState.controlBasisRefs.userGoverned,
+    controlRefsBefore.get("user_governed_constraints")
+  );
+  assert.equal(
+    correctionState.controlBasisRefs.consequence, controlRefsBefore.get("consequence")
+  );
+  assert.equal(
+    correctionState.controlBasisRefs.reversibility, controlRefsBefore.get("reversibility")
+  );
+  const outputs = harness.emitAvailableOutputs(runRef);
+  assert.deepEqual(Object.keys(outputs[0]).sort(), [
+    "kind", "outputRef", "requestedRef", "requestedBehavior", "sessionScope"
+  ].sort());
+  assert.equal(outputs[0].kind, "direct_current_session_correction_request");
+  assert.equal(outputs[0].requestedRef, disposition.reference);
+  assert.equal(outputs[0].requestedBehavior, "turn_completion_correction");
+  assert.equal(Object.isFrozen(outputs), true);
+  assert.equal(Object.isFrozen(outputs[0].sessionScope), true);
+  assert.deepEqual(harness.inspectDirectCorrectionRealizedCheckpoint(runRef), []);
+  const realized = harness.realizeAvailableOutputs(runRef);
+  assert.equal(realized.length, 1);
+  assert.equal(realized[0].requestedRef, disposition.reference);
+  assert.equal(realized[0].requestedBehavior, "turn_completion_correction");
+  assert.equal(realized[0].realizedBehavior, "turn_completion_correction");
+  assert.deepEqual(harness.inspectDirectCorrectionRealizedCheckpoint(runRef), []);
+  harness.processCurrentInteraction(runRef);
+  const checkpoint = harness.inspectDirectCorrectionRealizedCheckpoint(runRef);
+  assert.equal(checkpoint.length, 1);
+  assert.equal(checkpoint[0].correctionStateRef, correctionState.reference);
+  assert.equal(checkpoint[0].dispositionRef, disposition.reference);
+  snapshot = harness.captureInspectionSnapshot(runRef);
+  assert.deepEqual(snapshot.records.find(
+    (record) => record.reference === candidateBefore.reference
+  ), candidateBefore);
+  assert.deepEqual(snapshot.records.find(
+    (record) => record.reference === activeTrialBefore.reference
+  ), activeTrialBefore);
+  assert.deepEqual(snapshot.records.find(
+    (record) => record.reference === focusedInstructionBefore.reference
+  ), focusedInstructionBefore);
+  assert.deepEqual(snapshot.records.find(
+    (record) => record.reference === focusedDispositionBefore.reference
+  ), focusedDispositionBefore);
+  assert.deepEqual(snapshot.records.find(
+    (record) => record.reference === focusedOutcomeBefore.reference
+  ), focusedOutcomeBefore);
+  assert.equal(snapshot.records.some((record) => [
+    "delayed_correction_candidate", "active_delayed_correction_trial",
+    "later_use_applicability", "later_outcome", "explanation_support",
+    "formal_evaluation_record", "scoring_artifact"
+  ].includes(record.family)), false);
+  assert.doesNotMatch(
+    JSON.stringify(snapshot), /fixtureRecordId|CP-DIRECT|expectedBehavior|oracleAnnotations/
+  );
+  const beforeReplay = structuredClone(snapshot);
+  assert.equal(
+    harness.deliverSpontaneousCorrectionInputsIfEligible(runRef, directInputs), delivery
+  );
+  assert.deepEqual(harness.realizeAvailableOutputs(runRef), []);
+  assert.deepEqual(harness.captureInspectionSnapshot(runRef), beforeReplay);
+});
+
+test("direct-correction simulator preserves SUT timing ownership", () => {
+  const request = {
+    kind: "direct_current_session_correction_request",
+    outputRef: "transition_00000000-0000-0000-0000-000000000000",
+    requestedRef: "state_00000000-0000-0000-0000-000000000000",
+    requestedBehavior: "turn_completion_correction",
+    sessionScope: {
+      activity: "japanese_practice", taskMode: "spontaneous_production",
+      surfaceLabel: "voice_simulated", realVoiceStack: "absent",
+      scenarioDay: 138, sessionId: "spontaneous-correction-current"
+    }
+  };
+  const record = realizeDirectCorrectionOutput(request, 5);
+  assert.equal(record.requestedBehavior, "turn_completion_correction");
+  assert.equal(record.realizedBehavior, record.requestedBehavior);
+  const projected = createSimulatorProjector().project(record);
+  assert.deepEqual(Object.keys(projected).sort(), [
+    "fidelity", "kind", "mismatchOrigin", "occurrenceOrder", "realizedBehavior",
+    "requestedBehavior", "requestedRef", "sourceActor", "sourceFactRef"
+  ].sort());
+  assert.throws(
+    () => realizeDirectCorrectionOutput({
+      ...request, requestedBehavior: "immediate_correction"
+    }),
+    /Unsupported direct/
+  );
+  assert.throws(
+    () => realizeDirectCorrectionOutput({ ...request, expectedTiming: "oracle" }),
+    /contain exactly/
+  );
+});
+
+test("spontaneous bundle requires the completed focused-drill realization and outcome", () => {
+  const harness = createEvaluationHarness(createSutBoundary());
+  const runRef = harness.startRun();
+  activateProductionTrial(harness, runRef);
+  harness.deliverFocusedDrillInputsIfEligible(runRef, focusedDrillOpeningRecords());
+  harness.processCurrentInteraction(runRef);
+  assert.deepEqual(harness.deliverSpontaneousCorrectionInputsIfEligible(
+    runRef, spontaneousCorrectionRecords()
+  ), []);
+  harness.realizeAvailableOutputs(runRef);
+  harness.processCurrentInteraction(runRef);
+  assert.deepEqual(harness.deliverSpontaneousCorrectionInputsIfEligible(
+    runRef, spontaneousCorrectionRecords()
+  ), []);
+  harness.deliverFocusedDrillOutcomeIfEligible(runRef, focusedDrillOutcomeRecords());
+  harness.processCurrentInteraction(runRef);
+  assert.equal(harness.deliverSpontaneousCorrectionInputsIfEligible(
+    runRef, spontaneousCorrectionRecords()
+  ).length, 1);
+});
+
+test("spontaneous staging rejects a malformed focused-drill prefix before ingress", () => {
+  for (const mutate of [
+    (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "focused_drill_instruction"
+      )).authority = "inferred_preference";
+    },
+    (snapshot) => {
+      const outcome = snapshot.records.find((record) => (
+        record.family === "focused_drill_outcome"
+      ));
+      snapshot.relations.find((relation) => (
+        relation.fromRef === outcome.reference && relation.targetRole === "outcome_ingestion"
+      )).targetRole = "substituted_ingestion";
+    }
+  ]) {
+    const real = createSutBoundary();
+    let corrupt = false;
+    let ingressCalls = 0;
+    const boundary = Object.freeze({
+      ...real,
+      ingestSutVisibleInputs(...args) {
+        ingressCalls += 1;
+        return real.ingestSutVisibleInputs(...args);
+      },
+      captureInspectionSnapshot(runRef) {
+        const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+        if (corrupt) mutate(snapshot);
+        return snapshot;
+      }
+    });
+    const harness = createEvaluationHarness(boundary);
+    const runRef = harness.startRun();
+    completeFocusedDrill(harness, runRef);
+    const before = ingressCalls;
+    corrupt = true;
+    let rejected = false;
+    try {
+      rejected = harness.deliverSpontaneousCorrectionInputsIfEligible(
+        runRef, spontaneousCorrectionRecords()
+      ).length === 0;
+    } catch {
+      rejected = true;
+    }
+    assert.equal(rejected, true);
+    assert.equal(ingressCalls, before);
+  }
+});
+
+test("spontaneous fixture staging rejects substitutions before SUT ingress", () => {
+  for (const mutate of [
+    (records) => records.splice(2, 1),
+    (records) => { records[2].sourceActor = "fixture-driver"; },
+    (records) => { records[2].data.content = "Please correct me right away during this drill."; },
+    (records) => { records[4].fixtureRecordId = "FC-UGC-REPLACEMENT"; },
+    (records) => { records[5].data.value = "high"; },
+    (records) => { records[0].data.surfaceLabel = "text_simulated"; }
+  ]) {
+    const real = createSutBoundary();
+    let ingressCalls = 0;
+    const boundary = Object.freeze({
+      ...real,
+      ingestSutVisibleInputs(...args) {
+        ingressCalls += 1;
+        return real.ingestSutVisibleInputs(...args);
+      }
+    });
+    const harness = createEvaluationHarness(boundary);
+    const runRef = harness.startRun();
+    completeFocusedDrill(harness, runRef);
+    const before = ingressCalls;
+    const records = spontaneousCorrectionRecords();
+    mutate(records);
+    assert.throws(() => harness.deliverSpontaneousCorrectionInputsIfEligible(
+      runRef, records
+    ));
+    assert.equal(ingressCalls, before);
+  }
+});
+
+test("raw direct-correction fragments and competing current instructions create no disposition", () => {
+  const boundary = createSutBoundary();
+  for (const fixtureIndexes of [[0], [2], [0, 2], [0, 1, 2]]) {
+    const runRef = boundary.startRun();
+    const records = fixtureIndexes.map((index) => spontaneousCorrectionRecords()[index]);
+    const inputs = records.map((record) => projectFixtureRecord(record));
+    boundary.ingestSutVisibleInputs(runRef, { inputs });
+    boundary.processCurrentInteraction(runRef);
+    assert.equal(boundary.captureInspectionSnapshot(runRef).records.some((record) => (
+      record.family === "direct_current_session_correction_disposition"
+    )), false);
+  }
+
+  const runRef = boundary.startRun();
+  const records = spontaneousCorrectionRecords();
+  const projected = records.map((record) => projectFixtureRecord(record));
+  const controls = projected.slice(4);
+  boundary.ingestSutVisibleInputs(runRef, { inputs: controls });
+  boundary.processCurrentInteraction(runRef);
+  const competing = projectFixtureRecord({
+    ...structuredClone(records[2]), fixtureRecordId: "V-003-EQUAL-DISTINCT",
+    occurrenceOrder: 23
+  });
+  boundary.ingestSutVisibleInputs(runRef, {
+    inputs: [...projected.slice(0, 4), ...controls, competing]
+  });
+  boundary.processCurrentInteraction(runRef);
+  assert.equal(boundary.captureInspectionSnapshot(runRef).records.some((record) => (
+    record.family === "direct_current_session_correction_disposition"
+  )), false);
+});
+
+test("direct realization mismatch is retained but cannot reach the checkpoint", () => {
+  const harness = createHarnessForMechanismTests(createSutBoundary(), {
+    renderOutput(output, order) {
+      const record = realizeAvailableOutput(output, order);
+      if (output.kind !== "direct_current_session_correction_request") return record;
+      return Object.freeze({
+        ...record,
+        realizedBehavior: "immediate_correction",
+        fidelity: "mismatch",
+        mismatchOrigin: "simulated_dependency"
+      });
+    }
+  });
+  const runRef = harness.startRun();
+  completeFocusedDrill(harness, runRef);
+  harness.deliverSpontaneousCorrectionInputsIfEligible(
+    runRef, spontaneousCorrectionRecords()
+  );
+  harness.processCurrentInteraction(runRef);
+  const record = harness.realizeAvailableOutputs(runRef)[0];
+  assert.equal(record.requestedBehavior, "turn_completion_correction");
+  assert.equal(record.realizedBehavior, "immediate_correction");
+  harness.processCurrentInteraction(runRef);
+  assert.throws(
+    () => harness.inspectDirectCorrectionRealizedCheckpoint(runRef),
+    /exact closure is malformed/
+  );
+});
+
+test("CP-DIRECT-CORRECTION-REALIZED rejects identity, relation, and order substitution", () => {
+  const attacks = [
+    (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "scoped_current_correction_control"
+      )).correctionTiming = "immediate_correction";
+    },
+    (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "scoped_current_correction_control"
+      )).unexpectedOracleField = true;
+    },
+    (snapshot) => {
+      const state = snapshot.records.find((record) => (
+        record.family === "scoped_current_correction_control"
+      ));
+      snapshot.records.find((record) => (
+        record.reference === state.sourceCommunicationRef
+      )).firstInteractionRef = snapshot.records.find((record) => (
+        record.family === "focused_drill_instruction"
+      )).interactionRef;
+    },
+    (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "direct_current_session_correction_disposition"
+      )).correctionControlRef = snapshot.records.find((record) => (
+        record.family === "focused_drill_instruction"
+      )).reference;
+    },
+    (snapshot) => {
+      const fact = snapshot.records.find((record) => (
+        record.role === "simulator_behavior_realization"
+        && record.payload.requestedBehavior === "turn_completion_correction"
+      ));
+      snapshot.records.find((record) => record.reference === fact.sourceActorRef).sourceActor
+        = "wrong-simulator";
+    },
+    (snapshot) => {
+      const transition = snapshot.records.find((record) => (
+        record.transitionKind === "record_direct_current_session_correction_realization"
+      ));
+      transition.inputReferences.reverse();
+    },
+    (snapshot) => {
+      const relation = snapshot.relations.find((item) => (
+        item.relationKind === "realization"
+        && item.targetRole === "direct_current_session_correction_disposition"
+      ));
+      relation.targetRole = "focused_drill_behavior_disposition";
+    },
+    (snapshot) => {
+      const transition = snapshot.records.find((record) => (
+        record.transitionKind === "record_direct_current_session_correction_realization"
+      ));
+      snapshot.relations.find((item) => (
+        item.fromRef === transition.reference && item.relationKind === "basis"
+      )).createdOrder -= 1;
+    },
+    (snapshot) => {
+      const disposition = snapshot.records.find((record) => (
+        record.family === "direct_current_session_correction_disposition"
+      ));
+      snapshot.records.push({ ...structuredClone(disposition), reference:
+        "state_99999999-9999-9999-9999-999999999999" });
+    }
+  ];
+  for (const attack of attacks) {
+    const real = createSutBoundary();
+    let corrupt = false;
+    const boundary = Object.freeze({
+      ...real,
+      captureInspectionSnapshot(runRef) {
+        const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+        if (corrupt) attack(snapshot);
+        return snapshot;
+      }
+    });
+    const harness = createEvaluationHarness(boundary);
+    const runRef = harness.startRun();
+    completeFocusedDrill(harness, runRef);
+    harness.deliverSpontaneousCorrectionInputsIfEligible(
+      runRef, spontaneousCorrectionRecords()
+    );
+    harness.processCurrentInteraction(runRef);
+    harness.realizeAvailableOutputs(runRef);
+    harness.processCurrentInteraction(runRef);
+    corrupt = true;
+    assert.throws(() => harness.inspectDirectCorrectionRealizedCheckpoint(runRef));
+  }
+});
+
+test("independent runs never share direct-correction state", () => {
+  const harness = createEvaluationHarness(createSutBoundary());
+  const run = () => {
+    const runRef = harness.startRun();
+    completeFocusedDrill(harness, runRef);
+    harness.deliverSpontaneousCorrectionInputsIfEligible(
+      runRef, spontaneousCorrectionRecords()
+    );
+    harness.processCurrentInteraction(runRef);
+    harness.realizeAvailableOutputs(runRef);
+    harness.processCurrentInteraction(runRef);
+    return { runRef, checkpoint: harness.inspectDirectCorrectionRealizedCheckpoint(runRef)[0] };
+  };
+  const first = run();
+  harness.endRun(first.runRef);
+  const second = run();
+  assert.notEqual(second.checkpoint.correctionStateRef, first.checkpoint.correctionStateRef);
+  assert.notEqual(second.checkpoint.dispositionRef, first.checkpoint.dispositionRef);
+  assert.notEqual(second.checkpoint.realizationFactRef, first.checkpoint.realizationFactRef);
+  assert.equal(harness.captureInspectionSnapshot(second.runRef).records.some((record) => (
+    Object.values(first.checkpoint).includes(record.reference)
+  )), false);
 });
 
 test("focused-drill opening requires one exact retained active-trial closure", () => {

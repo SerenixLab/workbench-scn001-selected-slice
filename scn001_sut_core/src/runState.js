@@ -3,6 +3,13 @@ import { isDeepStrictEqual } from "node:util";
 
 import { SutBoundaryValidationError, SutReferenceError, SutStateIntegrityError } from "./errors.js";
 import {
+  deriveDirectCorrectionParticipants,
+  isMatchedDirectRealization,
+  resolveDirectCorrectionRealizationClosure,
+  TURN_COMPLETION_CORRECTION_BEHAVIOR,
+  validateDirectCorrectionDispositionClosure
+} from "./directCorrection.js";
+import {
   deriveFocusedDrillDecisionParticipants,
   deriveFocusedDrillOutcomeParticipants,
   IMMEDIATE_CORRECTION_BEHAVIOR,
@@ -298,6 +305,14 @@ export class RunState {
       interaction,
       interactionFacts
     );
+    const directCorrectionTransitionRefs = this.deriveDirectCorrectionDecision(
+      interaction,
+      interactionFacts
+    );
+    const directCorrectionRealizationTransitionRef = this.recordDirectCorrectionRealization(
+      interaction,
+      interactionFacts
+    );
     const semanticTransitionRefs = [
       attributionTransitionRef,
       temporalAssessmentTransitionRef,
@@ -311,7 +326,9 @@ export class RunState {
       activeTrialTransitionRef,
       ...focusedDrillDecisionTransitionRefs,
       focusedDrillRealizationTransitionRef,
-      focusedDrillOutcomeTransitionRef
+      focusedDrillOutcomeTransitionRef,
+      ...directCorrectionTransitionRefs,
+      directCorrectionRealizationTransitionRef
     ].filter(Boolean);
     const processingTransition = this.createTransition(
       "process_interaction_segment",
@@ -392,7 +409,23 @@ export class RunState {
         };
       })
       .filter(Boolean);
-    const outstanding = [...proposalOutputs, ...focusedDrillOutputs];
+    const directCorrectionOutputs = [...this.records.values()]
+      .filter((record) => record.family === "direct_current_session_correction_disposition")
+      .map((disposition) => {
+        this.validateDirectCorrectionDispositionClosure(disposition);
+        const realization = this.resolveDirectCorrectionRealizationClosure(disposition.reference);
+        return realization ? undefined : {
+          kind: "direct_current_session_correction_request",
+          outputRef: disposition.createdByTransitionRef,
+          requestedRef: disposition.reference,
+          requestedBehavior: disposition.requestedBehavior,
+          sessionScope: structuredClone(disposition.sessionScope)
+        };
+      })
+      .filter(Boolean);
+    const outstanding = [
+      ...proposalOutputs, ...focusedDrillOutputs, ...directCorrectionOutputs
+    ];
     if (outstanding.length !== 1) {
       return Object.freeze([]);
     }
@@ -1473,9 +1506,21 @@ export class RunState {
   }
 
   recordFocusedDrillRealization(interaction, interactionFacts) {
-    const facts = interactionFacts.filter((fact) => (
+    const behaviorFacts = interactionFacts.filter((fact) => (
       fact.role === "simulator_behavior_realization"
     ));
+    const facts = behaviorFacts.filter((fact) => (
+      this.records.get(fact.payload.requestedRef)?.family
+        === "focused_drill_behavior_disposition"
+    ));
+    if (behaviorFacts.some((fact) => ![
+      "focused_drill_behavior_disposition",
+      "direct_current_session_correction_disposition"
+    ].includes(this.records.get(fact.payload.requestedRef)?.family))) {
+      throw new SutStateIntegrityError(
+        "Focused-drill realization must target an exact SUT behavior disposition."
+      );
+    }
     if (facts.length === 0) return undefined;
     if (facts.length !== 1) return undefined;
     const fact = facts[0];
@@ -1679,6 +1724,225 @@ export class RunState {
       sourceFactBindings: this.sourceFactBindings,
       outcome,
       validateActiveTrial: (trial) => this.validActiveTrialClosure(trial)
+    });
+  }
+
+  deriveDirectCorrectionDecision(interaction, interactionFacts) {
+    const participants = deriveDirectCorrectionParticipants({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      interaction,
+      interactionFacts
+    });
+    if (!participants || participants.kind === "reuse") return [];
+
+    const correctionState = {
+      reference: createReference("state"),
+      family: "scoped_current_correction_control",
+      origin: "sut",
+      controlType: "correction_timing_during_current_spontaneous_session",
+      authority: "explicit_current_user_correction",
+      interpretedTarget: "correction_timing_during_current_spontaneous_production_session",
+      requestedBehavior: "do_not_interrupt_mid_sentence_allow_turn_completion_before_correction",
+      correctionTiming: TURN_COMPLETION_CORRECTION_BEHAVIOR,
+      activity: participants.sessionScope.activity,
+      taskMode: participants.sessionScope.taskMode,
+      surfaceLabel: participants.sessionScope.surfaceLabel,
+      sessionScope: structuredClone(participants.sessionScope),
+      currentApplicability: "applicable_to_exact_current_session",
+      futureApplicability: "not_established",
+      globalPreference: "not_established",
+      sourceCommunicationRef: participants.communication.reference,
+      attributedAssertionRef: participants.assertion.reference,
+      sourceActorRef: participants.sourceActorRef,
+      contextRef: participants.context.reference,
+      interruptionEventRef: participants.interruption.reference,
+      chronologyRef: participants.chronology.reference,
+      controlBasisRefs: structuredClone(participants.controlBasisRefs),
+      interactionRef: interaction.reference,
+      ingestionTransitionRef: participants.ingestion.reference,
+      statusOrigin: "sut_transition",
+      createdOrder: this.allocateOrder()
+    };
+    correctionState.effectiveOrder = correctionState.createdOrder;
+    const controlReferences = Object.values(participants.controlBasisRefs);
+    const correctionInputs = [
+      participants.context.reference,
+      participants.interruption.reference,
+      participants.communication.reference,
+      participants.assertion.reference,
+      participants.chronology.reference,
+      ...controlReferences,
+      interaction.reference,
+      participants.ingestion.reference
+    ];
+    const correctionTransition = this.createTransition(
+      "derive_scoped_current_correction_control",
+      correctionInputs,
+      [correctionState.reference],
+      interaction.reference
+    );
+    correctionTransition.result = "scoped_current_correction_control_derived";
+    attachCreatingTransition([correctionState], correctionTransition);
+
+    const disposition = {
+      reference: createReference("state"),
+      family: "direct_current_session_correction_disposition",
+      origin: "sut",
+      dispositionType: "respect_explicit_current_correction",
+      correctionControlRef: correctionState.reference,
+      contextRef: participants.context.reference,
+      requestedBehavior: TURN_COMPLETION_CORRECTION_BEHAVIOR,
+      behaviorEffect: "immediate_current_session_change",
+      sessionScope: structuredClone(participants.sessionScope),
+      futureApplicability: "not_established",
+      globalPolicy: "not_established",
+      durableAdaptation: "not_established",
+      statusOrigin: "sut_transition",
+      interactionRef: interaction.reference,
+      createdOrder: this.allocateOrder()
+    };
+    disposition.effectiveOrder = disposition.createdOrder;
+    const dispositionTransition = this.createTransition(
+      "derive_direct_current_session_correction_disposition",
+      [correctionState.reference, participants.context.reference],
+      [disposition.reference],
+      interaction.reference
+    );
+    dispositionTransition.result = "direct_current_session_correction_disposition_derived";
+    attachCreatingTransition([disposition], dispositionTransition);
+
+    this.commitDerivedRecords([correctionState], correctionTransition);
+    this.commitDerivedRecords([disposition], dispositionTransition);
+    for (const [reference, role] of [
+      [participants.context.reference, "current_spontaneous_context"],
+      [participants.interruption.reference, "supplied_interruption_event"],
+      [participants.communication.reference, "explicit_current_user_correction"],
+      [participants.assertion.reference, "attributed_current_user_correction"],
+      [participants.chronology.reference, "current_correction_chronology"],
+      [participants.controlBasisRefs.userGoverned, "user_governed_control"],
+      [participants.controlBasisRefs.consequence, "consequence_control"],
+      [participants.controlBasisRefs.reversibility, "reversibility_control"],
+      [interaction.reference, "current_correction_interaction"],
+      [participants.ingestion.reference, "current_correction_ingestion"]
+    ]) {
+      this.relations.push({
+        relationKind: "basis",
+        fromRef: correctionState.reference,
+        toRef: reference,
+        targetRole: role,
+        effectiveOrder: correctionState.createdOrder,
+        createdOrder: correctionTransition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    this.relations.push({
+      relationKind: "source",
+      fromRef: correctionState.reference,
+      toRef: participants.sourceActorRef,
+      targetRole: "semantic_source",
+      effectiveOrder: correctionState.createdOrder,
+      createdOrder: correctionTransition.createdOrder,
+      assertedByRole: "sut"
+    });
+    for (const [reference, role] of [
+      [correctionState.reference, "scoped_current_correction_control"],
+      [participants.context.reference, "current_spontaneous_context"]
+    ]) {
+      this.relations.push({
+        relationKind: "basis",
+        fromRef: disposition.reference,
+        toRef: reference,
+        targetRole: role,
+        effectiveOrder: disposition.createdOrder,
+        createdOrder: dispositionTransition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    return [correctionTransition.reference, dispositionTransition.reference];
+  }
+
+  recordDirectCorrectionRealization(interaction, interactionFacts) {
+    const facts = interactionFacts.filter((fact) => (
+      fact.role === "simulator_behavior_realization"
+      && this.records.get(fact.payload.requestedRef)?.family
+        === "direct_current_session_correction_disposition"
+    ));
+    if (facts.length === 0) return undefined;
+    if (facts.length !== 1) return undefined;
+    const fact = facts[0];
+    const disposition = this.records.get(fact.payload.requestedRef);
+    this.validateDirectCorrectionDispositionClosure(disposition);
+    const payload = fact.payload;
+    const validMismatch = payload.requestedBehavior === TURN_COMPLETION_CORRECTION_BEHAVIOR
+      && payload.fidelity === "mismatch"
+      && payload.realizedBehavior !== TURN_COMPLETION_CORRECTION_BEHAVIOR
+      && typeof payload.mismatchOrigin === "string" && payload.mismatchOrigin.length > 0;
+    if (!isMatchedDirectRealization(payload) && !validMismatch) {
+      throw new SutStateIntegrityError("Direct correction simulator realization is inconsistent.");
+    }
+    this.validateRetainedInputFact(
+      fact, "simulator", "simulator_behavior_realization", interaction,
+      "simulated-dependency"
+    );
+    const existing = this.resolveDirectCorrectionRealizationClosure(disposition.reference);
+    if (existing) {
+      if (existing.fact.reference === fact.reference) return undefined;
+      throw new SutStateIntegrityError(
+        "A distinct realization already exists for this direct correction disposition."
+      );
+    }
+    const transition = this.createTransition(
+      "record_direct_current_session_correction_realization",
+      [fact.reference, disposition.reference],
+      [],
+      interaction.reference
+    );
+    transition.result = "direct_current_session_correction_realization_recorded";
+    this.records.set(transition.reference, transition);
+    for (const [reference, role] of [
+      [fact.reference, "simulator_behavior_realization_fact"],
+      [disposition.reference, "requested_direct_correction_disposition"]
+    ]) {
+      this.relations.push({
+        relationKind: "basis",
+        fromRef: transition.reference,
+        toRef: reference,
+        targetRole: role,
+        effectiveOrder: transition.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    this.relations.push({
+      relationKind: "realization",
+      fromRef: fact.reference,
+      toRef: disposition.reference,
+      targetRole: "direct_current_session_correction_disposition",
+      effectiveOrder: transition.createdOrder,
+      createdOrder: transition.createdOrder,
+      assertedByRole: "sut"
+    });
+    return transition.reference;
+  }
+
+  validateDirectCorrectionDispositionClosure(disposition) {
+    return validateDirectCorrectionDispositionClosure({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      disposition
+    });
+  }
+
+  resolveDirectCorrectionRealizationClosure(dispositionRef, expectedFactRef) {
+    return resolveDirectCorrectionRealizationClosure({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      dispositionRef,
+      expectedFactRef
     });
   }
 

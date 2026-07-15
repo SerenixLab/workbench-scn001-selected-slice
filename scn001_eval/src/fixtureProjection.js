@@ -44,6 +44,10 @@ const roleDefinitions = {
   material_context_change: {
     kind: "material_context_change",
     keys: ["description"]
+  },
+  fixture_evidence: {
+    kind: "fixture_evidence",
+    keys: ["event", "context"]
   }
 };
 
@@ -53,9 +57,17 @@ export function projectFixtureRecord(record, sourceFactRef = createSourceFactRef
   if (!definition) {
     throw new Error(`Unsupported fixture role: ${record.role}.`);
   }
-  const dataKeys = record.role === "task_observation" && Object.hasOwn(record.data, "itemRefs")
-    ? definition.keys.map((key) => key === "itemRef" ? "itemRefs" : key)
-    : definition.keys;
+  let dataKeys = definition.keys;
+  if (record.role === "task_observation" && Object.hasOwn(record.data, "itemRefs")) {
+    dataKeys = definition.keys.map((key) => key === "itemRef" ? "itemRefs" : key);
+  } else if (record.role === "context_label" && Object.hasOwn(record.data, "realVoiceStack")) {
+    dataKeys = [...definition.keys, "realVoiceStack", "scenarioDay", "sessionId"];
+  } else if (record.role === "chronology_fact"
+    && Object.hasOwn(record.data, "focusedDrillScenarioDay")) {
+    dataKeys = [
+      ...definition.keys, "focusedDrillScenarioDay", "oldDrillPreferenceScenarioDay"
+    ];
+  }
   assertExactKeys(record.data, dataKeys, `fixture record ${record.fixtureRecordId}.data`);
   if (definition.kind === "task_observation") {
     if (Object.hasOwn(record.data, "itemRefs")) {

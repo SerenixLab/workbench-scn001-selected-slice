@@ -30,22 +30,44 @@ const inputValidators = {
   },
   chronology_fact: (input, path) => {
     assertCommonInputFields(input, path);
-    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "scenarioDay", "sessionId", "sessionOrder"], path);
+    const directChronology = Object.hasOwn(input, "focusedDrillScenarioDay");
+    assertExactKeys(input, [
+      "sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "scenarioDay",
+      "sessionId", "sessionOrder",
+      ...(directChronology
+        ? ["focusedDrillScenarioDay", "oldDrillPreferenceScenarioDay"] : [])
+    ], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertNonNegativeInteger(input.scenarioDay, `${path}.scenarioDay`);
     assertString(input.sessionId, `${path}.sessionId`);
     assertPositiveInteger(input.sessionOrder, `${path}.sessionOrder`);
+    if (directChronology) {
+      assertNonNegativeInteger(input.focusedDrillScenarioDay, `${path}.focusedDrillScenarioDay`);
+      assertNonNegativeInteger(
+        input.oldDrillPreferenceScenarioDay, `${path}.oldDrillPreferenceScenarioDay`
+      );
+    }
   },
   context_label: (input, path) => {
     assertCommonInputFields(input, path);
-    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "surfaceLabel", "activity", "taskMode", "consequence"], path);
+    const directContext = Object.hasOwn(input, "realVoiceStack");
+    assertExactKeys(input, [
+      "sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "surfaceLabel",
+      "activity", "taskMode", "consequence",
+      ...(directContext ? ["realVoiceStack", "scenarioDay", "sessionId"] : [])
+    ], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertString(input.surfaceLabel, `${path}.surfaceLabel`);
     assertString(input.activity, `${path}.activity`);
     assertString(input.taskMode, `${path}.taskMode`);
     assertString(input.consequence, `${path}.consequence`);
+    if (directContext) {
+      assertString(input.realVoiceStack, `${path}.realVoiceStack`);
+      assertNonNegativeInteger(input.scenarioDay, `${path}.scenarioDay`);
+      assertString(input.sessionId, `${path}.sessionId`);
+    }
   },
   affordance_fact: (input, path) => {
     assertCommonInputFields(input, path);
@@ -114,6 +136,16 @@ const inputValidators = {
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertString(input.description, `${path}.description`);
+  },
+  fixture_evidence: (input, path) => {
+    assertCommonInputFields(input, path);
+    assertExactKeys(input, [
+      "sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "event", "context"
+    ], path);
+    assertString(input.sourceActor, `${path}.sourceActor`);
+    assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
+    assertString(input.event, `${path}.event`);
+    assertString(input.context, `${path}.context`);
   }
 };
 
