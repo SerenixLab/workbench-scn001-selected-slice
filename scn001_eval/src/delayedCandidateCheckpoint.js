@@ -61,22 +61,48 @@ export function findExactDelayedCorrectionCandidate(snapshot, sourceBindingEvide
   const trialPolicy = records.get(candidate.trialPolicyRef);
   const interaction = records.get(candidate.interactionRef);
   const focusedRealizationTransition = records.get(focused.outcome.realizationTransitionRef);
-  const expectedPairs = [
-    [direct.state.reference, "current_correction_event", "support"],
+  const expectedInputs = [
+    direct.state.reference,
+    direct.disposition.reference,
+    direct.fact.reference,
+    direct.realizationTransition.reference,
+    activeTrial.reference,
+    focused.instruction.reference,
+    focused.disposition.reference,
+    focused.realizationFact.reference,
+    focusedRealizationTransition?.reference,
+    focused.outcome.reference,
+    context?.reference,
+    trialPolicy?.reference,
+    candidate.controlBasisRefs?.userGoverned,
+    candidate.controlBasisRefs?.consequence,
+    candidate.controlBasisRefs?.reversibility
+  ];
+  const expectedRelations = [
     [direct.disposition.reference, "direct_correction_disposition", "transition_ancestry"],
-    [direct.fact.reference, "realized_current_correction", "support"],
+    [direct.state.reference, "current_correction_evidence", "basis"],
+    [direct.disposition.reference, "direct_correction_disposition_basis", "basis"],
+    [direct.fact.reference, "realized_current_correction", "basis"],
     [direct.realizationTransition.reference, "current_correction_realization_transition", "basis"],
-    [activeTrial.reference, "retained_production_trial", "support"],
-    [focused.instruction.reference, "prior_focused_drill_instruction", "support"],
-    [focused.disposition.reference, "prior_focused_drill_disposition", "support"],
-    [focused.realizationFact.reference, "prior_focused_realization", "support"],
+    [activeTrial.reference, "retained_production_trial", "basis"],
+    [focused.instruction.reference, "prior_focused_drill_instruction", "basis"],
+    [focused.disposition.reference, "prior_focused_drill_disposition", "basis"],
+    [focused.realizationFact.reference, "prior_focused_realization", "basis"],
     [focusedRealizationTransition?.reference, "prior_focused_realization_transition", "basis"],
-    [focused.outcome.reference, "prior_focused_outcome", "support"],
-    [context?.reference, "spontaneous_production_context", "support"],
+    [focused.outcome.reference, "prior_focused_outcome", "basis"],
+    [context?.reference, "spontaneous_production_context", "basis"],
     [trialPolicy?.reference, "bounded_trial_policy", "basis"],
     [candidate.controlBasisRefs?.userGoverned, "user_governed_control", "basis"],
     [candidate.controlBasisRefs?.consequence, "consequence_control", "basis"],
-    [candidate.controlBasisRefs?.reversibility, "reversibility_control", "basis"]
+    [candidate.controlBasisRefs?.reversibility, "reversibility_control", "basis"],
+    [direct.state.reference, "current_correction_support", "support"],
+    [direct.fact.reference, "realized_current_correction_support", "support"],
+    [focused.instruction.reference,
+      "prior_focused_drill_instruction_support", "support"],
+    [focused.disposition.reference,
+      "prior_focused_drill_disposition_support", "support"],
+    [focused.realizationFact.reference, "prior_focused_realization_support", "support"],
+    [focused.outcome.reference, "prior_focused_outcome_support", "support"]
   ];
   const candidateRelations = snapshot.relations.filter(
     (relation) => relation.fromRef === candidate.reference
@@ -124,9 +150,9 @@ export function findExactDelayedCorrectionCandidate(snapshot, sourceBindingEvide
     || transition.interactionRef !== interaction.reference
     || transition.result !== "delayed_correction_candidate_formed_non_active"
     || JSON.stringify(transition.inputReferences)
-      !== JSON.stringify(expectedPairs.map(([reference]) => reference))
+      !== JSON.stringify(expectedInputs)
     || JSON.stringify(transition.resultReferences) !== JSON.stringify([candidate.reference])
-    || !hasExactRelations(candidateRelations, expectedPairs)
+    || !hasExactRelations(candidateRelations, expectedRelations)
     || candidateRelations.some((relation) => !exactRelationMetadata(
       relation, candidate.createdOrder, transition.createdOrder
     ))

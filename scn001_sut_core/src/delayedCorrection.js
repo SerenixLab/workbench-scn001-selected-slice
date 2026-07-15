@@ -189,7 +189,7 @@ export function validateDelayedCorrectionCandidateClosure({
   const trialPolicy = records.get(candidate?.trialPolicyRef);
   const interaction = records.get(candidate?.interactionRef);
   const controlRefs = candidate?.controlBasisRefs ?? {};
-  const expectedParticipants = candidateParticipantPairs({
+  const participants = {
     correctionState,
     directDisposition: direct?.disposition,
     directRealizationFact: direct?.fact,
@@ -203,7 +203,9 @@ export function validateDelayedCorrectionCandidateClosure({
     currentContext,
     trialPolicy,
     controlBasisRefs: controlRefs
-  });
+  };
+  const expectedInputs = candidateInputReferences(participants);
+  const expectedRelations = candidateRelationPairs(participants);
   const candidateRelations = relations.filter((relation) => (
     relation.fromRef === candidate?.reference
   ));
@@ -248,10 +250,10 @@ export function validateDelayedCorrectionCandidateClosure({
     || transition.result !== "delayed_correction_candidate_formed_non_active"
     || !isDeepStrictEqual(
       transition.inputReferences,
-      expectedParticipants.map(([reference]) => reference)
+      expectedInputs
     )
     || !isDeepStrictEqual(transition.resultReferences, [candidate.reference])
-    || !hasExactRelations(candidateRelations, expectedParticipants)
+    || !hasExactRelations(candidateRelations, expectedRelations)
     || candidateRelations.some((relation) => !exactRelationMetadata(
       relation, candidate.createdOrder, transition.createdOrder
     ))
@@ -267,23 +269,57 @@ export function validateDelayedCorrectionCandidateClosure({
   return candidate;
 }
 
-export function candidateParticipantPairs(participants) {
+export function candidateInputReferences(participants) {
   return [
-    [participants.correctionState.reference, "current_correction_event", "support"],
-    [participants.directDisposition.reference, "direct_correction_disposition", "transition_ancestry"],
-    [participants.directRealizationFact.reference, "realized_current_correction", "support"],
-    [participants.directRealizationTransition.reference, "current_correction_realization_transition", "basis"],
-    [participants.activeTrial.reference, "retained_production_trial", "support"],
-    [participants.focusedInstruction.reference, "prior_focused_drill_instruction", "support"],
-    [participants.focusedDisposition.reference, "prior_focused_drill_disposition", "support"],
-    [participants.focusedRealizationFact.reference, "prior_focused_realization", "support"],
-    [participants.focusedRealizationTransition.reference, "prior_focused_realization_transition", "basis"],
-    [participants.focusedOutcome.reference, "prior_focused_outcome", "support"],
-    [participants.currentContext.reference, "spontaneous_production_context", "support"],
+    participants.correctionState.reference,
+    participants.directDisposition.reference,
+    participants.directRealizationFact.reference,
+    participants.directRealizationTransition.reference,
+    participants.activeTrial.reference,
+    participants.focusedInstruction.reference,
+    participants.focusedDisposition.reference,
+    participants.focusedRealizationFact.reference,
+    participants.focusedRealizationTransition.reference,
+    participants.focusedOutcome.reference,
+    participants.currentContext.reference,
+    participants.trialPolicy.reference,
+    participants.controlBasisRefs.userGoverned,
+    participants.controlBasisRefs.consequence,
+    participants.controlBasisRefs.reversibility
+  ];
+}
+
+export function candidateRelationPairs(participants) {
+  return [
+    [participants.directDisposition.reference,
+      "direct_correction_disposition", "transition_ancestry"],
+    [participants.correctionState.reference, "current_correction_evidence", "basis"],
+    [participants.directDisposition.reference, "direct_correction_disposition_basis", "basis"],
+    [participants.directRealizationFact.reference, "realized_current_correction", "basis"],
+    [participants.directRealizationTransition.reference,
+      "current_correction_realization_transition", "basis"],
+    [participants.activeTrial.reference, "retained_production_trial", "basis"],
+    [participants.focusedInstruction.reference, "prior_focused_drill_instruction", "basis"],
+    [participants.focusedDisposition.reference, "prior_focused_drill_disposition", "basis"],
+    [participants.focusedRealizationFact.reference, "prior_focused_realization", "basis"],
+    [participants.focusedRealizationTransition.reference,
+      "prior_focused_realization_transition", "basis"],
+    [participants.focusedOutcome.reference, "prior_focused_outcome", "basis"],
+    [participants.currentContext.reference, "spontaneous_production_context", "basis"],
     [participants.trialPolicy.reference, "bounded_trial_policy", "basis"],
     [participants.controlBasisRefs.userGoverned, "user_governed_control", "basis"],
     [participants.controlBasisRefs.consequence, "consequence_control", "basis"],
-    [participants.controlBasisRefs.reversibility, "reversibility_control", "basis"]
+    [participants.controlBasisRefs.reversibility, "reversibility_control", "basis"],
+    [participants.correctionState.reference, "current_correction_support", "support"],
+    [participants.directRealizationFact.reference,
+      "realized_current_correction_support", "support"],
+    [participants.focusedInstruction.reference,
+      "prior_focused_drill_instruction_support", "support"],
+    [participants.focusedDisposition.reference,
+      "prior_focused_drill_disposition_support", "support"],
+    [participants.focusedRealizationFact.reference,
+      "prior_focused_realization_support", "support"],
+    [participants.focusedOutcome.reference, "prior_focused_outcome_support", "support"]
   ];
 }
 

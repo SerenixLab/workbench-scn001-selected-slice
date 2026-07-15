@@ -10,7 +10,8 @@ import {
   validateDirectCorrectionDispositionClosure
 } from "./directCorrection.js";
 import {
-  candidateParticipantPairs,
+  candidateInputReferences,
+  candidateRelationPairs,
   DELAYED_ACTIVATION_REQUIREMENTS,
   DELAYED_CORRECTION_INTENT,
   DELAYED_CORRECTION_SCOPE,
@@ -2010,17 +2011,18 @@ export class RunState {
       createdOrder: this.allocateOrder()
     };
     candidate.effectiveOrder = candidate.createdOrder;
-    const participantPairs = candidateParticipantPairs(participants);
+    const inputReferences = candidateInputReferences(participants);
+    const relationPairs = candidateRelationPairs(participants);
     const transition = this.createTransition(
       "form_delayed_correction_trial_candidate",
-      participantPairs.map(([reference]) => reference),
+      inputReferences,
       [candidate.reference],
       interaction.reference
     );
     transition.result = "delayed_correction_candidate_formed_non_active";
     attachCreatingTransition([candidate], transition);
     this.commitDerivedRecords([candidate], transition);
-    for (const [reference, role, relationKind] of participantPairs) {
+    for (const [reference, role, relationKind] of relationPairs) {
       this.relations.push({
         relationKind,
         fromRef: candidate.reference,

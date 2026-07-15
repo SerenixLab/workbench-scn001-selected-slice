@@ -1020,7 +1020,7 @@ test("CP-DELAY-CANDIDATE rejects malformed lineage without mutating SUT state", 
     ["missing focused support", (snapshot, candidate) => {
       snapshot.relations.splice(snapshot.relations.findIndex((relation) => (
         relation.fromRef === candidate.reference
-        && relation.targetRole === "prior_focused_outcome"
+        && relation.targetRole === "prior_focused_outcome_support"
       )), 1);
     }],
     ["duplicate creator", (snapshot, candidate) => {

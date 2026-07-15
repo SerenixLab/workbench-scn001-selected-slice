@@ -3312,6 +3312,24 @@ test("matched direct realization forms one separate non-active delayed candidate
     "reversibility", "consequence", "current_applicability", "retention_basis",
     "non_adaptation_boundary"
   ]);
+  const relations = completed.run.relations.filter(
+    (relation) => relation.fromRef === candidate.reference
+  );
+  assert.equal(relations.filter(
+    (relation) => relation.relationKind === "transition_ancestry"
+  ).length, 1);
+  assert.equal(relations.filter((relation) => relation.relationKind === "basis").length, 15);
+  assert.equal(relations.filter((relation) => relation.relationKind === "support").length, 6);
+  assert.equal(relations.some((relation) => (
+    relation.relationKind === "basis"
+    && relation.toRef === candidate.directRealizationFactRef
+  )), true);
+  assert.equal(relations.some((relation) => (
+    relation.relationKind === "support"
+    && relation.toRef === candidate.directRealizationFactRef
+  )), true);
+  const transition = completed.run.records.get(candidate.createdByTransitionRef);
+  assert.equal(transition.inputReferences.length, new Set(transition.inputReferences).size);
   assert.equal(completed.run.emitAvailableOutputs().length, 0);
   assert.equal([...completed.run.records.values()].some((record) => (
     record.family === "active_delayed_correction_trial"
