@@ -1061,6 +1061,21 @@ test("CP-DELAY-ACTIVE rejects malformed assessment and trial closure passively",
         ...structuredClone(transition), reference: "transition_duplicate_delayed_assessment"
       });
     }],
+    ["undeclared approval support", (snapshot, assessment) => {
+      const response = snapshot.records.find((record) => record.role === "user_response");
+      const transition = snapshot.records.find(
+        (record) => record.reference === assessment.createdByTransitionRef
+      );
+      snapshot.relations.push({
+        relationKind: "support",
+        fromRef: assessment.reference,
+        toRef: response.reference,
+        targetRole: "second_user_approval",
+        effectiveOrder: assessment.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }],
     ["broadened active scope", (snapshot, assessment, trial) => {
       trial.activeScope.taskMode = "all_voice_activity";
     }],
@@ -1069,6 +1084,20 @@ test("CP-DELAY-ACTIVE rejects malformed assessment and trial closure passively",
         relation.fromRef === trial.reference
         && relation.targetRole === "activation_assessment"
       )), 1);
+    }],
+    ["undeclared trial basis", (snapshot, assessment, trial) => {
+      const transition = snapshot.records.find(
+        (record) => record.reference === trial.createdByTransitionRef
+      );
+      snapshot.relations.push({
+        relationKind: "basis",
+        fromRef: trial.reference,
+        toRef: trial.retainedStateRefs.correctionState,
+        targetRole: "undeclared_trial_basis",
+        effectiveOrder: trial.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
     }]
   ];
   for (const [name, attack] of attacks) {
@@ -1101,6 +1130,21 @@ test("CP-DELAY-ACTIVE rejects malformed assessment and trial closure passively",
       assert.deepEqual(real.captureInspectionSnapshot(runRef), before);
     });
   }
+});
+
+test("delayed activation assessment and trial identities are isolated across runs", () => {
+  const harness = createEvaluationHarness(createSutBoundary());
+  const closures = [harness.startRun(), harness.startRun()].map((runRef) => {
+    completeDirectCorrection(harness, runRef);
+    const checkpoint = harness.inspectActiveDelayedCorrectionCheckpoint(runRef);
+    assert.equal(checkpoint.length, 1);
+    return checkpoint[0];
+  });
+  assert.notEqual(closures[0].candidateRef, closures[1].candidateRef);
+  assert.notEqual(
+    closures[0].activationAssessmentRef, closures[1].activationAssessmentRef
+  );
+  assert.notEqual(closures[0].activeTrialRef, closures[1].activeTrialRef);
 });
 
 test("CP-DELAY-CANDIDATE rejects malformed lineage without mutating SUT state", async (t) => {

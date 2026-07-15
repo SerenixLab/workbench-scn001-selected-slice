@@ -24,6 +24,11 @@ const TRIAL_KEYS = Object.freeze([
   "interactionRef", "createdOrder", "createdByTransitionRef"
 ]);
 
+const TRANSITION_KEYS = Object.freeze([
+  "reference", "family", "origin", "transitionKind", "interactionRef",
+  "inputReferences", "resultReferences", "createdOrder", "result"
+]);
+
 const ACTIVATION_BASIS_TYPE = "same_candidate_scoped_correction_evidence";
 
 export function findExactActiveDelayedCorrectionTrial(snapshot, sourceBindingEvidence) {
@@ -101,12 +106,12 @@ export function findExactActiveDelayedCorrectionTrial(snapshot, sourceBindingEvi
     [controls.reversibility?.reference, "reversibility_control"],
     [controls.retention?.reference, "retention_basis"]
   ];
-  const assessmentRelations = snapshot.relations.filter((relation) => (
-    relation.fromRef === assessment.reference && relation.relationKind === "basis"
-  ));
-  const trialAncestry = snapshot.relations.filter((relation) => (
-    relation.fromRef === trial.reference && relation.relationKind === "transition_ancestry"
-  ));
+  const assessmentRelations = snapshot.relations.filter(
+    (relation) => relation.fromRef === assessment.reference
+  );
+  const trialAncestry = snapshot.relations.filter(
+    (relation) => relation.fromRef === trial.reference
+  );
   const retainedStateRefs = {
     candidate: candidate.reference,
     correctionState: direct.state.reference,
@@ -138,6 +143,9 @@ export function findExactActiveDelayedCorrectionTrial(snapshot, sourceBindingEvi
     })
     || assessment.interactionRef !== candidate.interactionRef
     || assessment.statusOrigin !== "sut_transition"
+    || !hasExactKeys(assessmentTransition, TRANSITION_KEYS)
+    || assessmentTransition.family !== "sut_transition_evidence"
+    || assessmentTransition.origin !== "sut"
     || assessmentTransition.transitionKind
       !== "assess_delayed_correction_trial_activation"
     || assessmentTransition.interactionRef !== candidate.interactionRef
@@ -174,6 +182,9 @@ export function findExactActiveDelayedCorrectionTrial(snapshot, sourceBindingEvi
     || trial.durableAdaptation !== "unsupported_in_selected_slice"
     || trial.statusOrigin !== "sut_transition"
     || trial.interactionRef !== assessment.interactionRef
+    || !hasExactKeys(trialTransition, TRANSITION_KEYS)
+    || trialTransition.family !== "sut_transition_evidence"
+    || trialTransition.origin !== "sut"
     || trialTransition.transitionKind !== "activate_delayed_correction_trial"
     || trialTransition.interactionRef !== trial.interactionRef
     || trialTransition.result !== "delayed_correction_trial_activated"

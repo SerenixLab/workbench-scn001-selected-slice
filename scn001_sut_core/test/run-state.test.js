@@ -3400,6 +3400,20 @@ test("delayed activation closure rejects candidate, assessment, and ancestry att
     ({ run, assessment }) => {
       cloneRetainedTransition(run, run.records.get(assessment.createdByTransitionRef));
     },
+    ({ run, assessment }) => {
+      const response = [...run.records.values()].find(
+        (record) => record.role === "user_response"
+      );
+      run.relations.push({
+        relationKind: "support",
+        fromRef: assessment.reference,
+        toRef: response.reference,
+        targetRole: "second_user_approval",
+        effectiveOrder: assessment.createdOrder,
+        createdOrder: run.records.get(assessment.createdByTransitionRef).createdOrder,
+        assertedByRole: "sut"
+      });
+    },
     ({ trial }) => {
       trial.retainedStateRefs.correctionState = trial.retainedStateRefs.directDisposition;
     },
@@ -3408,6 +3422,17 @@ test("delayed activation closure rejects candidate, assessment, and ancestry att
         relation.fromRef === trial.reference
         && relation.targetRole === "activation_assessment"
       )), 1);
+    },
+    ({ run, trial }) => {
+      run.relations.push({
+        relationKind: "basis",
+        fromRef: trial.reference,
+        toRef: trial.retainedStateRefs.correctionState,
+        targetRole: "undeclared_trial_basis",
+        effectiveOrder: trial.createdOrder,
+        createdOrder: run.records.get(trial.createdByTransitionRef).createdOrder,
+        assertedByRole: "sut"
+      });
     },
     ({ candidate }) => {
       candidate.behaviorInfluence = "allowed_before_activation";

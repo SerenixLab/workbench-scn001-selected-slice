@@ -2580,7 +2580,7 @@ recomputes the nine results, exact basis and retention lineage, creator
 transitions, order, assessment relations, trial ancestry, candidate identity,
 and active scope. The existing direct and candidate checkpoints remain valid
 prerequisites after activation and do not treat later state as proof of their
-own closures. Six public-boundary corruptions and six SUT closure attacks cover
+own closures. Eight public-boundary corruptions and eight SUT closure attacks cover
 stored-label trust, candidate substitution, incomplete basis, duplicate
 creators, retained-state substitution, broadened scope, and missing ancestry
 without mutating the real retained state.
@@ -2596,7 +2596,7 @@ Affected rows are `ENG-BASE-001`, `ENG-CHANGE-001`, `ENG-CLAIM-001`,
 methods, runtime dependencies, and active exceptions do not change.
 
 Local verification at implementation completion includes all aggregate gates
-and all 263 tests. Fresh independent review of the exact activation commit is
+and all 266 tests. Fresh independent review of the exact activation stack is
 pending. Until it is recorded, `ENG-HEALTH-CHANGE-001`,
 `ENG-HEALTH-ABSTRACTION-001`, and `ENG-HEALTH-STRUCTURE-001` return to
 `uncovered`: 44 rules are applicable, 5 not applicable, 7 review-only, 37

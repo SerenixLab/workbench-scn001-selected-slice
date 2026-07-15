@@ -52,6 +52,11 @@ const ACTIVE_DELAYED_TRIAL_KEYS = Object.freeze([
   "interactionRef", "createdOrder", "createdByTransitionRef"
 ]);
 
+const TRANSITION_KEYS = Object.freeze([
+  "reference", "family", "origin", "transitionKind", "interactionRef",
+  "inputReferences", "resultReferences", "createdOrder", "result"
+]);
+
 const CANDIDATE_KEYS = Object.freeze([
   "reference", "family", "origin", "candidateType", "materialIntent",
   "sourceClass", "purpose", "proposedScope", "outcomeRelevance",
@@ -547,9 +552,9 @@ export function validateDelayedActivationAssessmentClosure({
   const expectedChecks = deriveDelayedActivationCheckResults(participants);
   const expectedInputs = delayedActivationMaterialBasisRefs(participants);
   const expectedPairs = delayedActivationRelationPairs(participants);
-  const basisRelations = relations.filter((relation) => (
-    relation.fromRef === assessment?.reference && relation.relationKind === "basis"
-  ));
+  const basisRelations = relations.filter(
+    (relation) => relation.fromRef === assessment?.reference
+  );
   const competing = [...records.values()].filter((record) => (
     record.family === "delayed_correction_activation_assessment"
     && record.candidateRef === candidate?.reference
@@ -581,7 +586,8 @@ export function validateDelayedActivationAssessmentClosure({
     || !isDeepStrictEqual(assessment.controlBasisRefs, controlBasisRefs)
     || assessment.interactionRef !== candidate.interactionRef
     || assessment.statusOrigin !== "sut_transition"
-    || transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
+    || !hasExactKeys(transition, TRANSITION_KEYS)
+    || transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
     || transition.transitionKind !== "assess_delayed_correction_trial_activation"
     || transition.interactionRef !== candidate.interactionRef
     || transition.result !== "delayed_correction_activation_assessed"
@@ -638,9 +644,9 @@ export function validateActiveDelayedCorrectionTrialClosure({
     validateFocusedOutcome,
     resolveDirectRealization
   });
-  const ancestry = relations.filter((relation) => (
-    relation.fromRef === trial?.reference && relation.relationKind === "transition_ancestry"
-  ));
+  const ancestry = relations.filter(
+    (relation) => relation.fromRef === trial?.reference
+  );
   const competing = [...records.values()].filter((record) => (
     record.family === "active_delayed_correction_trial"
     && record.candidateRef === candidate.reference
@@ -668,7 +674,8 @@ export function validateActiveDelayedCorrectionTrialClosure({
     || competing.length !== 1 || competing[0].reference !== trial.reference
     || assessment.overallStatus !== "sufficient"
     || Object.values(assessment.checkResults).some((result) => result.status !== "passed")
-    || transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
+    || !hasExactKeys(transition, TRANSITION_KEYS)
+    || transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
     || transition.transitionKind !== "activate_delayed_correction_trial"
     || transition.interactionRef !== trial.interactionRef
     || transition.result !== "delayed_correction_trial_activated"
