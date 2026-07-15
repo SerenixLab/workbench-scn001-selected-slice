@@ -2774,3 +2774,69 @@ No later outcome, canonical-intervention assessment, explanation, formal
 evaluation, scoring, behavioral-compatibility, milestone-completion, broader
 acceptance, obligation-satisfaction, production-readiness, or deployment claim
 is introduced.
+
+## Later-Use and Realization Independent Review Closure
+
+On 2026-07-15, fresh independent ChatGPT review examined exact corrected Phase
+6C stack `6728a9d..6f0cb02`. The earlier review of
+`6728a9d..8285c83` remains **blocking / failed** for its missing ADR-007
+projection closure and SUT drill-attribution creator-pointer mismatch.
+
+Independent review outcome for corrected stack `6728a9d..6f0cb02`:
+**pass with no further blocking finding**.
+
+The reviewer independently confirmed that:
+
+* canonical L-002 and counterfactual CF2-L-003 each produce a distinct
+  same-run `lineage_preserving_projection` targeting their own exact active
+  delayed-correction trial;
+* projection rule, view, semantic-contribution and effective-state metadata,
+  unique creator identity, exact transition envelope, chronology, and the
+  complete `projection_of` plus raw-reference `basis` relation set are closed;
+* both applicability assessments consume the raw reference fact and validated
+  projection, and SUT/evaluation reject missing, retargeted, backdated,
+  duplicated, substituted, or creator-corrupted projection closure;
+* drill attribution requires its creator pointer to equal the unique actual
+  creator in both SUT and evaluation;
+* source, original/current ingestion, actor, interaction, transition, relation,
+  chronology, replay, and independent-run closures remain aligned;
+* the canonical path creates one bounded disposition and matched realization
+  without modifying the active trial;
+* the counterfactual records `not_applicable`, emits no output, creates no
+  disposition or realization, and fabricates no narrowing, supersession,
+  retirement, or erasure;
+* the simulator only validates and realizes the SUT-selected behavior;
+* public SUT methods, package exports, manifests, and runtime dependencies are
+  unchanged; and
+* no outcome, canonical-intervention, explanation, formal-evaluation, scoring,
+  compatibility, milestone, or readiness artifact or claim is introduced.
+
+Independent verification reported 36 focused later-use/projection/
+counterfactual/realization/isolation checks, 100 SUT state tests, 207 boundary
+tests, and all 307 aggregate tests passing. All local gates and `git diff
+--check 6728a9d..6f0cb02` passed; reviewed `HEAD` was
+`6f0cb029fc36a140aa93bbcfe03bd890b522fc5d` and the worktree remained clean.
+
+This is the qualifying independent review outcome for
+`ENG-HEALTH-CHANGE-001 R2`, `ENG-HEALTH-ABSTRACTION-001 R2`, and
+`ENG-HEALTH-STRUCTURE-001 R2` for Phase 6C. It also passes the bounded hostile
+regressions under `ENG-HEALTH-TEST-001 R2`, `ENG-HEALTH-TEST-002 R2`, and
+`ENG-HEALTH-FAILURE-001 R2`. It does not establish protected required-check
+configuration, formal evidence, behavioral compatibility, scoreability,
+milestone completion, broader acceptance, obligation satisfaction, production
+readiness, or deployment.
+
+The remaining non-blocking risks are explicit: the counterfactual
+creator-pointer case is directly covered by SUT closure tests while evaluation
+uses its separately hostile-tested strict creator primitive; and the harness
+can receive both branch bundles sequentially in one run, but the checkpoint
+rejects the globally ambiguous applicability family. Formal evidence is not
+claimed.
+
+With this closure recorded, current applicability/status counts return to:
+
+* 44 rules `applicable` and 5 `not-applicable`;
+* 10 applicable rules `review-only`;
+* 34 applicable rules `uncovered`;
+* no applicable rule `revalidation-required`;
+* no rule claimed `enforced`.
