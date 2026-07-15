@@ -270,6 +270,7 @@ export function validateDelayedCorrectionCandidateClosure({
     || !isDeepStrictEqual(controlMeaning(trialPolicy), TRIAL_POLICY)
     || !isDeepStrictEqual(controlRefs, correctionState.controlBasisRefs)
     || transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
+    || transition.reference !== candidate.createdByTransitionRef
     || transition.transitionKind !== "form_delayed_correction_trial_candidate"
     || transition.interactionRef !== interaction.reference
     || transition.result !== "delayed_correction_candidate_formed_non_active"
@@ -588,6 +589,7 @@ export function validateDelayedActivationAssessmentClosure({
     || assessment.statusOrigin !== "sut_transition"
     || !hasExactKeys(transition, TRANSITION_KEYS)
     || transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
+    || transition.reference !== assessment.createdByTransitionRef
     || transition.transitionKind !== "assess_delayed_correction_trial_activation"
     || transition.interactionRef !== candidate.interactionRef
     || transition.result !== "delayed_correction_activation_assessed"
@@ -676,6 +678,7 @@ export function validateActiveDelayedCorrectionTrialClosure({
     || Object.values(assessment.checkResults).some((result) => result.status !== "passed")
     || !hasExactKeys(transition, TRANSITION_KEYS)
     || transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
+    || transition.reference !== trial.createdByTransitionRef
     || transition.transitionKind !== "activate_delayed_correction_trial"
     || transition.interactionRef !== trial.interactionRef
     || transition.result !== "delayed_correction_trial_activated"

@@ -3400,6 +3400,9 @@ test("delayed activation closure rejects candidate, assessment, and ancestry att
     ({ run, assessment }) => {
       cloneRetainedTransition(run, run.records.get(assessment.createdByTransitionRef));
     },
+    ({ assessment }) => {
+      assessment.createdByTransitionRef = "transition_missing_delayed_assessment";
+    },
     ({ run, assessment }) => {
       const response = [...run.records.values()].find(
         (record) => record.role === "user_response"
@@ -3416,6 +3419,9 @@ test("delayed activation closure rejects candidate, assessment, and ancestry att
     },
     ({ trial }) => {
       trial.retainedStateRefs.correctionState = trial.retainedStateRefs.directDisposition;
+    },
+    ({ trial }) => {
+      trial.createdByTransitionRef = "transition_missing_active_delayed_trial";
     },
     ({ run, trial }) => {
       run.relations.splice(run.relations.findIndex((relation) => (
@@ -3436,6 +3442,9 @@ test("delayed activation closure rejects candidate, assessment, and ancestry att
     },
     ({ candidate }) => {
       candidate.behaviorInfluence = "allowed_before_activation";
+    },
+    ({ candidate }) => {
+      candidate.createdByTransitionRef = "transition_missing_delayed_candidate";
     }
   ];
   for (const attack of attacks) {

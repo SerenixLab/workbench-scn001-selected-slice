@@ -1047,6 +1047,11 @@ test("CP-DELAY-ACTIVE rejects malformed assessment and trial closure passively",
         (record) => record.family === "trial_candidate"
       ).reference;
     }],
+    ["candidate creator pointer rewrite", (snapshot) => {
+      snapshot.records.find(
+        (record) => record.family === "delayed_correction_candidate"
+      ).createdByTransitionRef = "transition_missing_delayed_candidate";
+    }],
     ["missing material basis relation", (snapshot, assessment) => {
       snapshot.relations.splice(snapshot.relations.findIndex((relation) => (
         relation.fromRef === assessment.reference
@@ -1060,6 +1065,9 @@ test("CP-DELAY-ACTIVE rejects malformed assessment and trial closure passively",
       snapshot.records.push({
         ...structuredClone(transition), reference: "transition_duplicate_delayed_assessment"
       });
+    }],
+    ["assessment creator pointer rewrite", (snapshot, assessment) => {
+      assessment.createdByTransitionRef = "transition_missing_delayed_assessment";
     }],
     ["undeclared approval support", (snapshot, assessment) => {
       const response = snapshot.records.find((record) => record.role === "user_response");
@@ -1078,6 +1086,9 @@ test("CP-DELAY-ACTIVE rejects malformed assessment and trial closure passively",
     }],
     ["broadened active scope", (snapshot, assessment, trial) => {
       trial.activeScope.taskMode = "all_voice_activity";
+    }],
+    ["trial creator pointer rewrite", (snapshot, assessment, trial) => {
+      trial.createdByTransitionRef = "transition_missing_active_delayed_trial";
     }],
     ["missing trial ancestry", (snapshot, assessment, trial) => {
       snapshot.relations.splice(snapshot.relations.findIndex((relation) => (
