@@ -68,6 +68,11 @@ export function projectFixtureRecord(record, sourceFactRef = createSourceFactRef
     dataKeys = [
       ...definition.keys, "focusedDrillScenarioDay", "oldDrillPreferenceScenarioDay"
     ];
+  } else if (record.role === "outcome_fact" && Object.hasOwn(record.data, "comparison")) {
+    dataKeys = [...definition.keys, "comparison"];
+  } else if (record.role === "material_context_change"
+    && Object.hasOwn(record.data, "coInterventionVisibility")) {
+    dataKeys = [...definition.keys, "coInterventionVisibility", "completeness"];
   }
   assertExactKeys(record.data, dataKeys, `fixture record ${record.fixtureRecordId}.data`);
   if (definition.kind === "task_observation") {

@@ -47,6 +47,17 @@ import {
   validateLaterUseAssessmentClosure
 } from "./laterUse.js";
 import {
+  createExplanationArtifacts,
+  deriveExplanationParticipants,
+  deriveLaterOutcomeParticipants,
+  explanationInputReferences,
+  explanationRelationPairs,
+  laterOutcomeInputReferences,
+  laterOutcomeRelationPairs,
+  validateExplanationClosure,
+  validateLaterOutcomeClosure
+} from "./laterOutcome.js";
+import {
   assertEligibleProductionCandidate,
   classifyProposalResponse,
   PRODUCTION_FOCUSED_TRIAL_DIRECTION,
@@ -362,6 +373,14 @@ export class RunState {
       interaction,
       interactionFacts
     );
+    const laterOutcomeTransitionRef = this.recordLaterOutcome(
+      interaction,
+      interactionFacts
+    );
+    const explanationTransitionRef = this.deriveLaterBehaviorExplanation(
+      interaction,
+      interactionFacts
+    );
     const semanticTransitionRefs = [
       attributionTransitionRef,
       temporalAssessmentTransitionRef,
@@ -382,7 +401,9 @@ export class RunState {
       delayedActivationAssessmentTransitionRef,
       activeDelayedTrialTransitionRef,
       ...laterUseTransitionRefs,
-      laterRealizationTransitionRef
+      laterRealizationTransitionRef,
+      laterOutcomeTransitionRef,
+      explanationTransitionRef
     ].filter(Boolean);
     const processingTransition = this.createTransition(
       "process_interaction_segment",
@@ -2530,6 +2551,175 @@ export class RunState {
     return transition.reference;
   }
 
+  recordLaterOutcome(interaction, interactionFacts) {
+    const participants = deriveLaterOutcomeParticipants({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      interaction,
+      interactionFacts,
+      validateLaterDisposition: (disposition) => (
+        this.validateLaterDispositionClosure(disposition)
+      ),
+      resolveLaterRealization: (dispositionRef, expectedFactRef) => (
+        this.resolveLaterRealizationClosure(dispositionRef, expectedFactRef)
+      )
+    });
+    if (!participants || participants.kind === "reuse") return undefined;
+    const uncertainty = {
+      reference: createReference("state"),
+      family: "outcome_uncertainty",
+      origin: "sut",
+      uncertaintyType: "causal_and_co_intervention_limit",
+      causalStatus: "association_only",
+      alternativeCauses: "private_or_unobserved_not_excluded",
+      coInterventionVisibility: "non_exhaustive",
+      unsupportedClaims: [
+        "causal_theory", "long_term_learning_efficacy", "fatigue_status",
+        "global_voice_preference", "fixed_learning_style"
+      ],
+      statusOrigin: "sut_transition",
+      interactionRef: interaction.reference,
+      createdOrder: this.allocateOrder()
+    };
+    uncertainty.effectiveOrder = uncertainty.createdOrder;
+    const outcome = {
+      reference: createReference("state"),
+      family: "later_outcome",
+      origin: "sut",
+      outcomeType: "intervention_conditioned_later_behavior",
+      activeTrialRef: participants.activeTrial.reference,
+      applicabilityAssessmentRef: participants.assessment.reference,
+      dispositionRef: participants.disposition.reference,
+      realizationFactRef: participants.realization.fact.reference,
+      realizationTransitionRef: participants.realization.transition.reference,
+      materialContextRefs: {
+        currentContext: participants.context.reference,
+        coIntervention: participants.coIntervention.reference
+      },
+      outcomeFactRefs: [
+        participants.comparative.reference, participants.feedback.reference
+      ],
+      uncertaintyRef: uncertainty.reference,
+      classification: "intervention_conditioned_observed_association",
+      comparativeObservation: {
+        observation: "user_spoke_longer",
+        context: "spontaneous_production",
+        comparison: {
+          metric: "speaking_duration",
+          relation: "longer_than",
+          baselineSessionId: "spontaneous-correction-current",
+          currentSessionId: "spontaneous-outcome-later"
+        }
+      },
+      reportedFeedback: "This pacing feels easier.",
+      coInterventionStatus: {
+        zoeyAvailable: "none_supplied",
+        completeness: "non_exhaustive_for_private_or_unobserved_causes"
+      },
+      causalScope: "association_only_not_causal_proof",
+      longTermEfficacy: "not_established",
+      globalPreference: "not_established",
+      fixedLearningStyle: "not_established",
+      fatigueStatus: "not_established",
+      currentStatus: "observed_bounded",
+      statusOrigin: "sut_transition",
+      interactionRef: interaction.reference,
+      createdOrder: this.allocateOrder()
+    };
+    outcome.effectiveOrder = outcome.createdOrder;
+    const inputReferences = laterOutcomeInputReferences(participants);
+    const transition = this.createTransition(
+      "record_intervention_conditioned_later_outcome",
+      inputReferences,
+      [uncertainty.reference, outcome.reference],
+      interaction.reference
+    );
+    transition.result = "intervention_conditioned_later_outcome_recorded";
+    attachCreatingTransition([uncertainty, outcome], transition);
+    this.commitDerivedRecords([uncertainty, outcome], transition);
+    for (const [reference, role] of [
+      [participants.comparative.reference, "comparative_observation"],
+      [participants.feedback.reference, "reported_feedback"],
+      [participants.coIntervention.reference, "non_exhaustive_co_intervention_context"]
+    ]) {
+      this.relations.push({
+        relationKind: "basis",
+        fromRef: uncertainty.reference,
+        toRef: reference,
+        targetRole: role,
+        effectiveOrder: uncertainty.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    for (const [reference, role] of laterOutcomeRelationPairs(
+      participants, uncertainty
+    )) {
+      this.relations.push({
+        relationKind: "outcome",
+        fromRef: outcome.reference,
+        toRef: reference,
+        targetRole: role,
+        effectiveOrder: outcome.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    return transition.reference;
+  }
+
+  deriveLaterBehaviorExplanation(interaction, interactionFacts) {
+    const participants = deriveExplanationParticipants({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      interaction,
+      interactionFacts,
+      validateOutcome: (outcome) => this.validateLaterOutcomeClosure(outcome),
+      validateActiveProductionTrial: (trial) => this.validActiveTrialClosure(trial)
+    });
+    if (!participants || participants.kind === "reuse") return undefined;
+    const artifacts = createExplanationArtifacts(
+      participants,
+      () => this.allocateOrder(),
+      createReference
+    );
+    const inputReferences = explanationInputReferences(participants);
+    const resultReferences = [
+      ...artifacts.limitations.map((limit) => limit.reference),
+      artifacts.explanation.reference,
+      artifacts.support.reference
+    ];
+    const transition = this.createTransition(
+      "derive_grounded_later_behavior_explanation",
+      inputReferences,
+      resultReferences,
+      interaction.reference
+    );
+    transition.result = "grounded_later_behavior_explanation_derived";
+    attachCreatingTransition([
+      ...artifacts.limitations, artifacts.explanation, artifacts.support
+    ], transition);
+    this.commitDerivedRecords([
+      ...artifacts.limitations, artifacts.explanation, artifacts.support
+    ], transition);
+    for (const [reference, role] of explanationRelationPairs(
+      participants, artifacts
+    )) {
+      this.relations.push({
+        relationKind: "explanation_support",
+        fromRef: artifacts.support.reference,
+        toRef: reference,
+        targetRole: role,
+        effectiveOrder: artifacts.support.createdOrder,
+        createdOrder: transition.createdOrder,
+        assertedByRole: "sut"
+      });
+    }
+    return transition.reference;
+  }
+
   validateLaterUseAssessmentClosure(assessment) {
     return validateLaterUseAssessmentClosure({
       records: this.records,
@@ -2552,6 +2742,32 @@ export class RunState {
       activeTrial,
       stateReferenceFact,
       interaction
+    });
+  }
+
+  validateLaterOutcomeClosure(outcome) {
+    return validateLaterOutcomeClosure({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      outcome,
+      validateLaterDisposition: (disposition) => (
+        this.validateLaterDispositionClosure(disposition)
+      ),
+      resolveLaterRealization: (dispositionRef, expectedFactRef) => (
+        this.resolveLaterRealizationClosure(dispositionRef, expectedFactRef)
+      )
+    });
+  }
+
+  validateExplanationClosure(support) {
+    return validateExplanationClosure({
+      records: this.records,
+      relations: this.relations,
+      sourceFactBindings: this.sourceFactBindings,
+      support,
+      validateOutcome: (outcome) => this.validateLaterOutcomeClosure(outcome),
+      validateActiveProductionTrial: (trial) => this.validActiveTrialClosure(trial)
     });
   }
 

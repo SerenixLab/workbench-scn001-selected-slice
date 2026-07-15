@@ -56,6 +56,14 @@ export function realizeLaterDelayedCorrectionOutput(output, occurrenceOrder = 1)
     requestedBehavior: output.requestedBehavior,
     realizedBehavior: output.requestedBehavior,
     fidelity: "match",
+    canonicalInterventionPremise: Object.freeze({
+      activity: output.useScope.activity,
+      taskMode: output.useScope.taskMode,
+      correctionClass: "minor_correction",
+      timing: "turn_completion",
+      sessionId: output.useScope.sessionId
+    }),
+    canonicalInterventionPremiseMatch: true,
     mismatchOrigin: null
   });
 }

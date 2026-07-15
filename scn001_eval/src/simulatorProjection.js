@@ -11,6 +11,10 @@ const BEHAVIOR_RECORD_KEYS = [
   "simulatorRecordId", "role", "sourceActor", "occurrenceOrder", "requestedOutputRef",
   "requestedRef", "requestedBehavior", "realizedBehavior", "fidelity", "mismatchOrigin"
 ];
+const LATER_BEHAVIOR_RECORD_KEYS = [
+  ...BEHAVIOR_RECORD_KEYS,
+  "canonicalInterventionPremise", "canonicalInterventionPremiseMatch"
+];
 const REFERENCE_PATTERNS = {
   requestedOutputRef: /^transition_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
   requestedRef: /^state_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
@@ -37,6 +41,15 @@ export function createSimulatorProjector() {
             requestedBehavior: record.requestedBehavior,
             realizedBehavior: record.realizedBehavior,
             fidelity: record.fidelity,
+            ...(record.requestedBehavior === "delay_minor_correction_until_turn_completion"
+              ? {
+                  canonicalInterventionPremise: structuredClone(
+                    record.canonicalInterventionPremise
+                  ),
+                  canonicalInterventionPremiseMatch:
+                    record.canonicalInterventionPremiseMatch
+                }
+              : {}),
             mismatchOrigin: record.mismatchOrigin
           }
         : {
@@ -115,7 +128,25 @@ function assertSimulatorRecord(record) {
 }
 
 function assertBehaviorSimulatorRecord(record) {
-  assertExactKeys(record, BEHAVIOR_RECORD_KEYS, "evaluation-side behavior simulator record");
+  const later = record?.requestedBehavior
+    === "delay_minor_correction_until_turn_completion";
+  assertExactKeys(
+    record, later ? LATER_BEHAVIOR_RECORD_KEYS : BEHAVIOR_RECORD_KEYS,
+    "evaluation-side behavior simulator record"
+  );
+  if (later) {
+    assertExactKeys(record.canonicalInterventionPremise, [
+      "activity", "taskMode", "correctionClass", "timing", "sessionId"
+    ], "canonicalInterventionPremise");
+    if (record.canonicalInterventionPremise.activity !== "japanese_practice"
+      || record.canonicalInterventionPremise.taskMode !== "spontaneous_production"
+      || record.canonicalInterventionPremise.correctionClass !== "minor_correction"
+      || record.canonicalInterventionPremise.timing !== "turn_completion"
+      || record.canonicalInterventionPremise.sessionId !== "spontaneous-outcome-later"
+      || record.canonicalInterventionPremiseMatch !== true) {
+      throw new Error("Invalid canonical later-intervention premise.");
+    }
+  }
   for (const field of ["requestedOutputRef", "requestedRef"]) {
     const pattern = REFERENCE_PATTERNS[field];
     if (typeof record[field] !== "string" || !pattern.test(record[field])) {

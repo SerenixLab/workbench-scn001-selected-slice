@@ -107,13 +107,38 @@ const inputValidators = {
   },
   simulator_behavior_realization: (input, path) => {
     assertCommonInputFields(input, path);
-    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "requestedRef", "requestedBehavior", "realizedBehavior", "fidelity", "mismatchOrigin"], path);
+    const later = input.requestedBehavior
+      === "delay_minor_correction_until_turn_completion";
+    assertExactKeys(input, [
+      "sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "requestedRef",
+      "requestedBehavior", "realizedBehavior", "fidelity",
+      ...(later ? [
+        "canonicalInterventionPremise", "canonicalInterventionPremiseMatch"
+      ] : []),
+      "mismatchOrigin"
+    ], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertOpaqueStateReference(input.requestedRef, `${path}.requestedRef`);
     assertString(input.requestedBehavior, `${path}.requestedBehavior`);
     assertString(input.realizedBehavior, `${path}.realizedBehavior`);
     assertOneOf(input.fidelity, ["match", "mismatch"], `${path}.fidelity`);
+    if (later) {
+      assertExactKeys(input.canonicalInterventionPremise, [
+        "activity", "taskMode", "correctionClass", "timing", "sessionId"
+      ], `${path}.canonicalInterventionPremise`);
+      for (const key of Object.keys(input.canonicalInterventionPremise)) {
+        assertString(
+          input.canonicalInterventionPremise[key],
+          `${path}.canonicalInterventionPremise.${key}`
+        );
+      }
+      if (typeof input.canonicalInterventionPremiseMatch !== "boolean") {
+        throw new SutBoundaryValidationError(
+          `${path}.canonicalInterventionPremiseMatch must be a boolean.`
+        );
+      }
+    }
     if (input.mismatchOrigin !== null) {
       assertString(input.mismatchOrigin, `${path}.mismatchOrigin`);
     }
@@ -127,18 +152,38 @@ const inputValidators = {
   },
   outcome_fact: (input, path) => {
     assertCommonInputFields(input, path);
-    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "observation", "context"], path);
+    assertExactKeys(input, [
+      "sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "observation",
+      "context", ...(input.comparison ? ["comparison"] : [])
+    ], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertString(input.observation, `${path}.observation`);
     assertString(input.context, `${path}.context`);
+    if (input.comparison) {
+      assertExactKeys(input.comparison, [
+        "metric", "relation", "baselineSessionId", "currentSessionId"
+      ], `${path}.comparison`);
+      for (const key of Object.keys(input.comparison)) {
+        assertString(input.comparison[key], `${path}.comparison.${key}`);
+      }
+    }
   },
   material_context_change: (input, path) => {
     assertCommonInputFields(input, path);
-    assertExactKeys(input, ["sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "description"], path);
+    const coIntervention = input.coInterventionVisibility !== undefined
+      || input.completeness !== undefined;
+    assertExactKeys(input, [
+      "sourceFactRef", "kind", "sourceActor", "occurrenceOrder", "description",
+      ...(coIntervention ? ["coInterventionVisibility", "completeness"] : [])
+    ], path);
     assertString(input.sourceActor, `${path}.sourceActor`);
     assertPositiveInteger(input.occurrenceOrder, `${path}.occurrenceOrder`);
     assertString(input.description, `${path}.description`);
+    if (coIntervention) {
+      assertString(input.coInterventionVisibility, `${path}.coInterventionVisibility`);
+      assertString(input.completeness, `${path}.completeness`);
+    }
   },
   fixture_evidence: (input, path) => {
     assertCommonInputFields(input, path);

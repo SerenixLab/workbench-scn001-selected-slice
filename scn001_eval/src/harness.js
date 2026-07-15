@@ -7,7 +7,15 @@ import {
 } from "./directCorrectionCheckpoint.js";
 import { findExactDelayedCorrectionCandidate } from "./delayedCandidateCheckpoint.js";
 import { findExactActiveDelayedCorrectionTrial } from "./delayedActiveCheckpoint.js";
-import { findExactLaterRealization, findExactLaterUse } from "./laterUseCheckpoint.js";
+import {
+  findExactCanonicalIntervention,
+  findExactLaterRealization,
+  findExactLaterUse
+} from "./laterUseCheckpoint.js";
+import {
+  findExactExplanation,
+  findExactLaterOutcome
+} from "./laterOutcomeCheckpoint.js";
 import { findExactActiveProductionTrial } from "./productionActiveCheckpoint.js";
 import { realizeAvailableOutput } from "./simulator.js";
 import { createSimulatorProjector } from "./simulatorProjection.js";
@@ -104,9 +112,51 @@ const DIRECT_CORRECTION_FIXTURES = Object.freeze({
   "FC-REV-001": ACCEPTANCE_FIXTURES["FC-REV-001"]
 });
 
+const LATER_OUTCOME_FIXTURES = Object.freeze({
+  "L-003": Object.freeze({
+    role: "outcome_fact", sourceActor: "fixture-scorer", occurrenceOrder: 33,
+    data: Object.freeze({
+      observation: "user_spoke_longer", context: "spontaneous_production",
+      comparison: Object.freeze({
+        metric: "speaking_duration", relation: "longer_than",
+        baselineSessionId: "spontaneous-correction-current",
+        currentSessionId: "spontaneous-outcome-later"
+      })
+    })
+  }),
+  "L-004": Object.freeze({
+    role: "outcome_fact", sourceActor: "synthetic-user-a", occurrenceOrder: 34,
+    data: Object.freeze({
+      observation: "This pacing feels easier.", context: "spontaneous_production"
+    })
+  }),
+  "L-005": Object.freeze({
+    role: "material_context_change", sourceActor: "fixture-driver", occurrenceOrder: 35,
+    data: Object.freeze({
+      description: "no_zoey_available_co_intervention_event_supplied",
+      coInterventionVisibility: "none_supplied_to_zoey",
+      completeness: "non_exhaustive_for_private_or_unobserved_causes"
+    })
+  })
+});
+
+const EXPLANATION_FIXTURES = Object.freeze({
+  "X-001": Object.freeze({
+    role: "communication_event", sourceActor: "synthetic-user-a", occurrenceOrder: 36,
+    data: Object.freeze({
+      content: "Why are you correcting differently now?",
+      context: "spontaneous_production",
+      semanticStatusOrigin: "unclassified"
+    })
+  })
+});
+
 const RESERVED_FOCUSED_DRILL_FIXTURE_IDS = new Set([
   ...Object.keys(FOCUSED_DRILL_OPEN_FIXTURES),
   ...Object.keys(FOCUSED_DRILL_OUTCOME_FIXTURES)
+]);
+const RESERVED_LATER_OUTCOME_FIXTURE_IDS = new Set([
+  ...Object.keys(LATER_OUTCOME_FIXTURES), ...Object.keys(EXPLANATION_FIXTURES)
 ]);
 export function createEvaluationHarness(sutBoundary, ...extraArguments) {
   if (extraArguments.length !== 0) {
@@ -134,7 +184,8 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
         routed: new Map(), projector: createProjector(), nextOrder: 1,
         acceptanceDeliveries: new Map(), focusedOpenDeliveries: new Map(),
         focusedOutcomeDeliveries: new Map(), directOpenDeliveries: new Map(),
-        laterUseDeliveries: new Map()
+        laterUseDeliveries: new Map(), laterOutcomeDeliveries: new Map(),
+        explanationDeliveries: new Map()
       });
       return runRef;
     },
@@ -165,6 +216,14 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
       ))) {
         throw new Error(
           "Spontaneous-correction fixture records require their staged prefix delivery."
+        );
+      }
+      if (Array.isArray(fixtureRecords) && fixtureRecords.some((record) => (
+        RESERVED_LATER_OUTCOME_FIXTURE_IDS.has(record?.fixtureRecordId)
+        || isLaterOutcomeOrExplanationMaterial(record)
+      ))) {
+        throw new Error(
+          "Later outcome and explanation records require their staged checkpoint delivery."
         );
       }
       return deliverProjectedFixtureRecords(runRef, fixtureRecords);
@@ -387,6 +446,96 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
         dispositionRef: closure.disposition.reference,
         realizationFactRef: closure.fact.reference,
         realizationTransitionRef: closure.realizationTransition.reference
+      }]);
+    },
+
+    inspectCanonicalInterventionCheckpoint(runRef) {
+      const closure = findExactCanonicalIntervention(
+        sutBoundary.captureInspectionSnapshot(runRef),
+        sourceBindingEvidenceForRun(runRef)
+      );
+      if (!closure) return Object.freeze([]);
+      return deepFreeze([{
+        activeTrialRef: closure.active.trial.reference,
+        dispositionRef: closure.disposition.reference,
+        realizationFactRef: closure.fact.reference,
+        canonicalInterventionPremise: closure.canonicalInterventionPremise
+      }]);
+    },
+
+    deliverLaterOutcomeIfEligible(runRef, fixtureRecords) {
+      const transport = runTransport.get(runRef);
+      if (!transport) throw new Error(`Unknown or closed evaluation run: ${runRef}.`);
+      validateExactFixtureSet(
+        fixtureRecords, LATER_OUTCOME_FIXTURES, "Later outcome delivery"
+      );
+      const canonical = findExactCanonicalIntervention(
+        sutBoundary.captureInspectionSnapshot(runRef),
+        sourceBindingEvidenceForRun(runRef)
+      );
+      if (!canonical) return Object.freeze([]);
+      const prior = transport.laterOutcomeDeliveries.get(canonical.disposition.reference);
+      if (prior) return prior;
+      const result = deliverProjectedFixtureRecords(runRef, fixtureRecords);
+      const frozen = deepFreeze([{
+        dispositionRef: canonical.disposition.reference,
+        realizationFactRef: canonical.fact.reference,
+        acceptedInputRefs: [...result.acceptedInputRefs]
+      }]);
+      transport.laterOutcomeDeliveries.set(canonical.disposition.reference, frozen);
+      return frozen;
+    },
+
+    inspectLaterOutcomeCheckpoint(runRef) {
+      const closure = findExactLaterOutcome(
+        sutBoundary.captureInspectionSnapshot(runRef),
+        sourceBindingEvidenceForRun(runRef)
+      );
+      if (!closure) return Object.freeze([]);
+      return deepFreeze([{
+        activeTrialRef: closure.canonical.active.trial.reference,
+        dispositionRef: closure.canonical.disposition.reference,
+        outcomeRef: closure.outcome.reference,
+        uncertaintyRef: closure.uncertainty.reference,
+        classification: closure.outcome.classification,
+        causalScope: closure.outcome.causalScope
+      }]);
+    },
+
+    deliverExplanationPromptIfEligible(runRef, fixtureRecords) {
+      const transport = runTransport.get(runRef);
+      if (!transport) throw new Error(`Unknown or closed evaluation run: ${runRef}.`);
+      validateExactFixtureSet(
+        fixtureRecords, EXPLANATION_FIXTURES, "Explanation prompt delivery"
+      );
+      const outcome = findExactLaterOutcome(
+        sutBoundary.captureInspectionSnapshot(runRef),
+        sourceBindingEvidenceForRun(runRef)
+      );
+      if (!outcome) return Object.freeze([]);
+      const prior = transport.explanationDeliveries.get(outcome.outcome.reference);
+      if (prior) return prior;
+      const result = deliverProjectedFixtureRecords(runRef, fixtureRecords);
+      const frozen = deepFreeze([{
+        outcomeRef: outcome.outcome.reference,
+        acceptedInputRefs: [...result.acceptedInputRefs]
+      }]);
+      transport.explanationDeliveries.set(outcome.outcome.reference, frozen);
+      return frozen;
+    },
+
+    inspectExplanationCheckpoint(runRef) {
+      const closure = findExactExplanation(
+        sutBoundary.captureInspectionSnapshot(runRef),
+        sourceBindingEvidenceForRun(runRef)
+      );
+      if (!closure) return Object.freeze([]);
+      return deepFreeze([{
+        outcomeRef: closure.later.outcome.reference,
+        supportRef: closure.support.reference,
+        explanationRef: closure.explanation.reference,
+        userFacingText: closure.explanation.userFacingText,
+        limitationRefs: structuredClone(closure.support.limitationRefs)
       }]);
     },
 
@@ -1077,6 +1226,20 @@ function isDirectCorrectionFixtureMaterial(record) {
     || (record?.role === "chronology_fact"
       && data?.focusedDrillScenarioDay === 135
       && data.oldDrillPreferenceScenarioDay === 15);
+}
+
+function isLaterOutcomeOrExplanationMaterial(record) {
+  const data = record?.data;
+  return (record?.role === "outcome_fact"
+      && data?.comparison?.metric === "speaking_duration"
+      && data.comparison.currentSessionId === "spontaneous-outcome-later")
+    || (record?.role === "outcome_fact"
+      && data?.observation === "This pacing feels easier.")
+    || (record?.role === "material_context_change"
+      && data?.coInterventionVisibility === "none_supplied_to_zoey")
+    || (record?.role === "communication_event"
+      && data?.content?.trim().replaceAll(/\s+/g, " ").toLocaleLowerCase("en-US")
+        === "why are you correcting differently now?");
 }
 
 function uniqueCreatingTransition(snapshot, record, label) {

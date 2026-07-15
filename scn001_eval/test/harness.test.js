@@ -413,6 +413,41 @@ function completeDirectCorrection(harness, runRef) {
   harness.processCurrentInteraction(runRef);
 }
 
+function seedStaleHistory(harness, runRef) {
+  const oldObservation = taskObservationFixtureRecord({
+    fixtureRecordId: "H-002",
+    occurrenceOrder: 1,
+    data: {
+      ...taskObservationFixtureRecord().data,
+      itemRef: "historical-target-production-evidence",
+      taskMode: "spontaneous_production",
+      occurrenceScenarioDay: 0,
+      sessionId: "old-practice-history",
+      sessionOrder: 1
+    },
+    oracleAnnotations: { expectedTemporalStatus: "stale" }
+  });
+  const unrelatedObservation = taskObservationFixtureRecord({
+    fixtureRecordId: "DEV-HIST-DISTRACTOR",
+    occurrenceOrder: 2,
+    data: {
+      ...oldObservation.data,
+      itemRef: "unrelated-historical-evidence",
+      dimension: "unrelated_dimension"
+    },
+    oracleAnnotations: { explanationRelevance: "excluded" }
+  });
+  harness.deliverFixtureRecords(runRef, [oldObservation, unrelatedObservation]);
+  harness.processCurrentInteraction(runRef);
+  harness.deliverFixtureRecords(runRef, [oldObservation, unrelatedObservation, {
+    fixtureRecordId: "C-004", role: "chronology_fact", sourceActor: "fixture-driver",
+    occurrenceOrder: 3,
+    data: { scenarioDay: 135, sessionId: "session-current", sessionOrder: 2 },
+    oracleAnnotations: { expectedTemporalStatus: "stale" }
+  }]);
+  harness.processCurrentInteraction(runRef);
+}
+
 function laterUseRecords(activeTrialRef, counterfactual = false) {
   const definitions = counterfactual ? [
     ["CF2-L-001", "context_label", "fixture-driver", 30, {
@@ -449,6 +484,81 @@ function laterUseRecords(activeTrialRef, counterfactual = false) {
     fixtureRecordId, role, sourceActor, occurrenceOrder, data,
     oracleAnnotations: { checkpoint: counterfactual ? "CF-DRILL-OPT-IN" : "CP-LATER-DISPOSITION" }
   }));
+}
+
+function laterOutcomeRecords() {
+  return [
+    {
+      fixtureRecordId: "L-003", role: "outcome_fact", sourceActor: "fixture-scorer",
+      occurrenceOrder: 33,
+      data: {
+        observation: "user_spoke_longer", context: "spontaneous_production",
+        comparison: {
+          metric: "speaking_duration", relation: "longer_than",
+          baselineSessionId: "spontaneous-correction-current",
+          currentSessionId: "spontaneous-outcome-later"
+        }
+      },
+      oracleAnnotations: { checkpoint: "CP-CANONICAL-INTERVENTION" }
+    },
+    {
+      fixtureRecordId: "L-004", role: "outcome_fact", sourceActor: "synthetic-user-a",
+      occurrenceOrder: 34,
+      data: {
+        observation: "This pacing feels easier.", context: "spontaneous_production"
+      },
+      oracleAnnotations: { claimClass: "CC-OUTCOME-SEMANTICS" }
+    },
+    {
+      fixtureRecordId: "L-005", role: "material_context_change",
+      sourceActor: "fixture-driver", occurrenceOrder: 35,
+      data: {
+        description: "no_zoey_available_co_intervention_event_supplied",
+        coInterventionVisibility: "none_supplied_to_zoey",
+        completeness: "non_exhaustive_for_private_or_unobserved_causes"
+      },
+      oracleAnnotations: { completeness: "non_exhaustive" }
+    }
+  ];
+}
+
+function explanationRecords() {
+  return [{
+    fixtureRecordId: "X-001", role: "communication_event",
+    sourceActor: "synthetic-user-a", occurrenceOrder: 36,
+    data: {
+      content: "Why are you correcting differently now?",
+      context: "spontaneous_production", semanticStatusOrigin: "unclassified"
+    },
+    oracleAnnotations: { claimClass: "CC-EXPLANATION-PROVENANCE" }
+  }];
+}
+
+function completeLaterRealization(harness, runRef) {
+  const active = harness.inspectActiveDelayedCorrectionCheckpoint(runRef)[0];
+  harness.deliverLaterUseInputsIfEligible(
+    runRef, laterUseRecords(active.activeTrialRef)
+  );
+  harness.processCurrentInteraction(runRef);
+  harness.realizeAvailableOutputs(runRef);
+  harness.processCurrentInteraction(runRef);
+  return active;
+}
+
+function completeLaterOutcome(harness, runRef) {
+  seedStaleHistory(harness, runRef);
+  completeDirectCorrection(harness, runRef);
+  completeLaterRealization(harness, runRef);
+  harness.deliverLaterOutcomeIfEligible(runRef, laterOutcomeRecords());
+  harness.processCurrentInteraction(runRef);
+  return harness.inspectLaterOutcomeCheckpoint(runRef)[0];
+}
+
+function completeGroundedExplanation(harness, runRef) {
+  const outcome = completeLaterOutcome(harness, runRef);
+  harness.deliverExplanationPromptIfEligible(runRef, explanationRecords());
+  harness.processCurrentInteraction(runRef);
+  return { outcome, explanation: harness.inspectExplanationCheckpoint(runRef)[0] };
 }
 
 function sourceBindingEvidenceFrom(snapshot) {
@@ -1247,6 +1357,393 @@ test("formal later-use path rechecks scope, emits, and records exact realization
   assert.equal(realized[0].activeTrialRef, active.activeTrialRef);
   assert.equal(realized[0].dispositionRef, disposition[0].dispositionRef);
   assert.equal(Object.isFrozen(realized), true);
+});
+
+test("canonical later outcome remains intervention-conditioned and explanation is grounded", () => {
+  const boundary = createSutBoundary();
+  const harness = createEvaluationHarness(boundary);
+  const runRef = harness.startRun();
+  seedStaleHistory(harness, runRef);
+  completeDirectCorrection(harness, runRef);
+  const active = completeLaterRealization(harness, runRef);
+  const canonical = harness.inspectCanonicalInterventionCheckpoint(runRef);
+  assert.equal(canonical.length, 1);
+  assert.equal(canonical[0].activeTrialRef, active.activeTrialRef);
+  assert.deepEqual(canonical[0].canonicalInterventionPremise, {
+    activity: "japanese_practice", taskMode: "spontaneous_production",
+    correctionClass: "minor_correction", timing: "turn_completion",
+    sessionId: "spontaneous-outcome-later"
+  });
+  const delivery = harness.deliverLaterOutcomeIfEligible(runRef, laterOutcomeRecords());
+  assert.equal(delivery.length, 1);
+  harness.processCurrentInteraction(runRef);
+  const outcome = harness.inspectLaterOutcomeCheckpoint(runRef);
+  assert.equal(outcome.length, 1);
+  assert.equal(outcome[0].activeTrialRef, active.activeTrialRef);
+  assert.equal(outcome[0].classification, "intervention_conditioned_observed_association");
+  assert.equal(outcome[0].causalScope, "association_only_not_causal_proof");
+  const snapshot = boundary.captureInspectionSnapshot(runRef);
+  const outcomeRecord = snapshot.records.find((record) => (
+    record.reference === outcome[0].outcomeRef
+  ));
+  assert.equal(outcomeRecord.coInterventionStatus.zoeyAvailable, "none_supplied");
+  assert.equal(
+    outcomeRecord.coInterventionStatus.completeness,
+    "non_exhaustive_for_private_or_unobserved_causes"
+  );
+  assert.equal(outcomeRecord.longTermEfficacy, "not_established");
+  assert.equal(outcomeRecord.globalPreference, "not_established");
+  assert.equal(outcomeRecord.fixedLearningStyle, "not_established");
+  assert.equal(outcomeRecord.fatigueStatus, "not_established");
+
+  const explanationDelivery = harness.deliverExplanationPromptIfEligible(
+    runRef, explanationRecords()
+  );
+  assert.equal(explanationDelivery.length, 1);
+  harness.processCurrentInteraction(runRef);
+  const explanation = harness.inspectExplanationCheckpoint(runRef);
+  assert.equal(explanation.length, 1);
+  assert.equal(explanation[0].outcomeRef, outcome[0].outcomeRef);
+  assert.match(explanation[0].userFacingText, /spontaneous practice/);
+  assert.match(explanation[0].userFacingText, /focused drill/);
+  assert.match(explanation[0].userFacingText, /not proof of cause/);
+  assert.equal(Object.keys(explanation[0].limitationRefs).length, 4);
+  const finalSnapshot = boundary.captureInspectionSnapshot(runRef);
+  const support = finalSnapshot.records.find((record) => (
+    record.reference === explanation[0].supportRef
+  ));
+  assert.equal(support.hiddenChainOfThought, "not_required_not_retained");
+  assert.equal(support.temporalAssessmentRefs.length, 1);
+  assert.equal(finalSnapshot.records.filter((record) => (
+    record.family === "temporal_eligibility_assessment"
+    && record.eligibility === "ineligible"
+  )).length, 2);
+  assert.equal(finalSnapshot.records.some((record) => (
+    ["formal_evaluation_record", "score", "compatibility_claim"].includes(record.family)
+  )), false);
+});
+
+test("later facts and explanation prompt remain gated by exact prior checkpoints", () => {
+  const boundary = createSutBoundary();
+  const harness = createEvaluationHarness(boundary);
+  const runRef = harness.startRun();
+  seedStaleHistory(harness, runRef);
+  completeDirectCorrection(harness, runRef);
+  const active = harness.inspectActiveDelayedCorrectionCheckpoint(runRef)[0];
+  harness.deliverLaterUseInputsIfEligible(runRef, laterUseRecords(active.activeTrialRef));
+  harness.processCurrentInteraction(runRef);
+  const beforeOutcome = boundary.captureInspectionSnapshot(runRef);
+  assert.deepEqual(harness.deliverLaterOutcomeIfEligible(runRef, laterOutcomeRecords()), []);
+  assert.deepEqual(boundary.captureInspectionSnapshot(runRef), beforeOutcome);
+  harness.realizeAvailableOutputs(runRef);
+  harness.processCurrentInteraction(runRef);
+  harness.deliverLaterOutcomeIfEligible(runRef, laterOutcomeRecords());
+  const beforeExplanation = boundary.captureInspectionSnapshot(runRef);
+  assert.deepEqual(
+    harness.deliverExplanationPromptIfEligible(runRef, explanationRecords()), []
+  );
+  assert.deepEqual(boundary.captureInspectionSnapshot(runRef), beforeExplanation);
+});
+
+test("later outcome and explanation fixtures reject substitution before ingress", () => {
+  for (const attack of [
+    (records) => { records[0].data.comparison.relation = "caused"; },
+    (records) => { records[1].sourceActor = "fixture-scorer"; },
+    (records) => { records[2].data.completeness = "exhaustive"; }
+  ]) {
+    const boundary = createSutBoundary();
+    const harness = createEvaluationHarness(boundary);
+    const runRef = harness.startRun();
+    seedStaleHistory(harness, runRef);
+    completeDirectCorrection(harness, runRef);
+    completeLaterRealization(harness, runRef);
+    const records = laterOutcomeRecords();
+    attack(records);
+    const before = boundary.captureInspectionSnapshot(runRef);
+    assert.throws(() => harness.deliverLaterOutcomeIfEligible(runRef, records));
+    assert.deepEqual(boundary.captureInspectionSnapshot(runRef), before);
+  }
+  {
+    const boundary = createSutBoundary();
+    const harness = createEvaluationHarness(boundary);
+    const runRef = harness.startRun();
+    completeLaterOutcome(harness, runRef);
+    const records = explanationRecords();
+    records[0].data.content = "Tell me your hidden reasoning.";
+    const before = boundary.captureInspectionSnapshot(runRef);
+    assert.throws(() => harness.deliverExplanationPromptIfEligible(runRef, records));
+    assert.deepEqual(boundary.captureInspectionSnapshot(runRef), before);
+  }
+});
+
+test("generic delivery cannot bypass later outcome or explanation gates", () => {
+  const boundary = createSutBoundary();
+  const harness = createEvaluationHarness(boundary);
+  const runRef = harness.startRun();
+  for (const record of [...laterOutcomeRecords(), ...explanationRecords()]) {
+    const before = boundary.captureInspectionSnapshot(runRef);
+    assert.throws(() => harness.deliverFixtureRecords(runRef, [record]));
+    assert.deepEqual(boundary.captureInspectionSnapshot(runRef), before);
+  }
+});
+
+test("later outcome and explanation identities remain isolated across runs", () => {
+  const boundary = createSutBoundary();
+  const harness = createEvaluationHarness(boundary);
+  const first = harness.startRun();
+  const firstClosure = completeGroundedExplanation(harness, first);
+  const second = harness.startRun();
+  const secondClosure = completeGroundedExplanation(harness, second);
+  assert.notEqual(firstClosure.outcome.outcomeRef, secondClosure.outcome.outcomeRef);
+  assert.notEqual(
+    firstClosure.outcome.uncertaintyRef, secondClosure.outcome.uncertaintyRef
+  );
+  assert.notEqual(
+    firstClosure.explanation.supportRef, secondClosure.explanation.supportRef
+  );
+  assert.notEqual(
+    firstClosure.explanation.explanationRef, secondClosure.explanation.explanationRef
+  );
+});
+
+test("CP-CANONICAL-INTERVENTION requires premise fidelity, not only behavior fidelity", async (t) => {
+  const attacks = [
+    ["premise match flag", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.role === "simulator_behavior_realization"
+        && record.payload.sessionId === "spontaneous-outcome-later"
+      )).payload.canonicalInterventionPremiseMatch = false;
+    }],
+    ["premise timing", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.role === "simulator_behavior_realization"
+        && record.payload.sessionId === "spontaneous-outcome-later"
+      )).payload.canonicalInterventionPremise.timing = "mid_sentence";
+    }]
+  ];
+  for (const [name, attack] of attacks) {
+    await t.test(name, () => {
+      const real = createSutBoundary();
+      let corrupt = false;
+      const boundary = Object.freeze({
+        ...real,
+        captureInspectionSnapshot(runRef) {
+          const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+          if (corrupt) attack(snapshot);
+          return snapshot;
+        }
+      });
+      const harness = createEvaluationHarness(boundary);
+      const runRef = harness.startRun();
+      completeDirectCorrection(harness, runRef);
+      completeLaterRealization(harness, runRef);
+      const before = real.captureInspectionSnapshot(runRef);
+      corrupt = true;
+      assert.throws(() => harness.inspectCanonicalInterventionCheckpoint(runRef));
+      assert.throws(() => harness.deliverLaterOutcomeIfEligible(
+        runRef, laterOutcomeRecords()
+      ));
+      corrupt = false;
+      assert.deepEqual(real.captureInspectionSnapshot(runRef), before);
+    });
+  }
+});
+
+test("CP-LATER-OUTCOME rejects causal promotion and malformed closure passively", async (t) => {
+  const attacks = [
+    ["causal classification", (snapshot) => {
+      snapshot.records.find((record) => record.family === "later_outcome")
+        .classification = "causal_improvement";
+    }],
+    ["global preference promotion", (snapshot) => {
+      snapshot.records.find((record) => record.family === "later_outcome")
+        .globalPreference = "established";
+    }],
+    ["exhaustive co-intervention claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "later_outcome")
+        .coInterventionStatus.completeness = "exhaustive";
+    }],
+    ["excluded alternative causes", (snapshot) => {
+      snapshot.records.find((record) => record.family === "outcome_uncertainty")
+        .alternativeCauses = "excluded";
+    }],
+    ["rewritten comparative fact", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.role === "outcome_fact" && record.payload.comparison
+      )).payload.comparison.relation = "caused";
+    }],
+    ["missing outcome relation", (snapshot) => {
+      const outcome = snapshot.records.find((record) => record.family === "later_outcome");
+      snapshot.relations.splice(snapshot.relations.findIndex((relation) => (
+        relation.fromRef === outcome.reference
+        && relation.targetRole === "comparative_speaking_observation"
+      )), 1);
+    }],
+    ["missing uncertainty basis", (snapshot) => {
+      const uncertainty = snapshot.records.find(
+        (record) => record.family === "outcome_uncertainty"
+      );
+      snapshot.relations.splice(snapshot.relations.findIndex((relation) => (
+        relation.fromRef === uncertainty.reference
+        && relation.targetRole === "reported_feedback"
+      )), 1);
+    }],
+    ["transition input rewrite", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.transitionKind === "record_intervention_conditioned_later_outcome"
+      )).inputReferences.pop();
+    }],
+    ["duplicate outcome creator", (snapshot) => {
+      const outcome = snapshot.records.find((record) => record.family === "later_outcome");
+      const creator = snapshot.records.find(
+        (record) => record.reference === outcome.createdByTransitionRef
+      );
+      snapshot.records.push({
+        ...structuredClone(creator),
+        reference: "transition_00000000-0000-0000-0000-000000000091"
+      });
+    }],
+    ["duplicate outcome identity", (snapshot) => {
+      const outcome = snapshot.records.find((record) => record.family === "later_outcome");
+      snapshot.records.push({
+        ...structuredClone(outcome),
+        reference: "state_00000000-0000-0000-0000-000000000092"
+      });
+    }]
+  ];
+  for (const [name, attack] of attacks) {
+    await t.test(name, () => {
+      const real = createSutBoundary();
+      let corrupt = false;
+      const boundary = Object.freeze({
+        ...real,
+        captureInspectionSnapshot(runRef) {
+          const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+          if (corrupt) attack(snapshot);
+          return snapshot;
+        }
+      });
+      const harness = createEvaluationHarness(boundary);
+      const runRef = harness.startRun();
+      completeLaterOutcome(harness, runRef);
+      const before = real.captureInspectionSnapshot(runRef);
+      corrupt = true;
+      assert.throws(() => harness.inspectLaterOutcomeCheckpoint(runRef));
+      assert.throws(() => harness.deliverExplanationPromptIfEligible(
+        runRef, explanationRecords()
+      ));
+      corrupt = false;
+      assert.deepEqual(real.captureInspectionSnapshot(runRef), before);
+    });
+  }
+});
+
+test("CP-EXPLANATION rejects missing provenance and unsupported claims passively", async (t) => {
+  const attacks = [
+    ["stale history omitted", (snapshot) => {
+      snapshot.records.find((record) => record.family === "explanation_support")
+        .temporalAssessmentRefs = [];
+    }],
+    ["stale assessment age rewrite", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "temporal_eligibility_assessment"
+        && record.dimension === "particle_pattern_a"
+      )).ageDays -= 1;
+    }],
+    ["stale assessment creator ambiguity", (snapshot) => {
+      const assessment = snapshot.records.find((record) => (
+        record.family === "temporal_eligibility_assessment"
+        && record.dimension === "particle_pattern_a"
+      ));
+      const creator = snapshot.records.find(
+        (record) => record.reference === assessment.createdByTransitionRef
+      );
+      snapshot.records.push({
+        ...structuredClone(creator),
+        reference: "transition_00000000-0000-0000-0000-000000000095"
+      });
+    }],
+    ["focused instruction substituted", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      support.focusedInstructionRef = support.focusedOutcomeRef;
+    }],
+    ["missing lineage relation", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      snapshot.relations.splice(snapshot.relations.findIndex((relation) => (
+        relation.fromRef === support.reference
+        && relation.targetRole === "delayed_correction_candidate"
+      )), 1);
+    }],
+    ["causal limit rewrite", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.family === "explanation_limit" && record.limitType === "causal"
+      )).statement = "the intervention caused improvement";
+    }],
+    ["hidden reasoning claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "explanation_support")
+        .hiddenChainOfThought = "retained";
+    }],
+    ["causal user-facing claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText = "The delayed correction caused better learning.";
+    }],
+    ["request attribution substitution", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      support.requestAssertionRef = support.requestCommunicationRef;
+    }],
+    ["transition result omission", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.transitionKind === "derive_grounded_later_behavior_explanation"
+      )).resultReferences.pop();
+    }],
+    ["duplicate explanation creator", (snapshot) => {
+      const explanation = snapshot.records.find(
+        (record) => record.family === "user_facing_explanation"
+      );
+      const creator = snapshot.records.find(
+        (record) => record.reference === explanation.createdByTransitionRef
+      );
+      snapshot.records.push({
+        ...structuredClone(creator),
+        reference: "transition_00000000-0000-0000-0000-000000000093"
+      });
+    }],
+    ["extra limitation", (snapshot) => {
+      const limit = snapshot.records.find((record) => record.family === "explanation_limit");
+      snapshot.records.push({
+        ...structuredClone(limit),
+        reference: "state_00000000-0000-0000-0000-000000000094"
+      });
+    }]
+  ];
+  for (const [name, attack] of attacks) {
+    await t.test(name, () => {
+      const real = createSutBoundary();
+      let corrupt = false;
+      const boundary = Object.freeze({
+        ...real,
+        captureInspectionSnapshot(runRef) {
+          const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+          if (corrupt) attack(snapshot);
+          return snapshot;
+        }
+      });
+      const harness = createEvaluationHarness(boundary);
+      const runRef = harness.startRun();
+      completeGroundedExplanation(harness, runRef);
+      const before = real.captureInspectionSnapshot(runRef);
+      corrupt = true;
+      assert.throws(() => harness.inspectExplanationCheckpoint(runRef));
+      corrupt = false;
+      assert.deepEqual(real.captureInspectionSnapshot(runRef), before);
+    });
+  }
 });
 
 test("CF-DRILL-OPT-IN keeps the same active trial but forbids delayed use", () => {

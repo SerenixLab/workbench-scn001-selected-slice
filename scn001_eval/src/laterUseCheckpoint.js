@@ -2,6 +2,13 @@ import { findExactActiveDelayedCorrectionTrial } from "./delayedActiveCheckpoint
 import { validateBoundFact } from "./directCorrectionCheckpoint.js";
 
 const BEHAVIOR = "delay_minor_correction_until_turn_completion";
+const CANONICAL_INTERVENTION_PREMISE = Object.freeze({
+  activity: "japanese_practice",
+  taskMode: "spontaneous_production",
+  correctionClass: "minor_correction",
+  timing: "turn_completion",
+  sessionId: "spontaneous-outcome-later"
+});
 
 const TRANSITION_KEYS = Object.freeze([
   "reference", "family", "origin", "transitionKind", "interactionRef",
@@ -326,6 +333,9 @@ export function findExactLaterRealization(snapshot, sourceBindingEvidence) {
     || fact.payload?.sourceActor !== "simulated-dependency"
     || fact.payload.requestedBehavior !== BEHAVIOR
     || fact.payload.realizedBehavior !== BEHAVIOR || fact.payload.fidelity !== "match"
+    || JSON.stringify(fact.payload.canonicalInterventionPremise)
+      !== JSON.stringify(CANONICAL_INTERVENTION_PREMISE)
+    || fact.payload.canonicalInterventionPremiseMatch !== true
     || fact.payload.mismatchOrigin !== null
     || JSON.stringify(transitions[0].inputReferences) !== JSON.stringify([
       later.disposition.reference, fact.reference, fact.firstInteractionRef
@@ -347,6 +357,27 @@ export function findExactLaterRealization(snapshot, sourceBindingEvidence) {
     snapshot, fact, "simulator_behavior_realization", "simulated-dependency", "simulator"
   );
   return { ...later, fact, realizationTransition: transitions[0] };
+}
+
+export function findExactCanonicalIntervention(snapshot, sourceBindingEvidence) {
+  const closure = findExactLaterRealization(snapshot, sourceBindingEvidence);
+  if (!closure) return undefined;
+  const actualPremise = {
+    activity: closure.disposition.useScope.activity,
+    taskMode: closure.disposition.useScope.taskMode,
+    correctionClass: closure.fact.payload.realizedBehavior === BEHAVIOR
+      ? "minor_correction" : "unsupported",
+    timing: closure.fact.payload.realizedBehavior === BEHAVIOR
+      ? "turn_completion" : "unsupported",
+    sessionId: closure.disposition.useScope.sessionId
+  };
+  if (JSON.stringify(actualPremise) !== JSON.stringify(CANONICAL_INTERVENTION_PREMISE)
+    || JSON.stringify(closure.fact.payload.canonicalInterventionPremise)
+      !== JSON.stringify(actualPremise)
+    || closure.fact.payload.canonicalInterventionPremiseMatch !== true) {
+    throw checkpointError("Canonical later-intervention premise is malformed.");
+  }
+  return { ...closure, canonicalInterventionPremise: actualPremise };
 }
 
 function validateCurrentInteractionClosure(snapshot, interactionRef, expectedInputRefs) {

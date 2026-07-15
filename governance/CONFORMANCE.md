@@ -4,8 +4,8 @@ This ledger is the complete applicability router for the 49 rules pinned by `gov
 
 Later change-specific addenda and independent-review closures record subsequent selected-slice semantic increments without rewriting that historical verification basis. The projected lock and snapshot digests identify the exact canonical governance basis; each change-specific record identifies its own starting commit, scope, and review disposition.
 
-The workbench contains a two-package boundary spine and a stabilized semantic segment. The SUT derives attributed current-user assertions, selected temporal eligibility, scoped recognition/spontaneous-production comparisons, immutable non-active trial candidates, distinct candidate-bound proposal intents, proposal-response binding, nine-check activation assessments, separate active trials, scoped focused-drill instructions and dispositions, exact focused behavior-realization closure, separate short-term focused-drill outcomes, a scoped current spontaneous-session correction/control state, a separate direct turn-completion behavior disposition, exact direct realization closure, a separate formed/non-active delayed-correction candidate, its separate nine-check activation assessment, a separate active delayed-correction trial, exact later-use applicability, a bounded later behavior disposition, exact later realization closure, and non-activation dispositions from raw run-local source facts and exact typed local relation closure.
-It does not create current-skill facts, later outcomes, explanations, or formal evaluation artifacts.
+The workbench contains a two-package boundary spine and a stabilized semantic segment. The SUT derives attributed current-user assertions, selected temporal eligibility, scoped recognition/spontaneous-production comparisons, immutable non-active trial candidates, distinct candidate-bound proposal intents, proposal-response binding, nine-check activation assessments, separate active trials, scoped focused-drill instructions and dispositions, exact focused behavior-realization closure, separate short-term focused-drill outcomes, a scoped current spontaneous-session correction/control state, a separate direct turn-completion behavior disposition, exact direct realization closure, a separate formed/non-active delayed-correction candidate, its separate nine-check activation assessment, a separate active delayed-correction trial, exact later-use applicability, a bounded later behavior disposition, exact canonical later realization closure, an intervention-conditioned outcome with explicit uncertainty, a grounded explanation with typed retained-state support, and non-activation dispositions from raw run-local source facts and exact typed local relation closure.
+It does not create current-skill facts or formal evaluation artifacts.
 There is no formal evaluation record, behavioral-compatibility claim, scoreability claim, milestone-acceptance claim, replay/restore path, or durable repository extraction.
 
 ## Ledger Conventions
@@ -2840,3 +2840,98 @@ With this closure recorded, current applicability/status counts return to:
 * 34 applicable rules `uncovered`;
 * no applicable rule `revalidation-required`;
 * no rule claimed `enforced`.
+
+## Outcome Semantics And Explanation Provenance Increment
+
+The implementation change based on starting `HEAD` `ae0eba5` has one bounded
+purpose: finish the selected engineering path through `DP-OUTCOME-UPDATE` and
+`DP-EXPLAIN`, after exact `CP-CANONICAL-INTERVENTION`, without creating a
+formal evaluation record, compatibility claim, campaign result, or score.
+
+The simulator-visible `L-003R` record now preserves both exact behavior
+fidelity and the canonical intervention premise: Japanese spontaneous
+production, minor correction, turn-completion timing, and the D10 session.
+The harness independently reconstructs that premise from the retained active
+trial, applicability assessment, disposition, realized behavior, and context.
+It withholds `L-003` through `L-005` unless both behavior fidelity and premise
+match close. Raw outcome or explanation material cannot bypass those gates
+through generic fixture delivery.
+
+`DP-OUTCOME-UPDATE` consumes exactly three raw facts after the matched
+realization: a comparative longer-speaking observation, current positive pacing
+feedback, and the declaration that no Zoey-visible co-intervention was
+supplied. The last declaration is explicitly non-exhaustive for private or
+unobserved causes. The SUT creates a separate uncertainty record and a separate
+intervention-conditioned outcome. Their exact shared creator, input/result
+envelope, source/original-ingestion closure, typed basis/outcome relations,
+chronology, and run-local identities are revalidated by both SUT and passive
+evaluation code. The outcome records association only; causality, long-term
+efficacy, global preference, fixed learning style, and fatigue remain not
+established.
+
+`DP-EXPLAIN` accepts only the exact attributed current explanation request and
+requires one exact retained outcome. It creates four explicit limitation
+records, one user-facing explanation, and one typed explanation-support record
+under a shared transition. The support consumes the complete selected lineage:
+all relevant retained ineligible temporal assessments for the target dimension,
+current calibration comparison,
+active production trial, focused-drill instruction and outcome, scoped direct
+correction and disposition, delayed candidate and activation basis, active
+delayed trial, later applicability, disposition and matched realization,
+outcome, and uncertainty. The support explicitly records that hidden
+chain-of-thought is neither required nor retained. The passive explanation
+oracle validates semantic scope/causal markers and the typed support graph; it
+does not require exact natural-language wording.
+
+Hostile checks cover premature outcome and explanation delivery, canonical
+premise flag and content drift, fixture substitution, partial raw bundles,
+causal and global-preference promotion, exhaustive co-intervention claims,
+excluded alternative causes, raw comparison rewrites, missing or duplicate
+relations, transition-envelope corruption, duplicate result creators,
+ambiguous result identity, stale-history omission, focused-instruction
+substitution, limitation rewrites, hidden-reasoning claims, causal explanation
+text, request-attribution substitution, result omission, extra limitation
+records, generic-delivery bypass, no-mutation failure behavior, and independent
+run isolation. The complete positive path also proves that no formal-evaluation,
+compatibility, or scoring family is emitted.
+
+The feedback roadmap was strengthened in three material ways. `L-003R` premise
+match is an independently reconstructed gate rather than a trusted label;
+`L-005` means only that no Zoey-visible co-intervention was supplied and cannot
+exclude private causes; and explanation validity rests on retained typed state
+rather than exact prose or hidden reasoning. The canonical engineering test
+also explicitly retains stale history before current calibration, closing a
+premise the roadmap required but its later-only fixture sequence did not itself
+establish.
+
+Affected rows are `ENG-BASE-001`, `ENG-CHANGE-001`, `ENG-CLAIM-001`,
+`ENG-CLAIM-002`, `ENG-CONF-CAPTURE-001`, `ENG-CONF-CLAIM-001`,
+`ENG-CONF-DEP-001`, `ENG-CONF-DEP-002`, `ENG-CONF-HARNESS-001`,
+`ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`, `ENG-CONF-PAYLOAD-002`,
+`ENG-CONF-REF-001`, `ENG-CONF-ROLE-001`, `ENG-CONF-RUN-001`,
+`ENG-CONF-SIM-001`, `ENG-CONF-STATE-001`, `ENG-CONF-STATE-002`,
+`ENG-HEALTH-ABSTRACTION-001`, `ENG-HEALTH-API-001`,
+`ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-FAILURE-001`,
+`ENG-HEALTH-STRUCTURE-001`, `ENG-HEALTH-TEST-001`, and
+`ENG-HEALTH-TEST-002`. Public SUT methods, package exports, runtime
+dependencies, applicability, revisions, promotion mappings, and active
+exceptions do not change.
+
+Local verification includes 105 SUT state tests, 239 public-boundary and
+evaluation tests, every aggregate gate, and all 344 aggregate tests. `git diff
+--check` also passes.
+
+Fresh independent review of the exact Phase 6D implementation stack remains
+pending. Until a passing review is recorded,
+`ENG-HEALTH-CHANGE-001`, `ENG-HEALTH-ABSTRACTION-001`, and
+`ENG-HEALTH-STRUCTURE-001` remain `uncovered`: 44 rules are applicable, 5 not
+applicable, 7 review-only, 37 uncovered, none revalidation-required, and none
+enforced.
+
+Phase 7 is not authorized by this increment. Creating the first formal
+evaluation record, behavior-configuration comparison, evaluated compatibility
+claim, aggregation result, or scoreability rule triggers the unresolved
+`EVAL-004` and/or `EVAL-005` decisions. Phase 8 extraction remains blocked by
+`REPO-001`. No engineering test or review of this increment may be relabeled as
+formal evidence, scoreability, completion eligibility, owner acceptance,
+milestone completion, broader acceptance, production readiness, or deployment.

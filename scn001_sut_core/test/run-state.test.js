@@ -190,6 +190,60 @@ function directRealizationInput(requestedRef, overrides = {}) {
   };
 }
 
+function laterRealizationInput(requestedRef, overrides = {}) {
+  return {
+    sourceFactRef: sourceRef(), kind: "simulator_behavior_realization",
+    sourceActor: "simulated-dependency", occurrenceOrder: 33, requestedRef,
+    requestedBehavior: "delay_minor_correction_until_turn_completion",
+    realizedBehavior: "delay_minor_correction_until_turn_completion",
+    canonicalInterventionPremise: {
+      activity: "japanese_practice", taskMode: "spontaneous_production",
+      correctionClass: "minor_correction", timing: "turn_completion",
+      sessionId: "spontaneous-outcome-later"
+    },
+    canonicalInterventionPremiseMatch: true,
+    fidelity: "match", mismatchOrigin: null, ...overrides
+  };
+}
+
+function laterOutcomeInputs(overrides = {}) {
+  return [
+    {
+      sourceFactRef: sourceRef(), kind: "outcome_fact", sourceActor: "fixture-scorer",
+      occurrenceOrder: 33, observation: "user_spoke_longer",
+      context: "spontaneous_production",
+      comparison: {
+        metric: "speaking_duration", relation: "longer_than",
+        baselineSessionId: "spontaneous-correction-current",
+        currentSessionId: "spontaneous-outcome-later"
+      },
+      ...overrides.comparative
+    },
+    {
+      sourceFactRef: sourceRef(), kind: "outcome_fact", sourceActor: "synthetic-user-a",
+      occurrenceOrder: 34, observation: "This pacing feels easier.",
+      context: "spontaneous_production", ...overrides.feedback
+    },
+    {
+      sourceFactRef: sourceRef(), kind: "material_context_change",
+      sourceActor: "fixture-driver", occurrenceOrder: 35,
+      description: "no_zoey_available_co_intervention_event_supplied",
+      coInterventionVisibility: "none_supplied_to_zoey",
+      completeness: "non_exhaustive_for_private_or_unobserved_causes",
+      ...overrides.coIntervention
+    }
+  ];
+}
+
+function explanationRequestInput(overrides = {}) {
+  return communicationInput({
+    occurrenceOrder: 36,
+    content: "Why are you correcting differently now?",
+    context: "spontaneous_production", semanticStatusOrigin: "unclassified",
+    ...overrides
+  });
+}
+
 function calibrationInputs(recognitionCorrect = 4, productionCorrect = 1, overrides = {}) {
   const dimension = overrides.dimension ?? "particle_pattern_a";
   return [
@@ -525,6 +579,75 @@ function laterUseRun({ counterfactual = false } = {}) {
     laterDisposition: [...completed.run.records.values()].find((record) => (
       record.family === "later_behavior_disposition"
     ))
+  };
+}
+
+function laterRealizedRun() {
+  const later = laterUseRun();
+  const realizationInput = laterRealizationInput(later.laterDisposition.reference);
+  later.run.assertSourceFactConsistency([realizationInput]);
+  later.run.ingest([realizationInput]);
+  later.run.processCurrentInteraction();
+  const realizationFact = [...later.run.records.values()].find((record) => (
+    record.role === "simulator_behavior_realization"
+    && record.payload.requestedRef === later.laterDisposition.reference
+  ));
+  return { ...later, realizationInput, realizationFact };
+}
+
+function laterOutcomeRun() {
+  const realized = laterRealizedRun();
+  const outcomeInputs = laterOutcomeInputs();
+  realized.run.assertSourceFactConsistency(outcomeInputs);
+  realized.run.ingest(outcomeInputs);
+  realized.run.processCurrentInteraction();
+  return {
+    ...realized, outcomeInputs,
+    outcome: [...realized.run.records.values()].find(
+      (record) => record.family === "later_outcome"
+    ),
+    uncertainty: [...realized.run.records.values()].find(
+      (record) => record.family === "outcome_uncertainty"
+    )
+  };
+}
+
+function groundedExplanationRun() {
+  const completed = laterOutcomeRun();
+  const oldObservation = taskObservationInput({
+    occurrenceOrder: 37, itemRef: "historical-target-production-evidence",
+    taskMode: "spontaneous_production", occurrenceScenarioDay: 0,
+    sessionId: "old-practice-history", sessionOrder: 1
+  });
+  const unrelatedObservation = taskObservationInput({
+    occurrenceOrder: 38, itemRef: "unrelated-historical-evidence",
+    dimension: "unrelated_dimension", occurrenceScenarioDay: 0,
+    sessionId: "unrelated-old-practice", sessionOrder: 1
+  });
+  completed.run.assertSourceFactConsistency([oldObservation, unrelatedObservation]);
+  completed.run.ingest([oldObservation, unrelatedObservation]);
+  completed.run.processCurrentInteraction();
+  const chronology = chronologyInput({
+    occurrenceOrder: 39, scenarioDay: 145,
+    sessionId: "spontaneous-outcome-later", sessionOrder: 5
+  });
+  completed.run.assertSourceFactConsistency([
+    oldObservation, unrelatedObservation, chronology
+  ]);
+  completed.run.ingest([oldObservation, unrelatedObservation, chronology]);
+  completed.run.processCurrentInteraction();
+  const request = explanationRequestInput();
+  completed.run.assertSourceFactConsistency([request]);
+  completed.run.ingest([request]);
+  completed.run.processCurrentInteraction();
+  return {
+    ...completed, oldObservation, unrelatedObservation, chronology, request,
+    support: [...completed.run.records.values()].find(
+      (record) => record.family === "explanation_support"
+    ),
+    explanation: [...completed.run.records.values()].find(
+      (record) => record.family === "user_facing_explanation"
+    )
   };
 }
 
@@ -3594,6 +3717,12 @@ test("later spontaneous use rechecks applicability before selecting delayed corr
     requestedRef: later.laterDisposition.reference,
     requestedBehavior: "delay_minor_correction_until_turn_completion",
     realizedBehavior: "delay_minor_correction_until_turn_completion",
+    canonicalInterventionPremise: {
+      activity: "japanese_practice", taskMode: "spontaneous_production",
+      correctionClass: "minor_correction", timing: "turn_completion",
+      sessionId: "spontaneous-outcome-later"
+    },
+    canonicalInterventionPremiseMatch: true,
     fidelity: "match", mismatchOrigin: null
   };
   later.run.assertSourceFactConsistency([realization]);
@@ -3748,6 +3877,12 @@ test("later realization has one ingestion creator and rejects competing evidence
     requestedRef: later.laterDisposition.reference,
     requestedBehavior: "delay_minor_correction_until_turn_completion",
     realizedBehavior: "delay_minor_correction_until_turn_completion",
+    canonicalInterventionPremise: {
+      activity: "japanese_practice", taskMode: "spontaneous_production",
+      correctionClass: "minor_correction", timing: "turn_completion",
+      sessionId: "spontaneous-outcome-later"
+    },
+    canonicalInterventionPremiseMatch: true,
     fidelity: "match", mismatchOrigin: null
   };
   later.run.assertSourceFactConsistency([input]);
@@ -3795,6 +3930,143 @@ test("later realization has one ingestion creator and rejects competing evidence
   const partialBefore = retainedMutationSnapshot(partial.run);
   assert.throws(() => partial.run.processCurrentInteraction());
   assert.deepEqual(retainedMutationSnapshot(partial.run), partialBefore);
+});
+
+test("later outcome remains intervention-conditioned with non-exhaustive uncertainty", () => {
+  const completed = laterOutcomeRun();
+  const closure = completed.run.validateLaterOutcomeClosure(completed.outcome);
+  assert.equal(closure.outcome.activeTrialRef, completed.activeTrial.reference);
+  assert.equal(
+    closure.outcome.classification,
+    "intervention_conditioned_observed_association"
+  );
+  assert.equal(closure.outcome.causalScope, "association_only_not_causal_proof");
+  assert.deepEqual(closure.outcome.coInterventionStatus, {
+    zoeyAvailable: "none_supplied",
+    completeness: "non_exhaustive_for_private_or_unobserved_causes"
+  });
+  assert.equal(closure.uncertainty.alternativeCauses, "private_or_unobserved_not_excluded");
+  assert.deepEqual(closure.uncertainty.unsupportedClaims, [
+    "causal_theory", "long_term_learning_efficacy", "fatigue_status",
+    "global_voice_preference", "fixed_learning_style"
+  ]);
+});
+
+test("later outcome creation requires the exact realized premise and complete raw bundle", () => {
+  {
+    const realized = laterRealizedRun();
+    realized.realizationFact.payload.canonicalInterventionPremiseMatch = false;
+    const inputs = laterOutcomeInputs();
+    realized.run.assertSourceFactConsistency(inputs);
+    realized.run.ingest(inputs);
+    const before = retainedMutationSnapshot(realized.run);
+    assert.throws(() => realized.run.processCurrentInteraction());
+    assert.deepEqual(retainedMutationSnapshot(realized.run), before);
+    assert.equal([...realized.run.records.values()].some(
+      (record) => record.family === "later_outcome"
+    ), false);
+  }
+  {
+    const realized = laterRealizedRun();
+    const [comparative] = laterOutcomeInputs();
+    realized.run.assertSourceFactConsistency([comparative]);
+    realized.run.ingest([comparative]);
+    const before = retainedMutationSnapshot(realized.run);
+    assert.throws(() => realized.run.processCurrentInteraction(), /exact three-fact bundle/);
+    assert.deepEqual(retainedMutationSnapshot(realized.run), before);
+  }
+});
+
+test("later outcome closure rejects promotion, substitution, and creator ambiguity passively", () => {
+  const attacks = [
+    ({ outcome }) => { outcome.causalScope = "causal_proof"; },
+    ({ outcome }) => { outcome.fixedLearningStyle = "established"; },
+    ({ outcome }) => { outcome.coInterventionStatus.completeness = "exhaustive"; },
+    ({ uncertainty }) => { uncertainty.alternativeCauses = "excluded"; },
+    ({ run, outcome }) => {
+      run.relations.splice(run.relations.findIndex((relation) => (
+        relation.fromRef === outcome.reference
+        && relation.targetRole === "comparative_speaking_observation"
+      )), 1);
+    },
+    ({ run, uncertainty }) => {
+      run.relations.splice(run.relations.findIndex((relation) => (
+        relation.fromRef === uncertainty.reference
+        && relation.targetRole === "reported_feedback"
+      )), 1);
+    },
+    ({ run, uncertainty }) => {
+      cloneRetainedTransition(run, run.records.get(uncertainty.createdByTransitionRef));
+    }
+  ];
+  for (const attack of attacks) {
+    const completed = laterOutcomeRun();
+    attack(completed);
+    const before = retainedMutationSnapshot(completed.run);
+    assert.throws(() => completed.run.validateLaterOutcomeClosure(completed.outcome));
+    assert.deepEqual(retainedMutationSnapshot(completed.run), before);
+  }
+});
+
+test("grounded explanation retains typed lineage and explicit epistemic limits", () => {
+  const completed = groundedExplanationRun();
+  const closure = completed.run.validateExplanationClosure(completed.support);
+  assert.equal(closure.explanation.supportRef, completed.support.reference);
+  assert.equal(completed.support.temporalAssessmentRefs.length, 1);
+  assert.equal([...completed.run.records.values()].filter((record) => (
+    record.family === "temporal_eligibility_assessment"
+    && record.eligibility === "ineligible"
+  )).length, 2);
+  assert.equal(
+    completed.support.hiddenChainOfThought, "not_required_not_retained"
+  );
+  assert.match(closure.explanation.userFacingText, /spontaneous practice/);
+  assert.match(closure.explanation.userFacingText, /focused drill/);
+  assert.match(closure.explanation.userFacingText, /not proof of cause/);
+  assert.deepEqual(
+    closure.limitations.map((limit) => limit.limitType),
+    ["scope", "epistemic_uncertainty", "causal", "unsupported_generalization"]
+  );
+});
+
+test("explanation closure rejects lineage gaps, hidden reasoning, and creator ambiguity passively", () => {
+  const attacks = [
+    ({ support }) => { support.temporalAssessmentRefs = []; },
+    ({ run }) => {
+      [...run.records.values()].find((record) => (
+        record.family === "temporal_eligibility_assessment"
+        && record.dimension === "particle_pattern_a"
+      )).ageDays -= 1;
+    },
+    ({ run }) => {
+      const assessment = [...run.records.values()].find((record) => (
+        record.family === "temporal_eligibility_assessment"
+        && record.dimension === "particle_pattern_a"
+      ));
+      cloneRetainedTransition(run, run.records.get(assessment.createdByTransitionRef));
+    },
+    ({ support }) => { support.focusedInstructionRef = support.focusedOutcomeRef; },
+    ({ support }) => { support.hiddenChainOfThought = "retained"; },
+    ({ explanation }) => {
+      explanation.causalStatement = "the intervention caused improvement";
+    },
+    ({ run, support }) => {
+      run.relations.splice(run.relations.findIndex((relation) => (
+        relation.fromRef === support.reference
+        && relation.targetRole === "active_delayed_correction_trial"
+      )), 1);
+    },
+    ({ run, explanation }) => {
+      cloneRetainedTransition(run, run.records.get(explanation.createdByTransitionRef));
+    }
+  ];
+  for (const attack of attacks) {
+    const completed = groundedExplanationRun();
+    attack(completed);
+    const before = retainedMutationSnapshot(completed.run);
+    assert.throws(() => completed.run.validateExplanationClosure(completed.support));
+    assert.deepEqual(retainedMutationSnapshot(completed.run), before);
+  }
 });
 
 test("direct closure attacks fail without allocating order or repairing state", () => {
