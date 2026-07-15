@@ -4,6 +4,7 @@ import { createSourceFactReference, projectFixtureRecords } from "./fixtureProje
 import { findExactActiveProductionTrial } from "./productionActiveCheckpoint.js";
 import { realizeAvailableOutput } from "./simulator.js";
 import { createSimulatorProjector } from "./simulatorProjection.js";
+import { createSourceBindingLedger } from "./sourceBindingLedger.js";
 
 const ACCEPTANCE_FIXTURES = Object.freeze({
   "P-USER-ACCEPT": Object.freeze({ role: "user_response", sourceActor: "synthetic-user-a", occurrenceOrder: 10, data: Object.freeze({
@@ -77,12 +78,14 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
   const renderOutput = dependencies.renderOutput ?? realizeAvailableOutput;
   const createProjector = dependencies.createProjector ?? createSimulatorProjector;
   const runSourceFactReferences = new Map();
+  const runSourceBindings = new Map();
   const runTransport = new Map();
 
   return Object.freeze({
     startRun() {
       const runRef = sutBoundary.startRun();
       runSourceFactReferences.set(runRef, new Map());
+      runSourceBindings.set(runRef, createSourceBindingLedger());
       runTransport.set(runRef, {
         routed: new Map(), projector: createProjector(), nextOrder: 1,
         acceptanceDeliveries: new Map(), focusedOpenDeliveries: new Map(),
@@ -92,9 +95,14 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
     },
 
     endRun(runRef) {
-      sutBoundary.endRun(runRef);
-      runSourceFactReferences.delete(runRef);
-      runTransport.delete(runRef);
+      try {
+        sutBoundary.endRun(runRef);
+      } finally {
+        runSourceBindings.get(runRef)?.clear();
+        runSourceBindings.delete(runRef);
+        runSourceFactReferences.delete(runRef);
+        runTransport.delete(runRef);
+      }
     },
 
     deliverFixtureRecords(runRef, fixtureRecords) {
@@ -118,7 +126,9 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
         "Focused-drill opening delivery"
       );
       const snapshot = sutBoundary.captureInspectionSnapshot(runRef);
-      const activeTrial = findExactActiveProductionTrial(snapshot);
+      const activeTrial = findExactActiveProductionTrial(
+        snapshot, sourceBindingEvidenceForRun(runRef)
+      );
       if (!activeTrial) return Object.freeze([]);
       const prior = transport.focusedOpenDeliveries.get(activeTrial.reference);
       if (prior) return prior;
@@ -149,9 +159,9 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
         responseAndControlFixtureRecords,
         sourceFactReferenceForRun(runRef)
       );
-      const result = sutBoundary.ingestSutVisibleInputs(runRef, {
-        inputs: [simulatorInput, ...fixtureBatch.inputs]
-      });
+      const result = ingestWithSourceBindings(
+        runRef, [simulatorInput, ...fixtureBatch.inputs]
+      );
       const frozen = deepFreeze([{ outputRef, acceptedInputRefs: [...result.acceptedInputRefs] }]);
       transport.acceptanceDeliveries.set(outputRef, frozen);
       return frozen;
@@ -164,7 +174,9 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
         fixtureRecords, FOCUSED_DRILL_OUTCOME_FIXTURES,
         "Focused-drill outcome delivery"
       );
-      const eligible = findEligibleFocusedDrillRealizations(sutBoundary, runRef, transport);
+      const eligible = findEligibleFocusedDrillRealizations(
+        sutBoundary, runRef, transport, sourceBindingEvidenceForRun(runRef)
+      );
       if (eligible.length === 0) return Object.freeze([]);
       if (eligible.length !== 1) {
         throw new Error(
@@ -204,7 +216,7 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
       if (prior) return Object.freeze([prior.record]);
       const record = renderOutput(output, transport.nextOrder);
       const projected = transport.projector.project(record);
-      const result = sutBoundary.ingestSutVisibleInputs(runRef, { inputs: [projected] });
+      const result = ingestWithSourceBindings(runRef, [projected]);
       if (!Array.isArray(result.acceptedInputRefs) || result.acceptedInputRefs.length !== 1) {
         throw new Error("Simulator routing must accept exactly one SUT input fact reference.");
       }
@@ -239,11 +251,24 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
   }
 
   function deliverProjectedFixtureRecords(runRef, fixtureRecords) {
-      const sourceFactReferenceFor = sourceFactReferenceForRun(runRef);
-      return sutBoundary.ingestSutVisibleInputs(
-        runRef,
-        projectFixtureRecords(fixtureRecords, sourceFactReferenceFor)
-      );
+    const sourceFactReferenceFor = sourceFactReferenceForRun(runRef);
+    const { inputs } = projectFixtureRecords(fixtureRecords, sourceFactReferenceFor);
+    return ingestWithSourceBindings(runRef, inputs);
+  }
+
+  function ingestWithSourceBindings(runRef, inputs) {
+    const ledger = runSourceBindings.get(runRef);
+    if (!ledger) throw new Error(`Unknown or closed evaluation run: ${runRef}.`);
+    ledger.assertDeliveryCompatible(inputs);
+    const result = sutBoundary.ingestSutVisibleInputs(runRef, { inputs });
+    ledger.recordSuccessfulIngress(inputs, result.acceptedInputRefs);
+    return result;
+  }
+
+  function sourceBindingEvidenceForRun(runRef) {
+    const ledger = runSourceBindings.get(runRef);
+    if (!ledger) throw new Error(`Unknown or closed evaluation run: ${runRef}.`);
+    return ledger.readOnlyEvidence();
   }
 }
 
@@ -410,9 +435,11 @@ function findEligibleRoutedRealizations(sutBoundary, runRef, transport) {
   });
 }
 
-function findEligibleFocusedDrillRealizations(sutBoundary, runRef, transport) {
+function findEligibleFocusedDrillRealizations(
+  sutBoundary, runRef, transport, sourceBindingEvidence
+) {
   const snapshot = sutBoundary.captureInspectionSnapshot(runRef);
-  const activeTrial = findExactActiveProductionTrial(snapshot);
+  const activeTrial = findExactActiveProductionTrial(snapshot, sourceBindingEvidence);
   if (!activeTrial) return [];
   return [...transport.routed.entries()].flatMap(([outputRef, entry]) => {
     const { output, record, simulatorFactRef } = entry;

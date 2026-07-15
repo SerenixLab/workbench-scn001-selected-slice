@@ -19,7 +19,7 @@ const CONTROL_TYPES = Object.freeze({
   evaluation_retention_basis: "retentionBasisRefs"
 });
 
-export function findExactActiveProductionTrial(snapshot) {
+export function findExactActiveProductionTrial(snapshot, sourceBindingEvidence) {
   if (!snapshot || !Array.isArray(snapshot.records) || !Array.isArray(snapshot.relations)) {
     throw checkpointError("inspection snapshot is malformed");
   }
@@ -30,10 +30,11 @@ export function findExactActiveProductionTrial(snapshot) {
     }
     records.set(record.reference, record);
   }
-  const closure = { records, relations: snapshot.relations };
   const trials = snapshot.records.filter((record) => record.family === "active_trial");
   if (trials.length === 0) return undefined;
   if (trials.length !== 1) throw checkpointError("active-trial identity is ambiguous");
+  const sourceBindings = indexSourceBindingEvidence(sourceBindingEvidence);
+  const closure = { records, relations: snapshot.relations, sourceBindings };
   validateActiveTrial(closure, trials[0]);
   return trials[0];
 }
@@ -613,10 +614,17 @@ function validateRetainedFact(
   const sources = relations.filter((relation) => (
     relation.fromRef === fact.reference && relation.relationKind === "source"
   ));
+  const sourceBinding = closure.sourceBindings.bySourceFactRef.get(fact.sourceFactRef);
+  const retainedBinding = closure.sourceBindings.byRetainedFactRef.get(fact.reference);
   if (!hasExactKeys(actor, ["reference", "family", "origin", "sourceActor", "createdOrder"])
     || actor.family !== "semantic_source" || actor.origin !== origin
     || actor.sourceActor !== expectedActor
     || fact.payload.sourceFactRef !== fact.sourceFactRef
+    || !sourceBinding || retainedBinding !== sourceBinding
+    || sourceBinding.sourceFactRef !== fact.sourceFactRef
+    || sourceBinding.acceptedInputFactRef !== fact.reference
+    || sourceBinding.deliveryOrigin !== fact.origin || sourceBinding.role !== fact.role
+    || !isDeepStrictEqual(sourceBinding.projectedMeaning, fact.payload)
     || matchingActors.length !== 1 || matchingActors[0].reference !== actor.reference
     || containing.length === 0 || containing[0].reference !== firstInteraction.reference
     || firstInteraction.inputReferences.filter((ref) => ref === fact.reference).length !== 1
@@ -633,6 +641,36 @@ function validateRetainedFact(
     throw checkpointError(`${role} provenance closure is malformed`);
   }
   return fact;
+}
+
+function indexSourceBindingEvidence(evidence) {
+  if (!Array.isArray(evidence)) {
+    throw checkpointError("original source-binding evidence is missing");
+  }
+  const bySourceFactRef = new Map();
+  const byRetainedFactRef = new Map();
+  for (const entry of evidence) {
+    if (!hasExactKeys(entry, [
+      "sourceFactRef", "projectedMeaning", "acceptedInputFactRef", "deliveryOrigin", "role"
+    ]) || typeof entry.sourceFactRef !== "string" || entry.sourceFactRef.length === 0
+      || typeof entry.acceptedInputFactRef !== "string" || entry.acceptedInputFactRef.length === 0
+      || !entry.projectedMeaning
+      || Object.getPrototypeOf(entry.projectedMeaning) !== Object.prototype
+      || entry.projectedMeaning.sourceFactRef !== entry.sourceFactRef
+      || entry.projectedMeaning.kind !== entry.role
+      || !["fixture", "simulator"].includes(entry.deliveryOrigin)) {
+      throw checkpointError("original source-binding evidence is malformed");
+    }
+    if (bySourceFactRef.has(entry.sourceFactRef)) {
+      throw checkpointError("original source reference was rebound");
+    }
+    if (byRetainedFactRef.has(entry.acceptedInputFactRef)) {
+      throw checkpointError("retained fact has multiple original source bindings");
+    }
+    bySourceFactRef.set(entry.sourceFactRef, entry);
+    byRetainedFactRef.set(entry.acceptedInputFactRef, entry);
+  }
+  return { bySourceFactRef, byRetainedFactRef };
 }
 
 function validateInteractionIngestion(closure, interaction, label) {

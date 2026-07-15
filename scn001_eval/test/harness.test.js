@@ -12,6 +12,8 @@ import {
 } from "../src/simulator.js";
 import { createSimulatorProjector } from "../src/simulatorProjection.js";
 import { projectFixtureRecord } from "../src/fixtureProjection.js";
+import { findExactActiveProductionTrial } from "../src/productionActiveCheckpoint.js";
+import { createSourceBindingLedger } from "../src/sourceBindingLedger.js";
 
 function communicationFixtureRecord(overrides = {}) {
   return {
@@ -352,6 +354,23 @@ function activateProductionTrial(harness, runRef) {
   harness.processCurrentInteraction(runRef);
   harness.deliverProposalAcceptanceIfEligible(runRef, proposalAcceptanceRecords());
   harness.processCurrentInteraction(runRef);
+}
+
+function sourceBindingEvidenceFrom(snapshot) {
+  return snapshot.records
+    .filter((record) => record.family === "input_fact")
+    .map((fact) => ({
+      sourceFactRef: fact.sourceFactRef,
+      projectedMeaning: structuredClone(fact.payload),
+      acceptedInputFactRef: fact.reference,
+      deliveryOrigin: fact.origin,
+      role: fact.role
+    }));
+}
+
+function rewriteSourceIdentity(fact, suffix) {
+  fact.sourceFactRef = `${fact.sourceFactRef}-${suffix}`;
+  fact.payload.sourceFactRef = fact.sourceFactRef;
 }
 
 test("simulator validates the closed request and deterministically preserves material meaning", () => {
@@ -968,6 +987,224 @@ test("focused-drill opening requires one exact retained active-trial closure", (
     );
     assert.equal(ingressCalls, before);
   }
+});
+
+test("CP-PROD-ACTIVE rejects coordinated source-identity rewrites before D-001/D-002 ingress", async (t) => {
+  const attacks = [
+    ["all inspected source-reference fields", (snapshot) => {
+      for (const fact of snapshot.records.filter((record) => record.family === "input_fact")) {
+        rewriteSourceIdentity(fact, "all");
+      }
+    }],
+    ["source reference plus occurrence order", (snapshot) => {
+      const fact = snapshot.records.find((record) => (
+        record.role === "fixture_control_fact" && record.payload.control === "trial_policy"
+      ));
+      rewriteSourceIdentity(fact, "order");
+      fact.payload.occurrenceOrder += 100;
+    }],
+    ["source reference plus non-check-driving description", (snapshot) => {
+      const fact = snapshot.records.find((record) => record.role === "affordance_fact");
+      rewriteSourceIdentity(fact, "description");
+      fact.payload.description = "Coherently rewritten non-check-driving description.";
+    }],
+    ["candidate-interaction control source identity", (snapshot) => {
+      const fact = snapshot.records.find((record) => (
+        record.role === "fixture_control_fact" && record.payload.control === "trial_policy"
+      ));
+      rewriteSourceIdentity(fact, "candidate-control");
+    }],
+    ["binding-interaction control source identity", (snapshot) => {
+      const fact = snapshot.records.find((record) => (
+        record.role === "fixture_control_fact"
+          && record.payload.control === "evaluation_retention_basis"
+      ));
+      rewriteSourceIdentity(fact, "binding-control");
+    }],
+    ["chronology source identity", (snapshot) => {
+      rewriteSourceIdentity(
+        snapshot.records.find((record) => record.role === "chronology_fact"),
+        "chronology"
+      );
+    }],
+    ["context source identity", (snapshot) => {
+      rewriteSourceIdentity(snapshot.records.find((record) => (
+        record.role === "context_label"
+          && record.payload.taskMode === "spontaneous_production"
+      )), "context");
+    }],
+    ["recognition-observation source identity", (snapshot) => {
+      rewriteSourceIdentity(snapshot.records.find((record) => (
+        record.role === "task_observation" && record.payload.taskMode === "recognition"
+      )), "recognition");
+    }],
+    ["production-observation source identity", (snapshot) => {
+      rewriteSourceIdentity(snapshot.records.find((record) => (
+        record.role === "task_observation"
+          && record.payload.taskMode === "spontaneous_production"
+      )), "production");
+    }],
+    ["proposal-response source identity", (snapshot) => {
+      rewriteSourceIdentity(
+        snapshot.records.find((record) => record.role === "user_response"),
+        "response"
+      );
+    }],
+    ["proposal-simulator-realization source identity", (snapshot) => {
+      rewriteSourceIdentity(
+        snapshot.records.find((record) => record.role === "simulator_realization"),
+        "simulator"
+      );
+    }]
+  ];
+
+  for (const [name, mutate] of attacks) {
+    await t.test(name, () => {
+      const real = createSutBoundary();
+      let corrupt = false;
+      let ingressCalls = 0;
+      const boundary = Object.freeze({
+        ...real,
+        ingestSutVisibleInputs(...args) {
+          ingressCalls += 1;
+          return real.ingestSutVisibleInputs(...args);
+        },
+        captureInspectionSnapshot(runRef) {
+          const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+          if (corrupt) mutate(snapshot);
+          return snapshot;
+        }
+      });
+      const harness = createEvaluationHarness(boundary);
+      const runRef = harness.startRun();
+      activateProductionTrial(harness, runRef);
+      const before = ingressCalls;
+      corrupt = true;
+      assert.throws(
+        () => harness.deliverFocusedDrillInputsIfEligible(
+          runRef, focusedDrillOpeningRecords()
+        ),
+        /CP-PROD-ACTIVE/
+      );
+      assert.equal(ingressCalls, before);
+      assert.equal(real.captureInspectionSnapshot(runRef).records.some((record) => (
+        record.family === "input_fact" && record.payload.occurrenceOrder >= 15
+      )), false);
+    });
+  }
+});
+
+test("CP-PROD-ACTIVE rejects missing, rebound, duplicated, or changed original bindings", async (t) => {
+  const harness = createEvaluationHarness(createSutBoundary());
+  const runRef = harness.startRun();
+  activateProductionTrial(harness, runRef);
+  const snapshot = harness.captureInspectionSnapshot(runRef);
+  const evidence = sourceBindingEvidenceFrom(snapshot);
+  assert.ok(findExactActiveProductionTrial(snapshot, evidence));
+
+  await t.test("original source binding absent", () => {
+    const affordance = snapshot.records.find((record) => record.role === "affordance_fact");
+    assert.throws(
+      () => findExactActiveProductionTrial(
+        snapshot,
+        evidence.filter((entry) => entry.acceptedInputFactRef !== affordance.reference)
+      ),
+      /CP-PROD-ACTIVE/
+    );
+  });
+
+  await t.test("one source reference rebound to another retained fact", () => {
+    const corrupted = structuredClone(evidence);
+    corrupted.push({
+      ...structuredClone(corrupted[0]),
+      acceptedInputFactRef: corrupted[1].acceptedInputFactRef
+    });
+    assert.throws(
+      () => findExactActiveProductionTrial(snapshot, corrupted),
+      /source reference was rebound/
+    );
+  });
+
+  await t.test("one retained fact associated with two source bindings", () => {
+    const corrupted = structuredClone(evidence);
+    const duplicate = structuredClone(corrupted[0]);
+    duplicate.sourceFactRef = `${duplicate.sourceFactRef}-second-source`;
+    duplicate.projectedMeaning.sourceFactRef = duplicate.sourceFactRef;
+    corrupted.push(duplicate);
+    assert.throws(
+      () => findExactActiveProductionTrial(snapshot, corrupted),
+      /multiple original source bindings/
+    );
+  });
+
+  await t.test("original meaning differs only in a non-check-driving field", () => {
+    const corrupted = structuredClone(evidence);
+    corrupted.find((entry) => entry.role === "affordance_fact")
+      .projectedMeaning.description = "Different original description.";
+    assert.throws(
+      () => findExactActiveProductionTrial(snapshot, corrupted),
+      /CP-PROD-ACTIVE/
+    );
+  });
+});
+
+test("failed SUT ingress records no successful evaluation source binding", () => {
+  const real = createSutBoundary();
+  let failIngress = true;
+  const boundary = Object.freeze({
+    ...real,
+    ingestSutVisibleInputs(...args) {
+      if (failIngress) throw new Error("injected ingress failure");
+      return real.ingestSutVisibleInputs(...args);
+    }
+  });
+  const harness = createEvaluationHarness(boundary);
+  const runRef = harness.startRun();
+  assert.throws(
+    () => harness.deliverFixtureRecords(runRef, [communicationFixtureRecord()]),
+    /injected ingress failure/
+  );
+
+  failIngress = false;
+  const changed = communicationFixtureRecord({
+    data: { ...communicationFixtureRecord().data, content: "Changed after failed ingress." }
+  });
+  assert.equal(harness.deliverFixtureRecords(runRef, [changed]).acceptedInputRefs.length, 1);
+  assert.equal(deliveredFacts(harness, runRef)[0].payload.content, changed.data.content);
+});
+
+test("source-binding ledgers preserve replay identity, isolate runs, and clear on end-run", () => {
+  const first = createSourceBindingLedger();
+  const second = createSourceBindingLedger();
+  const input = {
+    sourceFactRef: "source_00000000-0000-0000-0000-000000000001",
+    kind: "affordance_fact",
+    sourceActor: "fixture-driver",
+    occurrenceOrder: 5,
+    direction: "TRIAL-PROD-FOCUS",
+    description: "Production-focused practice."
+  };
+  const retainedRef = "state_00000000-0000-0000-0000-000000000001";
+  first.assertDeliveryCompatible([input]);
+  first.recordSuccessfulIngress([input], [retainedRef]);
+  first.assertDeliveryCompatible([structuredClone(input)]);
+  first.recordSuccessfulIngress([structuredClone(input)], [retainedRef]);
+  assert.equal(first.readOnlyEvidence().length, 1);
+  assert.equal(Object.isFrozen(first.readOnlyEvidence()[0].projectedMeaning), true);
+  assert.deepEqual(second.readOnlyEvidence(), []);
+  assert.throws(
+    () => first.assertDeliveryCompatible([{ ...input, description: "Replacement." }]),
+    /cannot be rebound/
+  );
+  assert.throws(
+    () => second.assertDeliveryCompatible([
+      input, { ...input, description: "Same-delivery replacement." }
+    ]),
+    /cannot rebind/
+  );
+  assert.equal(first.readOnlyEvidence()[0].projectedMeaning.description, input.description);
+  first.clear();
+  assert.deepEqual(first.readOnlyEvidence(), []);
 });
 
 test("focused-drill mismatch remains separate and blocks outcome delivery", () => {
