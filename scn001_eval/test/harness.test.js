@@ -4137,6 +4137,103 @@ test("source-binding ledger rejects an omitted initialized assertion atomically"
   assert.equal(ledger.readOnlyEvidence().length, 1);
 });
 
+test("source-binding ledger rejects incomplete, duplicated, or reordered initialized batches", () => {
+  const records = [
+    communicationFixtureRecord({
+      fixtureRecordId: "H-INIT-A",
+      occurrenceOrder: 1,
+      data: {
+        content: "I freeze on particles.",
+        context: "old_practice_history",
+        semanticStatusOrigin: "fixture_initialized"
+      }
+    }),
+    communicationFixtureRecord({
+      fixtureRecordId: "H-INIT-B",
+      occurrenceOrder: 2,
+      data: {
+        content: "I also rush the endings.",
+        context: "old_practice_history",
+        semanticStatusOrigin: "fixture_initialized"
+      }
+    })
+  ];
+
+  for (const corruption of ["omit_second", "duplicate_first", "swap_results"]) {
+    const real = createSutBoundary();
+    const ledger = createSourceBindingLedger();
+    let transitionRef;
+    const boundary = Object.freeze({
+      ...real,
+      ingestSutVisibleInputs(...args) {
+        const result = real.ingestSutVisibleInputs(...args);
+        transitionRef = result.transitionRef;
+        return result;
+      },
+      captureInspectionSnapshot(runRef) {
+        const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+        const ingestion = snapshot.records.find((record) => record.reference === transitionRef);
+        const [interactionRef, firstAssertionRef, secondAssertionRef]
+          = ingestion.resultReferences;
+        ingestion.resultReferences = corruption === "omit_second"
+          ? [interactionRef, firstAssertionRef]
+          : corruption === "duplicate_first"
+            ? [interactionRef, firstAssertionRef, firstAssertionRef]
+            : [interactionRef, secondAssertionRef, firstAssertionRef];
+        return snapshot;
+      }
+    });
+    const harness = createHarnessForMechanismTests(boundary, {
+      createSourceBindingLedger: () => ledger
+    });
+    assert.throws(
+      () => harness.deliverFixtureRecords(harness.startRun(), records),
+      /Successful ingress transition identity is malformed/
+    );
+    assert.deepEqual(ledger.readOnlyEvidence(), []);
+  }
+});
+
+test("source-binding ledger initializes two new communications and not an exact redelivery", () => {
+  const boundary = createSutBoundary();
+  const harness = createEvaluationHarness(boundary);
+  const runRef = harness.startRun();
+  const first = communicationFixtureRecord({
+    fixtureRecordId: "H-INIT-REDLV",
+    occurrenceOrder: 1,
+    data: {
+      content: "I freeze on particles.",
+      context: "old_practice_history",
+      semanticStatusOrigin: "fixture_initialized"
+    }
+  });
+  const second = communicationFixtureRecord({
+    fixtureRecordId: "H-INIT-NEW",
+    occurrenceOrder: 2,
+    data: {
+      content: "I also rush the endings.",
+      context: "old_practice_history",
+      semanticStatusOrigin: "fixture_initialized"
+    }
+  });
+
+  const firstIngress = harness.deliverFixtureRecords(runRef, [first]);
+  const mixedIngress = harness.deliverFixtureRecords(runRef, [first, second]);
+  const snapshot = boundary.captureInspectionSnapshot(runRef);
+  const transition = snapshot.records.find(
+    (record) => record.reference === mixedIngress.transitionRef
+  );
+  const additionalResults = transition.resultReferences.slice(1);
+  assert.equal(firstIngress.acceptedInputRefs.length, 1);
+  assert.equal(mixedIngress.acceptedInputRefs.length, 2);
+  assert.equal(additionalResults.length, 1);
+  assert.equal(
+    snapshot.records.find((record) => record.reference === additionalResults[0])
+      .sourceCommunicationRef,
+    mixedIngress.acceptedInputRefs[1]
+  );
+});
+
 test("source-binding ledgers preserve replay identity, isolate runs, and clear on end-run", () => {
   const first = createSourceBindingLedger();
   const second = createSourceBindingLedger();

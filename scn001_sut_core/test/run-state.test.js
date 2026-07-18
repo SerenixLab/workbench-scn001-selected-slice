@@ -1642,6 +1642,110 @@ test("retained input rejects an omitted fixture-initialized assertion result", (
   }), /retained input-fact closure is malformed/);
 });
 
+test("retained input requires complete ordered initialized assertions for a batch", () => {
+  function initializedBatch() {
+    const run = new RunState();
+    const communications = [
+      communicationInput({
+        occurrenceOrder: 1,
+        content: "I freeze on particles.",
+        context: "old_practice_history",
+        semanticStatusOrigin: "fixture_initialized"
+      }),
+      communicationInput({
+        occurrenceOrder: 2,
+        content: "I also rush the endings.",
+        context: "old_practice_history",
+        semanticStatusOrigin: "fixture_initialized"
+      })
+    ];
+    run.assertSourceFactConsistency(communications);
+    const ingress = run.ingest(communications);
+    const interaction = run.pendingInteractions[0];
+    const ingestion = run.records.get(interaction.createdByTransitionRef);
+    const facts = ingress.acceptedInputRefs.map((reference) => run.records.get(reference));
+    return { run, interaction, ingestion, facts };
+  }
+
+  const valid = initializedBatch();
+  assert.equal(valid.ingestion.resultReferences.length, 3);
+  for (const fact of valid.facts) {
+    assert.doesNotThrow(() => validateRetainedInputFact({
+      records: valid.run.records,
+      relations: valid.run.relations,
+      sourceFactBindings: valid.run.sourceFactBindings,
+      fact,
+      origin: "fixture",
+      role: "communication",
+      interaction: valid.interaction,
+      expectedSourceActor: "synthetic-user-a"
+    }));
+  }
+
+  for (const corruption of ["omit_second", "duplicate_first", "swap_results"]) {
+    const attacked = initializedBatch();
+    const [interactionRef, firstAssertionRef, secondAssertionRef]
+      = attacked.ingestion.resultReferences;
+    attacked.ingestion.resultReferences = corruption === "omit_second"
+      ? [interactionRef, firstAssertionRef]
+      : corruption === "duplicate_first"
+        ? [interactionRef, firstAssertionRef, firstAssertionRef]
+        : [interactionRef, secondAssertionRef, firstAssertionRef];
+    assert.throws(() => validateRetainedInputFact({
+      records: attacked.run.records,
+      relations: attacked.run.relations,
+      sourceFactBindings: attacked.run.sourceFactBindings,
+      fact: attacked.facts[0],
+      origin: "fixture",
+      role: "communication",
+      interaction: attacked.interaction,
+      expectedSourceActor: "synthetic-user-a"
+    }), /retained input-fact closure is malformed/);
+  }
+});
+
+test("retained input requires an initialized assertion only for a newly retained communication", () => {
+  const run = new RunState();
+  const retained = communicationInput({
+    occurrenceOrder: 1,
+    content: "I freeze on particles.",
+    context: "old_practice_history",
+    semanticStatusOrigin: "fixture_initialized"
+  });
+  const newlyRetained = communicationInput({
+    occurrenceOrder: 2,
+    content: "I also rush the endings.",
+    context: "old_practice_history",
+    semanticStatusOrigin: "fixture_initialized"
+  });
+
+  run.assertSourceFactConsistency([retained]);
+  run.ingest([retained]);
+  run.assertSourceFactConsistency([retained, newlyRetained]);
+  const ingress = run.ingest([retained, newlyRetained]);
+  const interaction = run.pendingInteractions.at(-1);
+  const ingestion = run.records.get(interaction.createdByTransitionRef);
+  const additionalResults = ingestion.resultReferences.slice(1);
+  assert.equal(additionalResults.length, 1);
+  assert.equal(
+    run.records.get(additionalResults[0]).sourceCommunicationRef,
+    ingress.acceptedInputRefs[1]
+  );
+
+  for (const reference of ingress.acceptedInputRefs) {
+    assert.doesNotThrow(() => validateRetainedInputFact({
+      records: run.records,
+      relations: run.relations,
+      sourceFactBindings: run.sourceFactBindings,
+      fact: run.records.get(reference),
+      origin: "fixture",
+      role: "communication",
+      interaction,
+      expectedSourceActor: "synthetic-user-a"
+    }));
+  }
+});
+
 test("noncanonical response stays non-accepting and mismatch fidelity never becomes material match", () => {
   const noncanonical = realizedProposalRun();
   const response = userResponseInput({ content: "Sure." });

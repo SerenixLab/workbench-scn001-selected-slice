@@ -20,7 +20,9 @@ Exact first-ingestion closure is bidirectional for fixture-initialized
 communications: every additional result must be a valid initialized assertion,
 and every newly retained fixture-initialized communication must contribute
 exactly one such result. Redelivery of an already retained communication does
-not create or require a second initialized assertion.
+not create or require a second initialized assertion. Multi-item attacks cover
+omission, duplication, result-order swapping, two valid new communications, and
+one exact redelivery combined with one newly retained communication.
 
 SUT and evaluation use separate private implementations. The shared item is the
 test concept, not a semantic validator.

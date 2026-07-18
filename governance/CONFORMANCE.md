@@ -2800,8 +2800,14 @@ Symmetric hostile regressions remove the initialized assertion from the first
 ingestion result set while leaving the retained communication and other closure
 data intact. SUT retained-input validation and evaluator source-binding
 validation both reject; the evaluator commits no partial binding and a clean
-redelivery remains possible. All local gates and 403 aggregate tests pass;
-`git diff --check` passes. No remote required-check result is claimed.
+redelivery remains possible. A subsequent local adversarial expansion proves
+the multi-item cases directly in both domains: two valid newly retained
+communications, omission of one assertion, duplication of one assertion while
+the other is absent, swapped ordered results, and an exact redelivery combined
+with one new initialized communication. These tests strengthen the pending
+review basis; they are not an independent review result. All local gates and
+all 407 aggregate tests pass; `git diff --check` passes. No remote
+required-check result is claimed.
 
 This targeted hardening does not invalidate the historical independent PASS for
 exact range `4376bcc..6e57840` or reopen a broad Phase 5–6 semantic repair cycle.
