@@ -2672,6 +2672,130 @@ With this closure recorded, current applicability/status counts return to:
 * no applicable rule `revalidation-required`;
 * no rule claimed `enforced`.
 
+## Complete Phase 5–6 Blocking Revalidation Record
+
+On 2026-07-18, a broader external review examined the complete implementation
+range `7cff4e01e77c55bc136c34441df1c0d39878a2ba..4376bcc0b7618a9f96529305d23514dec4bde4a2`
+rather than only the most recent Phase 6D correction. That review is
+**blocking / failed** for the then-current Phase 5–6 standing.
+
+The review found deterministic gaps that the earlier hostile sets did not
+cover:
+
+* the common SUT creator resolver could accept a rewritten creator pointer or
+  duplicate result occurrence;
+* direct state/disposition creator identity and current-attribution transition
+  envelopes drifted from passive evaluation;
+* explanation attribution had inverse SUT/evaluation schema gaps;
+* semantic processing could throw after retaining partial derived state and
+  leave the same pending interaction wedged;
+* multiple valid outstanding outputs were silently represented as ordinary
+  absence;
+* the explanation evaluator accepted all required phrases even when the text
+  injected forbidden global, permanent, preference, or causal commitments;
+* SUT and evaluation disagreed on global terminal-family cardinality; and
+* repeated handwritten creator, transition, ingestion, relation, and
+  cardinality checks had accumulated systemic parity drift.
+
+These findings are preserved as a new failed review. They do not rewrite or
+delete any earlier failed or passing review, but they invalidate those passing
+reviews as the current closure disposition. No canonical governance source,
+ADR, rule revision, profile, or integration basis changed, so the ledger status
+is `uncovered`, not `revalidation-required`, for the qualifying change,
+abstraction, and structure review rows. Pending a fresh independent review of
+the exact correction, current counts are:
+
+* 44 rules `applicable` and 5 `not-applicable`;
+* 7 applicable rules `review-only`;
+* 37 applicable rules `uncovered`;
+* no applicable rule `revalidation-required`;
+* no rule claimed `enforced`.
+
+The blocking review also applies conservatively to the current standing under
+`ENG-CONF-CAPTURE-001`, `ENG-CONF-CLAIM-001`, `ENG-CONF-HARNESS-001`,
+`ENG-CONF-INSPECT-001`, `ENG-CONF-INSPECT-002`, `ENG-CONF-PAYLOAD-001`,
+`ENG-CONF-PAYLOAD-002`, `ENG-CONF-PUBLIC-001`, `ENG-CONF-REF-001`,
+`ENG-CONF-RUN-001`, `ENG-CONF-STATE-001`, `ENG-CONF-STATE-002`,
+`ENG-HEALTH-API-001`, `ENG-HEALTH-FAILURE-001`, `ENG-HEALTH-TEST-001`, and
+`ENG-HEALTH-TEST-002`. Existing table-row status remains conservative; this
+record makes no promotion, enforcement, formal-evidence, or acceptance claim.
+
+## Complete Phase 5–6 Corrective Hardening Increment
+
+Corrective implementation commit `f3af30c` has one primary purpose: restore
+bounded Phase 5–6 closure symmetry and transparent failure behavior before any
+Phase 7 work. It does not create formal evaluation records, configuration
+comparisons, compatibility claims, campaign aggregation, scoring, completion
+evidence, or extraction artifacts.
+
+The correction:
+
+* makes every package-local creator primitive require one claimant, exact
+  creator-pointer equality, and one exact result occurrence;
+* audits direct, focused-prefix, delayed-candidate, activation, later-use,
+  outcome, uncertainty, explanation, and relevant temporal call sites for exact
+  transition envelopes and ingestion identity;
+* aligns current and explanation attribution over exact assertion schema,
+  actor/source/basis closure, transition family/origin/kind/result, ordered
+  inputs/results, interaction, chronology, and competing assertion identity;
+* treats `processCurrentInteraction()` as a derived-state transaction: ingress
+  remains successful, while a thrown semantic pass restores records,
+  relations, order allocation, actor/source indexes, shared object identity,
+  and pending position to the post-ingress checkpoint;
+* treats an explanation request before any outcome as ordinary unavailable
+  processing, while retained corruption and incomplete required lineage still
+  fail transparently and roll back;
+* distinguishes zero, one, and multiple outstanding outputs without adding a
+  harness-side winner;
+* adds a bounded wording-flexible explanation oracle that requires the selected
+  commitments and rejects global, permanent, established-preference,
+  fixed-style, causal, long-term, fatigue, focused-drill, and hidden-reasoning
+  contradictions; and
+* enforces matching global cardinality for outcome, uncertainty, explanation,
+  support, and the four typed limitations.
+
+`PHASE5_6_PARITY_INVENTORY.md` records the review matrix across object schema,
+creator identity, transition envelope, relations, actor/source binding,
+original/current ingestion, chronology, cardinality, replay, failure mutation,
+SUT authority, passive evaluation authority, and hostile tests. It is a review
+aid, not a second semantic authority.
+
+Focused reproductions cover every external blocker plus additional shared
+retained-ingestion, focused-attribution, direct-realization, duplicate
+explanation-request assertion, deterministic retry, later-use rollback, and
+old ambiguity-expectation defects found by the implementing red-team pass.
+Passive attacks corrupt cloned inspection snapshots only; SUT attacks verify no
+repair or order allocation; transaction attacks compare the complete post-
+ingress mutable checkpoint.
+
+Fresh qualifying independent review of exact range
+`4376bcc0b7618a9f96529305d23514dec4bde4a2..f3af30c` is pending. The implementing
+task does not approve its own correction. Until that review is recorded, the
+status remains:
+
+```text
+Phase 5–6 correction implemented
+local gates passed
+research acceptance suspended
+fresh independent review pending
+Phase 7 not started
+```
+
+Local verification on 2026-07-18 passed `npm run check:governance`,
+`npm run check:format`, `npm run check:quality`, `npm run check:deps`,
+`npm run check:boundary`, `npm run check:state`, `npm test`, `npm run check`, and
+`git diff --check`. The focused state gate passed 111 tests, the boundary and
+evaluation gate passed 273 tests, and the aggregate suite passed all 384 tests.
+Syntax checks covered 29 JavaScript files. GitHub-hosted CI was not observed and
+is not claimed to have passed.
+
+The meta repository remains unchanged because no accepted ADR contradiction or
+new canonical question was found. `EVAL-004` and `EVAL-005` remain deferred and
+must be activated and resolved only after a separately accepted corrected
+baseline. Area 1's external-mechanism conclusion is not changed by defects in
+the owned implementation; its implemented-frontier acceptance is suspended
+until correction and review are recorded in the research repository.
+
 ## Later-Use and Realization Increment
 
 The implementation change based on starting `HEAD` `6728a9d` has one bounded

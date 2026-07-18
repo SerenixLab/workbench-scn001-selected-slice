@@ -71,6 +71,23 @@ The later outcome records only that the exact delayed-correction intervention wa
 
 This is engineering conformance infrastructure. It is not a formal evaluation record, behavioral-compatibility claim, milestone acceptance, or `SCN-001` pass.
 
+## Corrective Review Status
+
+A broader review of complete Phase 5–6 range `7cff4e0..4376bcc` invalidated the
+current standing of the earlier change-specific passing reviews. Those reviews
+remain historical evidence, but they did not cover creator-pointer parity,
+processing rollback, output multiplicity, mixed-claim explanation text, or
+global terminal-family ambiguity completely.
+
+Corrective implementation commit `f3af30c` strengthens those boundaries with
+symmetric hostile coverage; the accompanying review package adds a complete
+parity inventory. Its
+engineering status remains **implemented, locally testable, and pending fresh
+independent review**. It is not accepted Phase 5–6 closure until that exact
+correction receives a separate qualifying review. Phase 7 remains blocked, and
+no formal evaluation, compatibility, scoring, completion, or extraction work
+has started.
+
 ## Local Commands
 
 Requires Node.js `>=22 <27` and Python `>=3.11` for the portable governance checker; no external runtime dependencies are used.
