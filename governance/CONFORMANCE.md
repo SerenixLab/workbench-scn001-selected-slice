@@ -2722,8 +2722,8 @@ record makes no promotion, enforcement, formal-evidence, or acceptance claim.
 
 ## Complete Phase 5–6 Corrective Hardening Increment
 
-Corrective implementation commit `f3af30c` has one primary purpose: restore
-bounded Phase 5–6 closure symmetry and transparent failure behavior before any
+Corrective implementation commits `f3af30c` and `6dc45b8` have one primary
+purpose: restore bounded Phase 5–6 closure symmetry and transparent failure behavior before any
 Phase 7 work. It does not create formal evaluation records, configuration
 comparisons, compatibility claims, campaign aggregation, scoring, completion
 evidence, or extraction artifacts.
@@ -2768,8 +2768,15 @@ Passive attacks corrupt cloned inspection snapshots only; SUT attacks verify no
 repair or order allocation; transaction attacks compare the complete post-
 ingress mutable checkpoint.
 
+The implementing red-team's final language pass additionally found that the
+first forbidden-claim matrix did not cover inflected or passive paraphrases
+such as “this always applies,” “made you learn better,” tiredness as an asserted
+cause, or the delay applying to a focused drill when the verb preceded the
+scope. Commit `6dc45b8` closes those variants and adds mixed-text attacks that
+retain every required positive commitment.
+
 Fresh qualifying independent review of exact range
-`4376bcc0b7618a9f96529305d23514dec4bde4a2..f3af30c` is pending. The implementing
+`4376bcc0b7618a9f96529305d23514dec4bde4a2..6dc45b8` is pending. The implementing
 task does not approve its own correction. Until that review is recorded, the
 status remains:
 
@@ -2785,7 +2792,7 @@ Local verification on 2026-07-18 passed `npm run check:governance`,
 `npm run check:format`, `npm run check:quality`, `npm run check:deps`,
 `npm run check:boundary`, `npm run check:state`, `npm test`, `npm run check`, and
 `git diff --check`. The focused state gate passed 111 tests, the boundary and
-evaluation gate passed 273 tests, and the aggregate suite passed all 384 tests.
+evaluation gate passed 277 tests, and the aggregate suite passed all 388 tests.
 Syntax checks covered 29 JavaScript files. GitHub-hosted CI was not observed and
 is not claimed to have passed.
 
