@@ -2733,6 +2733,52 @@ revalidation-required and none enforced. Phase 7 remains blocked. No formal
 evaluation, compatibility, scoring, campaign, completion, extraction,
 readiness, or deployment artifact is created by this correction.
 
+## Expanded Phase 5–6 Independent Review Closure
+
+On 2026-07-18, fresh independent review examined exact range
+`4376bcc0b7618a9f96529305d23514dec4bde4a2..6e57840126b490805032e350e2735e55dabc6b8b`
+and returned **pass with no blocking finding**. This new result attests the
+correction; it does not erase or relabel the failed review of `0b156aa`.
+
+The reviewer independently confirmed that:
+
+* the evaluator-owned closed explanation grammar accepts the canonical text
+  and declared benign variance while rejecting unrecognized or appended
+  clauses, including every previously reproduced mixed overclaim;
+* later outcome, explanation, temporal assessment, attribution, retained-input,
+  and ingestion closures enforce the exact family, envelope, creator,
+  cardinality, source, and relation constraints claimed by the parity inventory;
+* terminal explanation artifacts without an outcome fail closed, while an
+  ordinary premature request remains unavailable and processing rollback
+  preserves the post-ingress checkpoint;
+* the initial evaluation source-binding ledger rejects undeclared ingestion
+  results without committing partial bindings;
+* mutable ownership remains centralized, passive validation remains bounded,
+  and no public API or unnecessary abstraction was introduced; and
+* the hostile and no-mutation regressions cover the corrected failure modes.
+
+Independent verification ran `npm run check`: governance, conformance,
+formatting, syntax, dependency-boundary, boundary, state, and aggregate gates
+passed; 401 tests passed with none failed or skipped. `git diff --check` passed,
+reviewed `HEAD` was `6e57840126b490805032e350e2735e55dabc6b8b`,
+and the worktree was clean. Remote GitHub required checks were not observed and
+are not claimed.
+
+This qualifies the correction under `ENG-HEALTH-CHANGE-001 R2`,
+`ENG-HEALTH-ABSTRACTION-001 R2`, and `ENG-HEALTH-STRUCTURE-001 R2`, with the
+bounded hostile regressions supporting `ENG-HEALTH-TEST-001 R2`,
+`ENG-HEALTH-TEST-002 R2`, and `ENG-HEALTH-FAILURE-001 R2`. Current counts return
+to 44 applicable and 5 not applicable, with 10 applicable rules review-only,
+34 applicable rules uncovered, none revalidation-required, and none enforced.
+
+The finite grammar is intentionally explicit; any future supported explanation
+wording requires a grammar and regression update. This remains engineering and
+conformance evidence only, not a formal evaluation campaign, compatibility
+result, score, milestone completion, broader acceptance, readiness, or
+deployment claim. Phase 7 has not started and remains gated by the separately
+owner-governed `EVAL-004` and `EVAL-005` decisions. Phase 8 remains gated by
+`REPO-001`.
+
 ## Complete Phase 5–6 Blocking Revalidation Record
 
 On 2026-07-18, a broader external review examined the complete implementation

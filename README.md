@@ -84,10 +84,10 @@ strengthen those boundaries with symmetric hostile coverage; the accompanying
 review package adds a complete parity inventory, and the latest follow-up
 replaces open-ended explanation denylisting with a closed bounded grammar while
 closing the remaining transition, ingestion, attribution, and failure-state
-parity gaps. The corrected head's
-engineering status remains **implemented, locally testable, and pending fresh
-independent review**. It is not accepted Phase 5–6 closure until that exact
-correction receives a separate qualifying review. Phase 7 remains blocked, and
+parity gaps. Fresh independent review passed exact corrective range
+`4376bcc..6e57840` with no blocking finding. The corrected head's engineering
+status is therefore **implemented, locally green, and independently reviewed**.
+Phase 7 remains separately blocked by its owner-governed decisions, and
 no formal evaluation, compatibility, scoring, completion, or extraction work
 has started.
 
