@@ -79,10 +79,12 @@ remain historical evidence, but they did not cover creator-pointer parity,
 processing rollback, output multiplicity, mixed-claim explanation text, or
 global terminal-family ambiguity completely.
 
-Corrective implementation commit `f3af30c` strengthens those boundaries with
-symmetric hostile coverage; the accompanying review package adds a complete
-parity inventory, and follow-up `6dc45b8` closes additional inflected and
-passive explanation-oracle paraphrase bypasses. The corrected head's
+Corrective implementation commits `f3af30c`, `6dc45b8`, and `15d5ab4`
+strengthen those boundaries with symmetric hostile coverage; the accompanying
+review package adds a complete parity inventory, and the latest follow-up
+replaces open-ended explanation denylisting with a closed bounded grammar while
+closing the remaining transition, ingestion, attribution, and failure-state
+parity gaps. The corrected head's
 engineering status remains **implemented, locally testable, and pending fresh
 independent review**. It is not accepted Phase 5–6 closure until that exact
 correction receives a separate qualifying review. Phase 7 remains blocked, and

@@ -2672,6 +2672,67 @@ With this closure recorded, current applicability/status counts return to:
 * no applicable rule `revalidation-required`;
 * no rule claimed `enforced`.
 
+## Expanded Phase 5–6 Independent Review Blocker And Correction
+
+On 2026-07-18, fresh independent review of the complete corrective range
+`4376bcc0b7618a9f96529305d23514dec4bde4a2..0b156aa` returned **blocking**.
+The reviewer confirmed the earlier transaction, output-multiplicity, creator,
+and terminal-cardinality corrections, but found that the corrected baseline
+still was not acceptable because:
+
+* the explanation oracle's open-ended positive/negative regular-expression
+  matrix admitted mixed global-default, reverse-causal, durable-gain,
+  fatigue-causal, and learner-label appendages;
+* later outcome, explanation, and relevant temporal evaluator closures omitted
+  selected family, exact-envelope, or creator-pointer checks enforced by their
+  SUT counterparts;
+* reusable evaluator retained-input checks did not close exact interaction and
+  ingestion envelopes at all relevant call sites;
+* focused SUT request attribution did not enforce one global derived assertion
+  for the selected source communication;
+* the SUT retained-input helper admitted coherently duplicated interaction
+  inputs and ingestion bases;
+* a premature explanation request could return ordinary unavailability while
+  orphan terminal explanation artifacts already existed; and
+* the parity inventory overstated symmetry for the affected rows.
+
+Those findings invalidate acceptance of `0b156aa`; the review remains preserved
+as failed evidence and does not attest its correction.
+
+Corrective commit `15d5ab4` closes the reported gaps. The evaluator now owns a
+closed three-sentence explanation grammar: it accepts the canonical explanation
+and a declared benign wording variant, but rejects every unrecognized or
+appended clause. This preserves the accepted ADR rule against one exact-text
+oracle without relying on an inherently incomplete denylist. SUT and evaluator
+closures now align on transition families and envelopes, relevant temporal
+creator identity, retained interaction/ingestion envelopes, unique ingestion
+inputs/results/bases, and focused attribution cardinality. An explanation
+request with no outcome remains ordinary unavailable only when no terminal
+explanation artifacts exist; orphan terminal families fail transparently and
+the processing transaction restores the post-ingress checkpoint.
+
+The implementing adversarial pass also found and fixed one additional gap not
+listed in the review: the evaluation source-binding ledger could initially
+accept an undeclared ingestion result even though later SUT closure validation
+would reject it. The ledger now permits only the interaction result plus fully
+validated fixture-initialized assertions, with unique result identity, and its
+failure commits no partial source binding.
+
+Hostile regressions cover every reported bypass, terminal transition-family and
+temporal-family rewrites, interaction and ingestion extra keys, duplicate
+focused attribution, coherently duplicated ingestion input/basis, no-outcome
+orphan terminal families, undeclared initial-ingestion results, and accepted
+benign wording variance. All 401 aggregate tests and every local gate pass at
+`15d5ab4`; `git diff --check` passes. No external CI result is claimed.
+
+Fresh independent review of exact range
+`4376bcc0b7618a9f96529305d23514dec4bde4a2..15d5ab4` is pending. Until a
+qualifying pass is recorded, the applicable-status counts remain 44 applicable,
+5 not applicable, 7 review-only, and 37 uncovered, with none
+revalidation-required and none enforced. Phase 7 remains blocked. No formal
+evaluation, compatibility, scoring, campaign, completion, extraction,
+readiness, or deployment artifact is created by this correction.
+
 ## Complete Phase 5–6 Blocking Revalidation Record
 
 On 2026-07-18, a broader external review examined the complete implementation
