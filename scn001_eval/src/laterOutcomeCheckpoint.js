@@ -424,15 +424,17 @@ function hasBoundedExplanationSemantics(userFacingText) {
     /\bnot\b[^.!?]{0,180}long-term (?:learning|efficacy|improvement)/
   ];
   const forbiddenCommitments = [
-    /\b(?:always|permanently)\s+(?:delay|apply|correct|use)\b/,
+    /\b(?:always|permanently)\b[^.!?]{0,30}\b(?:appl(?:y|ies|ied)|delay(?:s|ed)?|correct(?:s|ed)?|use(?:s|d)?)\b/,
     /\bpermanent (?:global )?(?:policy|preference|behavior|rule)\b/,
     /\bglobal (?:correction )?(?:policy|preference|rule)\b/,
     /\b(?:is|becomes?|establishes?|proves?)\b[^.!?]{0,40}\b(?:global |fixed |established )?preference\b/,
     /\b(?:you have|your|establishes?|proves?) (?:a )?fixed learning style\b/,
-    /\b(?:caused?|causes|proves?) (?:better|improved|improvement|learning)\b/,
-    /\b(?:proves?|establishes?|guarantees?) (?:long-term|lasting) (?:learning|efficacy|improvement)\b/,
-    /\b(?:because|shows?|proves?|establishes?) (?:you were|your )?fatigue\b/,
-    /focused drill[^.!?]{0,120}(?:also|still|will|does) (?:apply|delay)/,
+    /\b(?:caused|causes|made|makes|proves?)\b[^.!?]{0,50}\b(?:better|improved|improvement|learning|learn)\b/,
+    /\b(?:proves?|establishes?|guarantees?|shows?)\b[^.!?]{0,50}\b(?:long[- ]term|lasting|permanent)\b[^.!?]{0,30}\b(?:learning|efficacy|improvement|benefit)\b/,
+    /\b(?:because|shows?|proves?|establishes?|reason is)\b[^.!?]{0,50}\b(?:fatigue|fatigued|tiredness|tired)\b/,
+    /\b(?:you (?:were|are)|your)\b[^.!?]{0,20}\b(?:fatigue|fatigued|tiredness|tired)\b/,
+    /focused drill[^.!?]{0,120}(?:also|still|will|does)\s+(?:apply|delay)/,
+    /(?:apply|applies|delay|delays)[^.!?]{0,80}focused drill/,
     /\b(?:chain[- ]of[- ]thought|hidden reasoning|private reasoning)\b/
   ];
   return requiredCommitments.every((pattern) => pattern.test(text))

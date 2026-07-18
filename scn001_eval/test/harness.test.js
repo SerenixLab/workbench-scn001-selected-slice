@@ -1749,6 +1749,10 @@ test("CP-EXPLANATION rejects missing provenance and unsupported claims passively
       snapshot.records.find((record) => record.family === "user_facing_explanation")
         .userFacingText += " I will always apply this delay.";
     }],
+    ["mixed inflected always-applicable claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " This always applies.";
+    }],
     ["mixed established-preference claim", (snapshot) => {
       snapshot.records.find((record) => record.family === "user_facing_explanation")
         .userFacingText += " This establishes your preference.";
@@ -1761,6 +1765,10 @@ test("CP-EXPLANATION rejects missing provenance and unsupported claims passively
       snapshot.records.find((record) => record.family === "user_facing_explanation")
         .userFacingText += " The delay caused improved learning.";
     }],
+    ["mixed causal-learning paraphrase", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " The delay made you learn better.";
+    }],
     ["mixed long-term-efficacy claim", (snapshot) => {
       snapshot.records.find((record) => record.family === "user_facing_explanation")
         .userFacingText += " This proves lasting improvement.";
@@ -1769,9 +1777,17 @@ test("CP-EXPLANATION rejects missing provenance and unsupported claims passively
       snapshot.records.find((record) => record.family === "user_facing_explanation")
         .userFacingText += " This was because your fatigue.";
     }],
+    ["mixed tiredness claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " The reason is that you were tired.";
+    }],
     ["mixed focused-drill applicability claim", (snapshot) => {
       snapshot.records.find((record) => record.family === "user_facing_explanation")
         .userFacingText += " In a focused drill, this will apply.";
+    }],
+    ["mixed reverse focused-drill applicability claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " The delay also applies in a focused drill.";
     }],
     ["mixed hidden-reasoning claim", (snapshot) => {
       snapshot.records.find((record) => record.family === "user_facing_explanation")
