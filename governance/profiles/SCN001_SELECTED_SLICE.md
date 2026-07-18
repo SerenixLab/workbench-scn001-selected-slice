@@ -1,16 +1,16 @@
 # SCN-001 Selected-Slice Engineering Profile
 
-Profile version: `V0.4.0`
+Profile version: `V0.4.1`
 
 Status: `Draft`
 
 Date: 2026-07-10
 
-Base standard: `ENGINEERING_STANDARD.md` `V0.6.0`
+Base standard: `ENGINEERING_STANDARD.md` `V0.6.1`
 
 Decision basis:
 
-- `OPEN_QUESTIONS.md` `V0.2.20`
+- `OPEN_QUESTIONS.md` `V0.2.21`
 - `decisions/ADR-002-scn001-system-under-test-boundary.md` `R2`
 - `decisions/ADR-003-scn001-selected-slice-trial-time-contract.md` `R2`
 - `decisions/ADR-004-scn001-first-milestone-evaluation-policy.md` `R3`
@@ -58,7 +58,7 @@ Governing sources:
 
 - `ADR-001 R1`
 - `ADR-008 R2`
-- `OPEN_QUESTIONS.md V0.2.20`
+- `OPEN_QUESTIONS.md V0.2.21`
 - `ENG-BASE-REPO-001 R2`
 
 Scope: first `SCN-001` selected-slice implementation repository or workbench.
@@ -1014,7 +1014,7 @@ Rule revision: `R3`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.20`
+- `OPEN_QUESTIONS.md V0.2.21`
 - `ADR-004 R3`
 - `ADR-005 R2`
 - `ADR-009 R4`

@@ -1,6 +1,6 @@
 # Zoey Engineering Standard
 
-Document version: `V0.6.0`
+Document version: `V0.6.1`
 
 Status: `Draft`
 
@@ -11,7 +11,7 @@ Release context:
 - `SYSTEM_THESIS.md` `V0.3.1`
 - `CANONICAL_SCENARIOS.md` `V0.2.2`
 - `STATE_AND_CONTROL_MODEL.md` `V0.4.1`
-- `OPEN_QUESTIONS.md` `V0.2.20`
+- `OPEN_QUESTIONS.md` `V0.2.21`
 - accepted ADRs through `decisions/ADR-009-scn001-first-selected-slice-milestone-completion-gate.md` `R4`
 
 Rule-level governing sources are listed on each rule. The release context is not a substitute for rule-level source references.
@@ -408,7 +408,7 @@ Rule revision: `R2`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.20`
+- `OPEN_QUESTIONS.md V0.2.21`
 
 Scope: every governed non-throwaway implementation repository or workbench.
 
@@ -1258,7 +1258,7 @@ Rule revision: `R3`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.20`
+- `OPEN_QUESTIONS.md V0.2.21`
 - `ADR-009 R4`
 
 Scope: docs, tests, reports, traces, demos, README text, and review language.
@@ -1321,7 +1321,7 @@ Rule revision: `R3`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.20`
+- `OPEN_QUESTIONS.md V0.2.21`
 - `ADR-004 R3`
 - `ADR-005 R2`
 - `ADR-009 R4`
@@ -1382,7 +1382,7 @@ Rule revision: `R3`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.20`
+- `OPEN_QUESTIONS.md V0.2.21`
 - `ADR-009 R4`
 
 Scope: implementation work that crosses unresolved governance frontiers.

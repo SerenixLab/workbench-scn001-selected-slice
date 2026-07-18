@@ -2779,6 +2779,40 @@ deployment claim. Phase 7 has not started and remains gated by the separately
 owner-governed `EVAL-004` and `EVAL-005` decisions. Phase 8 remains gated by
 `REPO-001`.
 
+## Pre-Formal Fixture-Initialization Completeness Hardening
+
+Post-closure external review identified one residual non-blocking ingress edge:
+the SUT and evaluation validators proved that every additional ingestion result
+was a valid fixture-initialized assertion, but did not independently prove the
+inverse first-ingestion obligation. A malformed inspection snapshot could omit
+the initialized assertion result for a newly retained fixture-initialized
+communication and leave that omission to a downstream domain closure to reject.
+
+Commit `a7d787f` makes the local ingestion contract bidirectional. For the first
+interaction that retains a fixture-initialized communication, the ordered
+additional result set must contain exactly one valid initialized assertion for
+each such communication and no other result. Redelivery of an already retained
+communication creates and requires no duplicate assertion. The evaluation
+source-binding ledger enforces the same rule before committing a formal-source
+binding candidate.
+
+Symmetric hostile regressions remove the initialized assertion from the first
+ingestion result set while leaving the retained communication and other closure
+data intact. SUT retained-input validation and evaluator source-binding
+validation both reject; the evaluator commits no partial binding and a clean
+redelivery remains possible. All local gates and 403 aggregate tests pass;
+`git diff --check` passes. No remote required-check result is claimed.
+
+This targeted hardening does not invalidate the historical independent PASS for
+exact range `4376bcc..6e57840` or reopen a broad Phase 5–6 semantic repair cycle.
+It is a new post-review delta and therefore must receive change-specific
+independent review before the current head is used as a formal-evidence
+baseline. Until that review is recorded, current-head counts are 44 applicable,
+5 not applicable, 7 review-only, and 37 uncovered, with none
+revalidation-required and none enforced. Phase 7 formal-record and campaign
+implementation also remains blocked by active owner-governed `EVAL-004` and
+`EVAL-005`; this hardening creates no formal evidence or governance resolution.
+
 ## Complete Phase 5–6 Blocking Revalidation Record
 
 On 2026-07-18, a broader external review examined the complete implementation

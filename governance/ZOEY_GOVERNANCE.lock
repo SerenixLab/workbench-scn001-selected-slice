@@ -1,5 +1,5 @@
 {
-  "canonical_meta_commit": "6726ebef553b38db1d860ab207b4549db0dd57a0",
+  "canonical_meta_commit": "8883ac8fde85ae8f68b4b21e2bc43376d83089bc",
   "canonical_meta_source": "Zoey/meta",
   "canonical_meta_worktree_state": "clean",
   "conformance_index": {
@@ -11,10 +11,10 @@
   "governing_source_snapshots": [
     {
       "canonical_path": "OPEN_QUESTIONS.md",
-      "content_digest": "ad65af6abcddebecd95360be5ac7b179e046c21317771916378a150c768b7f29",
+      "content_digest": "190c75d00d7afeb4fd215c47070c6950acc8ab9b8b8ef1d215e48a39855ea44c",
       "id": "OPEN_QUESTIONS",
       "path": "governance/sources/OPEN_QUESTIONS.md",
-      "version_or_revision": "V0.2.20"
+      "version_or_revision": "V0.2.21"
     },
     {
       "canonical_path": "decisions/ADR-001-first-vertical-slice.md",
@@ -90,9 +90,9 @@
   "lock_version": "V0.2.0",
   "profiles": [
     {
-      "content_digest": "5bd58cbf1f54ff3a693290f0608ca89f83b8095e7dce92319062114bde882451",
+      "content_digest": "6821057e73e368cb7c77ea630f626e3b5361b788a9f0f1fb5342c8a3e716075d",
       "path": "governance/profiles/SCN001_SELECTED_SLICE.md",
-      "version": "V0.4.0"
+      "version": "V0.4.1"
     }
   ],
   "rule_revisions": [
@@ -344,8 +344,8 @@
   ],
   "serialization": "json",
   "standard": {
-    "content_digest": "3d29d20df5631f8d8f67824afcedbd025796d3dc1a9a6e98c0dfa86dc6c1f46c",
+    "content_digest": "cd17b89fca8c36db4f854da04e4a5730026595d2f00926dbf0f7cfaae0a38eb1",
     "path": "governance/ENGINEERING_STANDARD.md",
-    "version": "V0.6.0"
+    "version": "V0.6.1"
   }
 }

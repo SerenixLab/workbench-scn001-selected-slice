@@ -87,7 +87,12 @@ closing the remaining transition, ingestion, attribution, and failure-state
 parity gaps. Fresh independent review passed exact corrective range
 `4376bcc..6e57840` with no blocking finding. The corrected head's engineering
 status is therefore **implemented, locally green, and independently reviewed**.
-Phase 7 remains separately blocked by its owner-governed decisions, and
+Targeted pre-formal hardening `a7d787f` additionally requires every newly
+retained fixture-initialized communication to contribute exactly one initialized
+assertion result on both SUT and evaluator ingress. All local gates pass at that
+head; the narrow delta awaits change-specific independent review before it may
+enter a formal-evidence baseline. Phase 7 remains separately blocked by its
+owner-governed decisions, and
 no formal evaluation, compatibility, scoring, completion, or extraction work
 has started.
 
