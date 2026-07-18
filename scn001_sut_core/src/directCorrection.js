@@ -35,6 +35,22 @@ const DISPOSITION_KEYS = Object.freeze([
   "interactionRef", "createdOrder", "effectiveOrder", "createdByTransitionRef"
 ]);
 
+const ATTRIBUTION_KEYS = Object.freeze([
+  "reference", "family", "origin", "sourceCommunicationRef", "sourceActorRef",
+  "context", "occurrenceOrder", "epistemicStatus", "statusOrigin",
+  "interactionRef", "createdOrder", "createdByTransitionRef"
+]);
+
+const TRANSITION_KEYS = Object.freeze([
+  "reference", "family", "origin", "transitionKind", "interactionRef",
+  "inputReferences", "resultReferences", "createdOrder", "result"
+]);
+
+const INTERACTION_KEYS = Object.freeze([
+  "reference", "family", "origin", "inputReferences", "createdOrder",
+  "createdByTransitionRef"
+]);
+
 const CONTROL_REQUIREMENTS = Object.freeze({
   user_governed_constraints: "exhaustive_selected_slice_scope",
   consequence: "low",
@@ -166,7 +182,9 @@ export function validateDirectCorrectionStateClosure({
     records, correctionState, "Scoped current correction/control state"
   );
   const interaction = records.get(correctionState?.interactionRef);
-  const ingestion = records.get(correctionState?.ingestionTransitionRef);
+  const ingestion = resolveUniqueCreatingTransition(
+    records, interaction, "Current correction ingestion"
+  );
   const context = records.get(correctionState?.contextRef);
   const interruption = records.get(correctionState?.interruptionEventRef);
   const chronology = records.get(correctionState?.chronologyRef);
@@ -230,15 +248,22 @@ export function validateDirectCorrectionStateClosure({
     || !isDeepStrictEqual(correctionState.controlBasisRefs, controlsByType(controls))
     || validateCurrentAttribution(records, relations, assertion, communication, interaction)
       !== assertion
-    || interaction?.family !== "interaction_segment" || interaction.origin !== "sut"
+    || !hasExactKeys(interaction, INTERACTION_KEYS)
+    || interaction.family !== "interaction_segment" || interaction.origin !== "sut"
     || !sameReferenceSet(interaction.inputReferences, [
       context.reference, interruption.reference, communication.reference,
       chronology.reference, ...controls.map((control) => control.reference)
     ])
     || interaction.inputReferences.length !== 7
-    || ingestion?.reference !== interaction.createdByTransitionRef
+    || ingestion.reference !== correctionState.ingestionTransitionRef
+    || !hasExactKeys(ingestion, TRANSITION_KEYS)
+    || ingestion.family !== "sut_transition_evidence" || ingestion.origin !== "sut"
     || ingestion?.transitionKind !== "ingest_sut_visible_inputs"
     || ingestion.interactionRef !== interaction.reference
+    || !isDeepStrictEqual(ingestion.inputReferences, interaction.inputReferences)
+    || !isDeepStrictEqual(ingestion.resultReferences, [interaction.reference])
+    || ingestion.result !== "accepted"
+    || !hasExactKeys(transition, TRANSITION_KEYS)
     || transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
     || transition.transitionKind !== "derive_scoped_current_correction_control"
     || transition.interactionRef !== interaction.reference
@@ -307,6 +332,7 @@ export function validateDirectCorrectionDispositionClosure({
     || !isDeepStrictEqual(disposition.sessionScope, correctionState.sessionScope)
     || competing.length !== 1 || competing[0].reference !== disposition.reference
     || !isExactDirectContext(context?.payload)
+    || !hasExactKeys(transition, TRANSITION_KEYS)
     || transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
     || transition.transitionKind !== "derive_direct_current_session_correction_disposition"
     || transition.interactionRef !== disposition.interactionRef
@@ -357,7 +383,9 @@ export function resolveDirectCorrectionRealizationClosure({
   const transition = transitions[0];
   const fact = records.get(relation.fromRef);
   const interaction = records.get(transition.interactionRef);
-  const ingestion = records.get(interaction?.createdByTransitionRef);
+  const ingestion = resolveUniqueCreatingTransition(
+    records, interaction, "Direct correction realization ingestion"
+  );
   const bases = relations.filter((candidate) => (
     candidate.fromRef === transition.reference && candidate.relationKind === "basis"
   ));
@@ -368,11 +396,21 @@ export function resolveDirectCorrectionRealizationClosure({
     || !validDirectRealization(fact.payload)
     || (expectedFactRef && fact.reference !== expectedFactRef)
     || interaction?.reference !== fact.firstInteractionRef
+    || !hasExactKeys(interaction, INTERACTION_KEYS)
     || interaction?.family !== "interaction_segment" || interaction.origin !== "sut"
     || !isDeepStrictEqual(interaction.inputReferences, [fact.reference])
-    || ingestion?.transitionKind !== "ingest_sut_visible_inputs"
+    || !hasExactKeys(ingestion, TRANSITION_KEYS)
+    || ingestion.family !== "sut_transition_evidence" || ingestion.origin !== "sut"
+    || ingestion.transitionKind !== "ingest_sut_visible_inputs"
     || ingestion.interactionRef !== interaction.reference
+    || !isDeepStrictEqual(ingestion.inputReferences, [fact.reference])
+    || !isDeepStrictEqual(ingestion.resultReferences, [interaction.reference])
+    || ingestion.result !== "accepted"
+    || !hasExactKeys(transition, TRANSITION_KEYS)
     || transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
+    || transition.transitionKind
+      !== "record_direct_current_session_correction_realization"
+    || transition.interactionRef !== interaction.reference
     || transition.result !== "direct_current_session_correction_realization_recorded"
     || !isDeepStrictEqual(transition.inputReferences, [fact.reference, disposition.reference])
     || transition.resultReferences?.length !== 0
@@ -417,13 +455,23 @@ export function isMatchedDirectRealization(payload) {
 
 function validateCurrentAttribution(records, relations, assertion, communication, interaction) {
   const transition = resolveUniqueCreatingTransition(records, assertion, "Current correction attribution");
+  const ingestion = resolveUniqueCreatingTransition(
+    records, interaction, "Current correction attribution ingestion"
+  );
+  const actor = records.get(assertion?.sourceActorRef);
   const sources = relations.filter((relation) => (
     relation.fromRef === assertion?.reference && relation.relationKind === "source"
   ));
   const bases = relations.filter((relation) => (
     relation.fromRef === assertion?.reference && relation.relationKind === "basis"
   ));
-  if (assertion?.family !== "attributed_assertion" || assertion.origin !== "sut"
+  const competing = [...records.values()].filter((record) => (
+    record.family === "attributed_assertion"
+    && record.sourceCommunicationRef === communication?.reference
+    && record.statusOrigin === "sut_transition"
+  ));
+  if (!hasExactKeys(assertion, ATTRIBUTION_KEYS)
+    || assertion.family !== "attributed_assertion" || assertion.origin !== "sut"
     || assertion.sourceCommunicationRef !== communication.reference
     || assertion.sourceActorRef !== communication.sourceActorRef
     || assertion.context !== communication.payload.context
@@ -431,17 +479,25 @@ function validateCurrentAttribution(records, relations, assertion, communication
     || assertion.epistemicStatus !== "attributed_user_assertion"
     || assertion.statusOrigin !== "sut_transition"
     || assertion.interactionRef !== interaction.reference
-    || transition?.transitionKind !== "attribute_current_communications"
+    || competing.length !== 1 || competing[0].reference !== assertion.reference
+    || actor?.family !== "semantic_source" || actor.origin !== "fixture"
+    || actor.sourceActor !== "synthetic-user-a"
+    || !hasExactKeys(transition, TRANSITION_KEYS)
+    || transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
+    || transition.transitionKind !== "attribute_current_communications"
     || transition.interactionRef !== interaction.reference
-    || !transition.inputReferences?.includes(communication.reference)
-    || !transition.resultReferences?.includes(assertion.reference)
-    || sources.length !== 1 || sources[0].toRef !== assertion.sourceActorRef
+    || transition.result !== "accepted"
+    || !isDeepStrictEqual(transition.inputReferences, [communication.reference])
+    || !isDeepStrictEqual(transition.resultReferences, [assertion.reference])
+    || sources.length !== 1 || sources[0].toRef !== actor.reference
     || sources[0].targetRole !== "semantic_source"
     || !exactRelationMetadata(sources[0], assertion.createdOrder, transition.createdOrder, "sut")
     || bases.length !== 1 || bases[0].toRef !== communication.reference
     || bases[0].targetRole !== "attributed_communication"
     || !exactRelationMetadata(bases[0], assertion.createdOrder, transition.createdOrder, "sut")
-    || communication.createdOrder >= assertion.createdOrder
+    || communication.createdOrder >= interaction.createdOrder
+    || interaction.createdOrder >= ingestion.createdOrder
+    || ingestion.createdOrder >= assertion.createdOrder
     || assertion.createdOrder >= transition.createdOrder) {
     throw new SutStateIntegrityError("Current correction attribution closure is malformed.");
   }

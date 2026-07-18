@@ -269,6 +269,7 @@ export function validateDelayedCorrectionCandidateClosure({
     || direct.transition.interactionRef !== interaction.reference
     || !isDeepStrictEqual(controlMeaning(trialPolicy), TRIAL_POLICY)
     || !isDeepStrictEqual(controlRefs, correctionState.controlBasisRefs)
+    || !hasExactKeys(transition, TRANSITION_KEYS)
     || transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
     || transition.reference !== candidate.createdByTransitionRef
     || transition.transitionKind !== "form_delayed_correction_trial_candidate"

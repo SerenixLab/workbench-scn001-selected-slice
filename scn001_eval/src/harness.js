@@ -1067,11 +1067,19 @@ function findEligibleFocusedDrillRealizations(
       && context.payload?.consequence === "low"
       && instruction.interactionRef === context.firstInteractionRef
       && instruction.interactionRef === communication.firstInteractionRef
+      && hasExactKeys(attributionTransition, [
+        "reference", "family", "origin", "transitionKind", "interactionRef",
+        "inputReferences", "resultReferences", "createdOrder", "result"
+      ])
+      && attributionTransition.family === "sut_transition_evidence"
       && attributionTransition.transitionKind === "attribute_current_communications"
       && attributionTransition.origin === "sut"
       && attributionTransition.interactionRef === instruction.interactionRef
-      && attributionTransition.inputReferences.includes(communication.reference)
-      && attributionTransition.resultReferences.includes(assertion.reference)
+      && attributionTransition.result === "accepted"
+      && JSON.stringify(attributionTransition.inputReferences)
+        === JSON.stringify([communication.reference])
+      && JSON.stringify(attributionTransition.resultReferences)
+        === JSON.stringify([assertion.reference])
       && assertionBases.length === 1
       && hasRoleReference(assertionBases, communication.reference, "attributed_communication")
       && exactRelationMetadata(
@@ -1261,7 +1269,11 @@ function uniqueCreatingTransition(snapshot, record, label) {
     candidate.reference === record?.createdByTransitionRef
     || candidate.resultReferences?.includes(record?.reference)
   ));
-  if (claimants.length !== 1) {
+  if (claimants.length !== 1
+    || claimants[0].reference !== record?.createdByTransitionRef
+    || claimants[0].resultReferences?.filter(
+      (reference) => reference === record?.reference
+    ).length !== 1) {
     throw new Error(`${label} requires exactly one retained creating transition.`);
   }
   return claimants[0];

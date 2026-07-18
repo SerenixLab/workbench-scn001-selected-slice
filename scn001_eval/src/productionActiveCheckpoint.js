@@ -938,7 +938,11 @@ function uniqueCreatingTransition(closure, record, label) {
     candidate.reference === record?.createdByTransitionRef
       || candidate.resultReferences?.includes(record?.reference)
   ));
-  if (claimants.length !== 1) {
+  if (claimants.length !== 1
+    || claimants[0].reference !== record?.createdByTransitionRef
+    || claimants[0].resultReferences?.filter(
+      (reference) => reference === record?.reference
+    ).length !== 1) {
     throw checkpointError(`${label} creating transition is not unique`);
   }
   return claimants[0];

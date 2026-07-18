@@ -97,6 +97,12 @@ const TEMPORAL_ASSESSMENT_KEYS = Object.freeze([
   "interactionRef", "createdOrder", "createdByTransitionRef"
 ]);
 
+const ATTRIBUTION_KEYS = Object.freeze([
+  "reference", "family", "origin", "sourceCommunicationRef", "sourceActorRef",
+  "context", "occurrenceOrder", "epistemicStatus", "statusOrigin",
+  "interactionRef", "createdOrder", "createdByTransitionRef"
+]);
+
 const LIMITS = Object.freeze([
   Object.freeze(["scope", "applies_only_to_tested_spontaneous_production; focused_drill_opt_in_is_excluded"]),
   Object.freeze(["epistemic_uncertainty", "observed_response_does_not_establish_a_stable_user_preference"]),
@@ -163,7 +169,11 @@ export function deriveLaterOutcomeParticipants({
   const existing = [...records.values()].filter(
     (record) => record.family === "later_outcome"
   );
-  if (existing.length > 1) {
+  const existingUncertainties = [...records.values()].filter(
+    (record) => record.family === "outcome_uncertainty"
+  );
+  if (existing.length > 1 || existingUncertainties.length > 1
+    || existing.length !== existingUncertainties.length) {
     throw new SutStateIntegrityError("Later outcome state is ambiguous.");
   }
   const participants = {
@@ -242,6 +252,9 @@ export function validateLaterOutcomeClosure({
   const competing = [...records.values()].filter(
     (record) => record.family === "later_outcome"
   );
+  const competingUncertainties = [...records.values()].filter(
+    (record) => record.family === "outcome_uncertainty"
+  );
   if (!hasExactKeys(outcome, OUTCOME_KEYS)
     || outcome.family !== "later_outcome" || outcome.origin !== "sut"
     || outcome.outcomeType !== "intervention_conditioned_later_behavior"
@@ -272,6 +285,8 @@ export function validateLaterOutcomeClosure({
     || outcome.statusOrigin !== "sut_transition"
     || outcome.effectiveOrder !== outcome.createdOrder
     || competing.length !== 1 || competing[0].reference !== outcome.reference
+    || competingUncertainties.length !== 1
+    || competingUncertainties[0].reference !== uncertainty.reference
     || !validUncertainty(uncertainty, outcome, transition, coIntervention)
     || !hasExactRelations(uncertaintyBases, [
       [comparative.reference, "comparative_observation"],
@@ -351,6 +366,7 @@ export function deriveExplanationParticipants({
   const outcomes = [...records.values()].filter(
     (record) => record.family === "later_outcome"
   );
+  if (outcomes.length === 0) return undefined;
   if (outcomes.length !== 1) {
     throw new SutStateIntegrityError("Explanation requires one exact retained outcome.");
   }
@@ -398,7 +414,17 @@ export function deriveExplanationParticipants({
   const existing = [...records.values()].filter(
     (record) => record.family === "explanation_support"
   );
-  if (existing.length > 1) {
+  const existingExplanations = [...records.values()].filter(
+    (record) => record.family === "user_facing_explanation"
+  );
+  const existingLimits = [...records.values()].filter(
+    (record) => record.family === "explanation_limit"
+  );
+  if (existing.length > 1 || existingExplanations.length > 1
+    || existingLimits.length > LIMITS.length
+    || (existing.length === 0 && (
+      existingExplanations.length !== 0 || existingLimits.length !== 0
+    ))) {
     throw new SutStateIntegrityError("Explanation support is ambiguous.");
   }
   if (existing.length === 1) {
@@ -572,6 +598,15 @@ export function validateExplanationClosure({
     && record.dimension === productionCandidate?.proposedScope?.dimension
   )).sort(byCreatedOrder);
   const artifacts = { explanation, limitations, support };
+  const allSupports = [...records.values()].filter(
+    (record) => record.family === "explanation_support"
+  );
+  const allExplanations = [...records.values()].filter(
+    (record) => record.family === "user_facing_explanation"
+  );
+  const allLimits = [...records.values()].filter(
+    (record) => record.family === "explanation_limit"
+  );
   const expectedInputs = explanationInputReferences(participants);
   const expectedRelations = explanationRelationPairs(participants, artifacts);
   const outward = relations.filter((relation) => relation.fromRef === support?.reference);
@@ -580,6 +615,10 @@ export function validateExplanationClosure({
   ];
   if (!hasExactKeys(support, SUPPORT_KEYS)
     || support.family !== "explanation_support" || support.origin !== "sut"
+    || allSupports.length !== 1 || allSupports[0].reference !== support.reference
+    || allExplanations.length !== 1
+    || allExplanations[0].reference !== explanation?.reference
+    || allLimits.length !== LIMITS.length
     || support.supportType !== "retained_behavior_change_lineage"
     || support.supportCompleteness !== "complete_selected_behavior_change_lineage"
     || support.hiddenChainOfThought !== "not_required_not_retained"
@@ -796,14 +835,23 @@ function validateExplanationAttribution(
   const transition = resolveUniqueCreatingTransition(
     records, assertion, "Explanation attribution"
   );
+  const ingestion = resolveUniqueCreatingTransition(
+    records, interaction, "Explanation attribution ingestion"
+  );
   const sources = relations.filter((relation) => (
     relation.fromRef === assertion?.reference && relation.relationKind === "source"
   ));
   const bases = relations.filter((relation) => (
     relation.fromRef === assertion?.reference && relation.relationKind === "basis"
   ));
+  const competing = [...records.values()].filter((record) => (
+    record.family === "attributed_assertion"
+    && record.sourceCommunicationRef === communication?.reference
+    && record.statusOrigin === "sut_transition"
+  ));
   const actor = records.get(assertion?.sourceActorRef);
-  if (assertion?.family !== "attributed_assertion" || assertion.origin !== "sut"
+  if (!hasExactKeys(assertion, ATTRIBUTION_KEYS)
+    || assertion.family !== "attributed_assertion" || assertion.origin !== "sut"
     || assertion.sourceCommunicationRef !== communication.reference
     || assertion.sourceActorRef !== communication.sourceActorRef
     || assertion.context !== communication.payload.context
@@ -811,13 +859,17 @@ function validateExplanationAttribution(
     || assertion.epistemicStatus !== "attributed_user_assertion"
     || assertion.statusOrigin !== "sut_transition"
     || assertion.interactionRef !== interaction.reference
+    || competing.length !== 1 || competing[0].reference !== assertion.reference
     || transition.reference !== assertion.createdByTransitionRef
     || !hasExactKeys(transition, TRANSITION_KEYS)
+    || transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
     || transition.transitionKind !== "attribute_current_communications"
+    || transition.interactionRef !== interaction.reference
     || !isDeepStrictEqual(transition.inputReferences, [communication.reference])
     || !isDeepStrictEqual(transition.resultReferences, [assertion.reference])
     || transition.result !== "accepted"
-    || actor?.family !== "semantic_source" || actor.sourceActor !== "synthetic-user-a"
+    || actor?.family !== "semantic_source" || actor.origin !== "fixture"
+    || actor.sourceActor !== "synthetic-user-a"
     || sources.length !== 1 || sources[0].toRef !== actor.reference
     || sources[0].targetRole !== "semantic_source"
     || bases.length !== 1 || bases[0].toRef !== communication.reference
@@ -827,7 +879,11 @@ function validateExplanationAttribution(
     ))
     || bases.some((relation) => !exactMetadata(
       relation, assertion.createdOrder, transition.createdOrder
-    ))) {
+    ))
+    || communication.createdOrder >= interaction.createdOrder
+    || interaction.createdOrder >= ingestion.createdOrder
+    || ingestion.createdOrder >= assertion.createdOrder
+    || assertion.createdOrder >= transition.createdOrder) {
     throw new SutStateIntegrityError("Explanation request attribution is malformed.");
   }
 }

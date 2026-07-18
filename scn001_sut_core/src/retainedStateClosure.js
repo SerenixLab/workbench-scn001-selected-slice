@@ -2,6 +2,16 @@ import { isDeepStrictEqual } from "node:util";
 
 import { SutStateIntegrityError } from "./errors.js";
 
+const INTERACTION_KEYS = Object.freeze([
+  "reference", "family", "origin", "inputReferences", "createdOrder",
+  "createdByTransitionRef"
+]);
+
+const TRANSITION_KEYS = Object.freeze([
+  "reference", "family", "origin", "transitionKind", "interactionRef",
+  "inputReferences", "resultReferences", "createdOrder", "result"
+]);
+
 export function sourceFactMeaning(input) {
   const meaning = structuredClone(input);
   delete meaning.sourceFactRef;
@@ -14,9 +24,13 @@ export function validateRetainedInputFact({
 }) {
   const binding = sourceFactBindings.get(fact?.sourceFactRef);
   const actor = records.get(fact?.sourceActorRef);
-  const ingestion = records.get(interaction?.createdByTransitionRef);
+  const ingestion = interaction && resolveUniqueCreatingTransition(
+    records, interaction, "Current input ingestion"
+  );
   const firstInteraction = records.get(fact?.firstInteractionRef);
-  const firstIngestion = records.get(firstInteraction?.createdByTransitionRef);
+  const firstIngestion = firstInteraction && resolveUniqueCreatingTransition(
+    records, firstInteraction, "Original input ingestion"
+  );
   const source = relations.filter((relation) => relation.fromRef === fact.reference
     && relation.relationKind === "source");
   const basis = relations.filter((relation) => relation.fromRef === ingestion?.reference
@@ -30,6 +44,41 @@ export function validateRetainedInputFact({
     .filter((record) => record.family === "interaction_segment"
       && record.inputReferences?.includes(fact.reference))
     .sort(byCreatedOrder);
+  const exactIngestion = (candidateInteraction, candidateIngestion) => {
+    const allBases = relations.filter((relation) => (
+      relation.fromRef === candidateIngestion?.reference
+      && relation.relationKind === "basis"
+    ));
+    const additionalResults = candidateIngestion?.resultReferences?.filter(
+      (reference) => reference !== candidateInteraction?.reference
+    ) ?? [];
+    return hasExactKeys(candidateInteraction, INTERACTION_KEYS)
+      && candidateInteraction.family === "interaction_segment"
+      && candidateInteraction.origin === "sut"
+      && hasExactKeys(candidateIngestion, TRANSITION_KEYS)
+      && candidateIngestion.family === "sut_transition_evidence"
+      && candidateIngestion.origin === "sut"
+      && candidateIngestion.transitionKind === "ingest_sut_visible_inputs"
+      && candidateIngestion.interactionRef === candidateInteraction.reference
+      && isDeepStrictEqual(
+        candidateIngestion.inputReferences, candidateInteraction.inputReferences
+      )
+      && candidateIngestion.resultReferences.filter(
+        (reference) => reference === candidateInteraction.reference
+      ).length === 1
+      && additionalResults.every((reference) => isValidInitializedIngestionResult(
+        records, relations, reference, candidateIngestion, candidateInteraction
+      ))
+      && candidateIngestion.result === "accepted"
+      && allBases.length === candidateInteraction.inputReferences.length
+      && candidateInteraction.inputReferences.every((reference) => allBases.some(
+        (relation) => relation.toRef === reference
+          && relation.targetRole === "ingested_input"
+          && relation.assertedByRole === "sut"
+          && relation.effectiveOrder === candidateIngestion.createdOrder
+          && relation.createdOrder === candidateIngestion.createdOrder
+      ));
+  };
   if (fact?.family !== "input_fact" || fact.origin !== origin || fact.role !== role
     || fact.payload?.sourceFactRef !== fact.sourceFactRef
     || binding?.inputFactRef !== fact.reference
@@ -45,14 +94,11 @@ export function validateRetainedInputFact({
     || source[0].effectiveOrder !== fact.createdOrder
     || source[0].createdOrder !== firstIngestion?.createdOrder
     || actor.createdOrder >= fact.createdOrder
-    || firstInteraction?.family !== "interaction_segment" || firstInteraction.origin !== "sut"
+    || !exactIngestion(firstInteraction, firstIngestion)
     || firstInteraction.createdByTransitionRef !== binding.firstIngestionTransitionRef
     || containingInteractions.length === 0
     || containingInteractions[0].reference !== firstInteraction.reference
     || firstInteraction.inputReferences.filter((ref) => ref === fact.reference).length !== 1
-    || firstIngestion?.family !== "sut_transition_evidence" || firstIngestion.origin !== "sut"
-    || firstIngestion.transitionKind !== "ingest_sut_visible_inputs"
-    || firstIngestion.interactionRef !== firstInteraction.reference
     || firstIngestion.inputReferences?.filter((ref) => ref === fact.reference).length !== 1
     || firstIngestion.resultReferences?.filter((ref) => ref === firstInteraction.reference).length !== 1
     || firstBasis.length !== 1 || firstBasis[0].targetRole !== "ingested_input"
@@ -61,11 +107,8 @@ export function validateRetainedInputFact({
     || firstBasis[0].createdOrder !== firstIngestion.createdOrder
     || fact.createdOrder >= firstInteraction.createdOrder
     || firstInteraction.createdOrder >= firstIngestion.createdOrder
-    || interaction?.family !== "interaction_segment" || interaction.origin !== "sut"
+    || !exactIngestion(interaction, ingestion)
     || interaction.inputReferences.filter((ref) => ref === fact.reference).length !== 1
-    || ingestion?.family !== "sut_transition_evidence" || ingestion.origin !== "sut"
-    || ingestion.transitionKind !== "ingest_sut_visible_inputs"
-    || ingestion.interactionRef !== interaction.reference
     || ingestion.inputReferences.filter((ref) => ref === fact.reference).length !== 1
     || basis.length !== 1 || basis[0].targetRole !== "ingested_input"
     || basis[0].assertedByRole !== "sut" || basis[0].effectiveOrder !== ingestion.createdOrder
@@ -144,12 +187,22 @@ export function resolveUniqueCreatingTransition(records, record, label) {
     candidate.reference === record?.createdByTransitionRef
     || candidate.resultReferences?.includes(record?.reference)
   ));
-  if (claimants.length !== 1) {
+  const claimant = claimants[0];
+  if (claimants.length !== 1
+    || claimant?.reference !== record?.createdByTransitionRef
+    || claimant.resultReferences?.filter(
+      (reference) => reference === record?.reference
+    ).length !== 1) {
     throw new SutStateIntegrityError(
       `${label} requires exactly one retained creating transition.`
     );
   }
-  return claimants[0];
+  return claimant;
+}
+
+function hasExactKeys(value, keys) {
+  return value && Object.getPrototypeOf(value) === Object.prototype
+    && Object.keys(value).sort().join("|") === [...keys].sort().join("|");
 }
 
 function byCreatedOrder(left, right) {

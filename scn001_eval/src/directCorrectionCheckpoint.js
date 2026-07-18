@@ -338,7 +338,7 @@ export function findExactDirectCorrectionRealization(snapshot, sourceBindingEvid
   const chronology = records.get(state.chronologyRef);
   const actor = records.get(state.sourceActorRef);
   const interaction = records.get(state.interactionRef);
-  const ingestion = records.get(state.ingestionTransitionRef);
+  const ingestion = uniqueCreator(snapshot, interaction, "direct correction ingestion");
   validateExactAttribution(
     snapshot, records, assertion, communication, interaction, "current correction"
   );
@@ -374,7 +374,9 @@ export function findExactDirectCorrectionRealization(snapshot, sourceBindingEvid
   const fact = realizationFacts[0];
   const realizationTransition = realizationTransitions[0];
   const factInteraction = records.get(fact?.firstInteractionRef);
-  const factIngestion = records.get(factInteraction?.createdByTransitionRef);
+  const factIngestion = uniqueCreator(
+    snapshot, factInteraction, "direct realization ingestion"
+  );
   const stateBases = snapshot.relations.filter((candidate) => (
     candidate.fromRef === state.reference && candidate.relationKind === "basis"
   ));
@@ -462,7 +464,21 @@ export function findExactDirectCorrectionRealization(snapshot, sourceBindingEvid
     || communication?.firstInteractionRef !== interaction?.reference
     || chronology?.firstInteractionRef !== interaction?.reference
     || interaction?.createdByTransitionRef !== ingestion?.reference
+    || !hasExactKeys(interaction, [
+      "reference", "family", "origin", "inputReferences", "createdOrder",
+      "createdByTransitionRef"
+    ])
+    || interaction.family !== "interaction_segment" || interaction.origin !== "sut"
     || !sameReferenceSet(interaction?.inputReferences, expectedInteractionInputs)
+    || !hasExactKeys(ingestion, TRANSITION_KEYS)
+    || ingestion.family !== "sut_transition_evidence" || ingestion.origin !== "sut"
+    || ingestion.transitionKind !== "ingest_sut_visible_inputs"
+    || ingestion.interactionRef !== interaction.reference
+    || JSON.stringify(ingestion.inputReferences)
+      !== JSON.stringify(interaction.inputReferences)
+    || JSON.stringify(ingestion.resultReferences) !== JSON.stringify([interaction.reference])
+    || ingestion.result !== "accepted"
+    || !hasExactKeys(stateTransition, TRANSITION_KEYS)
     || stateTransition.family !== "sut_transition_evidence"
     || stateTransition.origin !== "sut"
     || stateTransition.transitionKind !== "derive_scoped_current_correction_control"
@@ -496,6 +512,7 @@ export function findExactDirectCorrectionRealization(snapshot, sourceBindingEvid
     || disposition.durableAdaptation !== "not_established"
     || disposition.statusOrigin !== "sut_transition"
     || disposition.effectiveOrder !== disposition.createdOrder
+    || !hasExactKeys(dispositionTransition, TRANSITION_KEYS)
     || dispositionTransition.family !== "sut_transition_evidence"
     || dispositionTransition.origin !== "sut"
     || dispositionTransition.transitionKind
@@ -527,8 +544,24 @@ export function findExactDirectCorrectionRealization(snapshot, sourceBindingEvid
     || JSON.stringify(factInteraction?.inputReferences) !== JSON.stringify([
       fact.reference
     ])
+    || !hasExactKeys(factInteraction, [
+      "reference", "family", "origin", "inputReferences", "createdOrder",
+      "createdByTransitionRef"
+    ])
+    || factInteraction.family !== "interaction_segment" || factInteraction.origin !== "sut"
+    || !hasExactKeys(factIngestion, TRANSITION_KEYS)
+    || factIngestion.family !== "sut_transition_evidence" || factIngestion.origin !== "sut"
+    || factIngestion.transitionKind !== "ingest_sut_visible_inputs"
+    || factIngestion.interactionRef !== factInteraction.reference
+    || JSON.stringify(factIngestion.inputReferences) !== JSON.stringify([fact.reference])
+    || JSON.stringify(factIngestion.resultReferences)
+      !== JSON.stringify([factInteraction.reference])
+    || factIngestion.result !== "accepted"
+    || !hasExactKeys(realizationTransition, TRANSITION_KEYS)
     || realizationTransition.family !== "sut_transition_evidence"
     || realizationTransition.origin !== "sut"
+    || realizationTransition.transitionKind
+      !== "record_direct_current_session_correction_realization"
     || realizationTransition.result !== "direct_current_session_correction_realization_recorded"
     || realizationTransition.interactionRef !== factInteraction?.reference
     || JSON.stringify(realizationTransition.inputReferences) !== JSON.stringify([

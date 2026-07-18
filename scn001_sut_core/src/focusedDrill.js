@@ -42,6 +42,11 @@ const OUTCOME_KEYS = Object.freeze([
   "interactionRef", "createdOrder", "createdByTransitionRef"
 ]);
 
+const TRANSITION_KEYS = Object.freeze([
+  "reference", "family", "origin", "transitionKind", "interactionRef",
+  "inputReferences", "resultReferences", "createdOrder", "result"
+]);
+
 export function deriveFocusedDrillDecisionParticipants({
   records, relations, sourceFactBindings, interaction, interactionFacts, activeTrial,
   validateActiveTrial
@@ -191,6 +196,7 @@ export function validateFocusedDrillInstructionClosure({
     || validateFocusedDrillAttribution(
       records, relations, assertion, communication, interaction
     ).reference !== assertion.reference
+    || !hasExactKeys(transition, TRANSITION_KEYS)
     || transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
     || transition.transitionKind !== "derive_focused_drill_instruction"
     || transition.interactionRef !== interaction.reference
@@ -258,6 +264,7 @@ export function validateFocusedDrillDispositionClosure({
     || disposition.interactionRef !== instruction.interactionRef
     || !isDeepStrictEqual(disposition.drillScope, instruction.drillScope)
     || competing.length !== 1 || competing[0].reference !== disposition.reference
+    || !hasExactKeys(transition, TRANSITION_KEYS)
     || transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
     || transition.transitionKind !== "derive_focused_drill_behavior_disposition"
     || transition.interactionRef !== disposition.interactionRef
@@ -324,6 +331,7 @@ export function resolveFocusedDrillRealizationClosure({
     || interaction?.reference !== firstInteraction?.reference
     || interaction?.family !== "interaction_segment" || interaction.origin !== "sut"
     || !isDeepStrictEqual(interaction.inputReferences, [fact.reference])
+    || !hasExactKeys(transition, TRANSITION_KEYS)
     || transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
     || transition.result !== "focused_drill_realization_recorded"
     || !isDeepStrictEqual(transition.inputReferences, [fact.reference, disposition.reference])
@@ -516,6 +524,7 @@ export function validateFocusedDrillOutcomeClosure({
     || ingestion?.family !== "sut_transition_evidence" || ingestion.origin !== "sut"
     || ingestion.transitionKind !== "ingest_sut_visible_inputs"
     || ingestion.interactionRef !== interaction.reference
+    || !hasExactKeys(transition, TRANSITION_KEYS)
     || transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
     || transition.transitionKind !== "record_short_term_focused_drill_outcome"
     || transition.interactionRef !== interaction.reference
@@ -562,6 +571,9 @@ function validateFocusedDrillAttribution(records, relations, assertion, communic
   const transition = resolveUniqueCreatingTransition(
     records, assertion, "Focused-drill request attribution"
   );
+  const ingestion = resolveUniqueCreatingTransition(
+    records, interaction, "Focused-drill request attribution ingestion"
+  );
   const actor = records.get(assertion?.sourceActorRef);
   const sourceRelations = relations.filter((relation) => (
     relation.fromRef === assertion?.reference && relation.relationKind === "source"
@@ -583,11 +595,13 @@ function validateFocusedDrillAttribution(records, relations, assertion, communic
     || assertion.interactionRef !== interaction.reference
     || actor?.family !== "semantic_source" || actor.origin !== "fixture"
     || actor.sourceActor !== "synthetic-user-a"
+    || !hasExactKeys(transition, TRANSITION_KEYS)
     || transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
     || transition.transitionKind !== "attribute_current_communications"
     || transition.interactionRef !== interaction.reference
-    || !transition.inputReferences?.includes(communication.reference)
-    || !transition.resultReferences?.includes(assertion.reference)
+    || transition.result !== "accepted"
+    || !isDeepStrictEqual(transition.inputReferences, [communication.reference])
+    || !isDeepStrictEqual(transition.resultReferences, [assertion.reference])
     || sourceRelations.length !== 1 || sourceRelations[0].toRef !== actor.reference
     || sourceRelations[0].targetRole !== "semantic_source"
     || sourceRelations[0].assertedByRole !== "sut"
@@ -598,7 +612,9 @@ function validateFocusedDrillAttribution(records, relations, assertion, communic
     || basisRelations[0].assertedByRole !== "sut"
     || basisRelations[0].effectiveOrder !== assertion.createdOrder
     || basisRelations[0].createdOrder !== transition.createdOrder
-    || communication.createdOrder >= assertion.createdOrder
+    || communication.createdOrder >= interaction.createdOrder
+    || interaction.createdOrder >= ingestion.createdOrder
+    || ingestion.createdOrder >= assertion.createdOrder
     || assertion.createdOrder >= transition.createdOrder) {
     throw new SutStateIntegrityError("Focused-drill request attribution closure is malformed.");
   }
@@ -665,6 +681,7 @@ function validateExactInputIngestionClosure({
     || interaction.createdByTransitionRef !== ingestion?.reference
     || !isDeepStrictEqual(interaction.inputReferences, expectedInputRefs)
     || new Set(interaction.inputReferences).size !== interaction.inputReferences.length
+    || !hasExactKeys(ingestion, TRANSITION_KEYS)
     || ingestion.family !== "sut_transition_evidence" || ingestion.origin !== "sut"
     || ingestion.transitionKind !== "ingest_sut_visible_inputs"
     || ingestion.interactionRef !== interaction.reference

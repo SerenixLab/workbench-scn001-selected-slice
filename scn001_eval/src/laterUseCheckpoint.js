@@ -537,7 +537,11 @@ function uniqueCreator(snapshot, record) {
     candidate.reference === record?.createdByTransitionRef
     || candidate.resultReferences?.includes(record?.reference)
   ));
-  if (claimants.length !== 1 || claimants[0].reference !== record.createdByTransitionRef) {
+  if (claimants.length !== 1
+    || claimants[0].reference !== record?.createdByTransitionRef
+    || claimants[0].resultReferences?.filter(
+      (reference) => reference === record?.reference
+    ).length !== 1) {
     throw checkpointError("Creator identity is ambiguous.");
   }
   return claimants[0];

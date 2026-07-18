@@ -1632,6 +1632,15 @@ test("CP-LATER-OUTCOME rejects causal promotion and malformed closure passively"
         ...structuredClone(outcome),
         reference: "state_00000000-0000-0000-0000-000000000092"
       });
+    }],
+    ["duplicate uncertainty identity", (snapshot) => {
+      const uncertainty = snapshot.records.find(
+        (record) => record.family === "outcome_uncertainty"
+      );
+      snapshot.records.push({
+        ...structuredClone(uncertainty),
+        reference: "state_00000000-0000-0000-0000-000000000093"
+      });
     }]
   ];
   for (const [name, attack] of attacks) {
@@ -1732,6 +1741,158 @@ test("CP-EXPLANATION rejects missing provenance and unsupported claims passively
       snapshot.records.find((record) => record.family === "user_facing_explanation")
         .userFacingText = "The delayed correction caused better learning.";
     }],
+    ["mixed global-preference claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " This is now your permanent global preference.";
+    }],
+    ["mixed always-applicable claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " I will always apply this delay.";
+    }],
+    ["mixed established-preference claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " This establishes your preference.";
+    }],
+    ["mixed fixed-learning-style claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " You have a fixed learning style.";
+    }],
+    ["mixed causal-improvement claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " The delay caused improved learning.";
+    }],
+    ["mixed long-term-efficacy claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " This proves lasting improvement.";
+    }],
+    ["mixed fatigue claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " This was because your fatigue.";
+    }],
+    ["mixed focused-drill applicability claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " In a focused drill, this will apply.";
+    }],
+    ["mixed hidden-reasoning claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " My private reasoning establishes this conclusion.";
+    }],
+    ["explanation assertion family rewrite", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      snapshot.records.find(
+        (record) => record.reference === support.requestAssertionRef
+      ).family = "unrelated_family";
+    }],
+    ["explanation assertion origin rewrite", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      snapshot.records.find(
+        (record) => record.reference === support.requestAssertionRef
+      ).origin = "fixture";
+    }],
+    ["explanation assertion extra key", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      snapshot.records.find(
+        (record) => record.reference === support.requestAssertionRef
+      ).unexpected = true;
+    }],
+    ["explanation assertion creator rewrite", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      snapshot.records.find(
+        (record) => record.reference === support.requestAssertionRef
+      ).createdByTransitionRef = "transition_00000000-0000-0000-0000-000000000097";
+    }],
+    ["explanation attribution transition family", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      const assertion = snapshot.records.find(
+        (record) => record.reference === support.requestAssertionRef
+      );
+      snapshot.records.find(
+        (record) => record.reference === assertion.createdByTransitionRef
+      ).family = "unrelated_family";
+    }],
+    ["explanation attribution extra input", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      const assertion = snapshot.records.find(
+        (record) => record.reference === support.requestAssertionRef
+      );
+      snapshot.records.find(
+        (record) => record.reference === assertion.createdByTransitionRef
+      ).inputReferences.push(support.outcomeRef);
+    }],
+    ["explanation attribution duplicate result", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      const assertion = snapshot.records.find(
+        (record) => record.reference === support.requestAssertionRef
+      );
+      snapshot.records.find(
+        (record) => record.reference === assertion.createdByTransitionRef
+      ).resultReferences.push(assertion.reference);
+    }],
+    ["explanation attribution actor substitution", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      const assertion = snapshot.records.find(
+        (record) => record.reference === support.requestAssertionRef
+      );
+      snapshot.records.find(
+        (record) => record.reference === assertion.sourceActorRef
+      ).sourceActor = "substituted-user";
+    }],
+    ["explanation attribution relation duplication", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      const relation = snapshot.relations.find((candidate) => (
+        candidate.fromRef === support.requestAssertionRef
+        && candidate.relationKind === "basis"
+      ));
+      snapshot.relations.push(structuredClone(relation));
+    }],
+    ["duplicate explanation request assertion", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      const assertion = snapshot.records.find(
+        (record) => record.reference === support.requestAssertionRef
+      );
+      snapshot.records.push({
+        ...structuredClone(assertion),
+        reference: "assertion_00000000-0000-0000-0000-000000000096"
+      });
+    }],
+    ["extra user-facing explanation", (snapshot) => {
+      const explanation = snapshot.records.find(
+        (record) => record.family === "user_facing_explanation"
+      );
+      snapshot.records.push({
+        ...structuredClone(explanation),
+        reference: "state_00000000-0000-0000-0000-000000000098"
+      });
+    }],
+    ["extra explanation support", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      snapshot.records.push({
+        ...structuredClone(support),
+        reference: "state_00000000-0000-0000-0000-000000000099"
+      });
+    }],
     ["request attribution substitution", (snapshot) => {
       const support = snapshot.records.find(
         (record) => record.family === "explanation_support"
@@ -1742,6 +1903,20 @@ test("CP-EXPLANATION rejects missing provenance and unsupported claims passively
       snapshot.records.find((record) => (
         record.transitionKind === "derive_grounded_later_behavior_explanation"
       )).resultReferences.pop();
+    }],
+    ["transition extra terminal result", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      snapshot.records.find((record) => (
+        record.transitionKind === "derive_grounded_later_behavior_explanation"
+      )).resultReferences.push(support.outcomeRef);
+    }],
+    ["duplicate referenced limitation", (snapshot) => {
+      const support = snapshot.records.find(
+        (record) => record.family === "explanation_support"
+      );
+      support.limitationRefs.causal = support.limitationRefs.scope;
     }],
     ["duplicate explanation creator", (snapshot) => {
       const explanation = snapshot.records.find(
@@ -2588,6 +2763,9 @@ test("direct checkpoint reconstructs complete focused and current attribution cl
     family(snapshot, "focused_drill_behavior_disposition")
   );
   const directState = (snapshot) => family(snapshot, "scoped_current_correction_control");
+  const directDisposition = (snapshot) => (
+    family(snapshot, "direct_current_session_correction_disposition")
+  );
   const directAssertion = (snapshot) => {
     const state = directState(snapshot);
     return record(snapshot, (item) => item.reference === state.attributedAssertionRef);
@@ -2775,6 +2953,22 @@ test("direct checkpoint reconstructs complete focused and current attribution cl
         focusedInstruction(snapshot).reference
       ];
     }],
+    ["direct state rejects creator-pointer rewrite", (snapshot) => {
+      directState(snapshot).createdByTransitionRef = "transition_missing_direct_state";
+    }],
+    ["direct disposition rejects creator-pointer rewrite", (snapshot) => {
+      directDisposition(snapshot).createdByTransitionRef
+        = "transition_missing_direct_disposition";
+    }],
+    ["current assertion rejects extra key", (snapshot) => {
+      directAssertion(snapshot).unexpected = true;
+    }],
+    ["current assertion rejects family rewrite", (snapshot) => {
+      directAssertion(snapshot).family = "unrelated_family";
+    }],
+    ["current assertion rejects origin rewrite", (snapshot) => {
+      directAssertion(snapshot).origin = "fixture";
+    }],
     ["current assertion rejects epistemic-status rewrite", (snapshot) => {
       directAssertion(snapshot).epistemicStatus = "inferred_preference";
     }],
@@ -2805,6 +2999,19 @@ test("direct checkpoint reconstructs complete focused and current attribution cl
     }],
     ["current assertion rejects transition-kind rewrite", (snapshot) => {
       creator(snapshot, directAssertion(snapshot)).transitionKind = "infer_preference";
+    }],
+    ["current assertion rejects transition-family rewrite", (snapshot) => {
+      creator(snapshot, directAssertion(snapshot)).family = "unrelated_family";
+    }],
+    ["current assertion rejects transition-origin rewrite", (snapshot) => {
+      creator(snapshot, directAssertion(snapshot)).origin = "fixture";
+    }],
+    ["current assertion rejects transition-result rewrite", (snapshot) => {
+      creator(snapshot, directAssertion(snapshot)).result = "malformed";
+    }],
+    ["current assertion rejects transition-interaction rewrite", (snapshot) => {
+      creator(snapshot, directAssertion(snapshot)).interactionRef
+        = focusedInstruction(snapshot).interactionRef;
     }],
     ["current assertion rejects missing attribution input", (snapshot) => {
       creator(snapshot, directAssertion(snapshot)).inputReferences = [];

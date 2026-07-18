@@ -291,6 +291,28 @@ export class RunState {
   }
 
   processCurrentInteraction() {
+    const checkpoint = structuredClone({
+      nextOrder: this.nextOrder,
+      records: this.records,
+      relations: this.relations,
+      actorReferences: this.actorReferences,
+      sourceFactBindings: this.sourceFactBindings,
+      pendingInteractions: this.pendingInteractions
+    });
+    try {
+      return this.processCurrentInteractionAtomically();
+    } catch (error) {
+      this.nextOrder = checkpoint.nextOrder;
+      this.records = checkpoint.records;
+      this.relations = checkpoint.relations;
+      this.actorReferences = checkpoint.actorReferences;
+      this.sourceFactBindings = checkpoint.sourceFactBindings;
+      this.pendingInteractions = checkpoint.pendingInteractions;
+      throw error;
+    }
+  }
+
+  processCurrentInteractionAtomically() {
     const interaction = this.pendingInteractions[0];
     if (!interaction) {
       return;
@@ -516,8 +538,13 @@ export class RunState {
       ...proposalOutputs, ...focusedDrillOutputs, ...directCorrectionOutputs,
       ...laterUseOutputs
     ];
-    if (outstanding.length !== 1) {
+    if (outstanding.length === 0) {
       return Object.freeze([]);
+    }
+    if (outstanding.length > 1) {
+      throw new SutStateIntegrityError(
+        "Available output ambiguity: more than one material output is outstanding."
+      );
     }
     return deepFreeze(outstanding);
   }
@@ -2799,7 +2826,10 @@ export class RunState {
   resolveActivationBindingTrigger(interaction, bindingTransitionRef) {
     const transition = this.records.get(bindingTransitionRef);
     const binding = this.records.get(transition?.resultReferences?.[0]);
-    if (transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
+    if (!hasExactKeys(transition, [
+      "reference", "family", "origin", "transitionKind", "interactionRef",
+      "inputReferences", "resultReferences", "createdOrder", "result"
+    ]) || transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
       || transition.transitionKind !== "assess_proposal_response_binding"
       || transition.result !== "binding_assessed"
       || !isDeepStrictEqual(transition.resultReferences, [binding?.reference])
@@ -2896,6 +2926,10 @@ export class RunState {
       || relation[0].semanticTaskMode !== taskMode
       || relation[0].effectiveOrder !== comparison.createdOrder
       || relation[0].createdOrder !== transition?.createdOrder
+      || !hasExactKeys(transition, [
+        "reference", "family", "origin", "transitionKind", "interactionRef",
+        "inputReferences", "resultReferences", "createdOrder", "result"
+      ])
       || transition?.family !== "sut_transition_evidence" || transition.origin !== "sut"
       || transition.transitionKind !== "compare_recognition_and_spontaneous_production"
       || transition.interactionRef !== comparison.interactionRef

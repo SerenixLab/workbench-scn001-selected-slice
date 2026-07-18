@@ -2995,7 +2995,9 @@ test("equal-payload prior drill instructions remain distinct and are never selec
   assert.equal(dispositions.length, 2);
   assert.notEqual(instructions[0].sourceCommunicationRef, instructions[1].sourceCommunicationRef);
   assert.notEqual(dispositions[0].instructionRef, dispositions[1].instructionRef);
-  assert.deepEqual(first.run.emitAvailableOutputs(), []);
+  const before = retainedMutationSnapshot(first.run);
+  assert.throws(() => first.run.emitAvailableOutputs(), /output ambiguity/i);
+  assert.deepEqual(retainedMutationSnapshot(first.run), before);
 });
 
 test("focused-drill realization is separate, exact-targeted, and mismatch cannot create outcome", () => {
@@ -4067,6 +4069,87 @@ test("explanation closure rejects lineage gaps, hidden reasoning, and creator am
     },
     ({ run, explanation }) => {
       cloneRetainedTransition(run, run.records.get(explanation.createdByTransitionRef));
+    },
+    ({ run, support }) => {
+      const assertion = run.records.get(support.requestAssertionRef);
+      assertion.createdByTransitionRef = createReference("transition");
+    },
+    ({ run, support }) => {
+      run.records.get(support.requestAssertionRef).unexpected = "extra";
+    },
+    ({ run, support }) => {
+      run.records.get(support.requestAssertionRef).family = "unrelated_family";
+    },
+    ({ run, support }) => {
+      run.records.get(support.requestAssertionRef).origin = "fixture";
+    },
+    ({ run, support }) => {
+      const assertion = run.records.get(support.requestAssertionRef);
+      run.records.get(assertion.createdByTransitionRef).family = "unrelated_family";
+    },
+    ({ run, support }) => {
+      const assertion = run.records.get(support.requestAssertionRef);
+      run.records.get(assertion.createdByTransitionRef).origin = "fixture";
+    },
+    ({ run, support }) => {
+      const assertion = run.records.get(support.requestAssertionRef);
+      run.records.get(assertion.createdByTransitionRef).result = "malformed";
+    },
+    ({ run, support }) => {
+      const assertion = run.records.get(support.requestAssertionRef);
+      run.records.get(assertion.createdByTransitionRef).inputReferences.push(
+        support.outcomeRef
+      );
+    },
+    ({ run, support }) => {
+      const assertion = run.records.get(support.requestAssertionRef);
+      run.records.get(assertion.createdByTransitionRef).resultReferences.push(
+        support.outcomeRef
+      );
+    },
+    ({ run, support }) => {
+      const assertion = run.records.get(support.requestAssertionRef);
+      run.records.get(assertion.createdByTransitionRef).resultReferences.push(
+        assertion.reference
+      );
+    },
+    ({ run, support }) => {
+      const assertion = run.records.get(support.requestAssertionRef);
+      run.records.get(assertion.sourceActorRef).sourceActor = "substituted-user";
+    },
+    ({ run, support }) => {
+      const assertion = run.records.get(support.requestAssertionRef);
+      run.relations.splice(run.relations.findIndex((relation) => (
+        relation.fromRef === assertion.reference && relation.relationKind === "source"
+      )), 1);
+    },
+    ({ run, support }) => {
+      const assertion = run.records.get(support.requestAssertionRef);
+      const relation = run.relations.find((candidate) => (
+        candidate.fromRef === assertion.reference && candidate.relationKind === "basis"
+      ));
+      run.relations.push(structuredClone(relation));
+    },
+    ({ run, support }) => {
+      const assertion = run.records.get(support.requestAssertionRef);
+      const clone = structuredClone(assertion);
+      clone.reference = createReference("assertion");
+      run.records.set(clone.reference, clone);
+    },
+    ({ run, explanation }) => {
+      const clone = structuredClone(explanation);
+      clone.reference = createReference("state");
+      run.records.set(clone.reference, clone);
+    },
+    ({ run, support }) => {
+      const clone = structuredClone(support);
+      clone.reference = createReference("state");
+      run.records.set(clone.reference, clone);
+    },
+    ({ run, support }) => {
+      const clone = structuredClone(run.records.get(support.limitationRefs.scope));
+      clone.reference = createReference("state");
+      run.records.set(clone.reference, clone);
     }
   ];
   for (const attack of attacks) {
@@ -4075,6 +4158,240 @@ test("explanation closure rejects lineage gaps, hidden reasoning, and creator am
     const before = retainedMutationSnapshot(completed.run);
     assert.throws(() => completed.run.validateExplanationClosure(completed.support));
     assert.deepEqual(retainedMutationSnapshot(completed.run), before);
+  }
+});
+
+test("direct closure enforces exact creator and attribution envelopes", () => {
+  const attacks = [
+    ({ correctionState }) => {
+      correctionState.createdByTransitionRef = createReference("transition");
+    },
+    ({ disposition }) => {
+      disposition.createdByTransitionRef = createReference("transition");
+    },
+    ({ run, correctionState }) => {
+      run.records.get(correctionState.attributedAssertionRef)
+        .createdByTransitionRef = createReference("transition");
+    },
+    ({ run, correctionState, disposition }) => {
+      const assertion = run.records.get(correctionState.attributedAssertionRef);
+      run.records.get(assertion.createdByTransitionRef).inputReferences.push(
+        disposition.reference
+      );
+    },
+    ({ run, correctionState, disposition }) => {
+      const assertion = run.records.get(correctionState.attributedAssertionRef);
+      run.records.get(assertion.createdByTransitionRef).resultReferences.push(
+        disposition.reference
+      );
+    },
+    ({ run, correctionState }) => {
+      const assertion = run.records.get(correctionState.attributedAssertionRef);
+      run.records.get(assertion.createdByTransitionRef).resultReferences.push(
+        assertion.reference
+      );
+    },
+    ({ run, correctionState }) => {
+      const assertion = run.records.get(correctionState.attributedAssertionRef);
+      run.records.get(assertion.createdByTransitionRef).family = "wrong_family";
+    },
+    ({ run, correctionState }) => {
+      const assertion = run.records.get(correctionState.attributedAssertionRef);
+      run.records.get(assertion.createdByTransitionRef).origin = "fixture";
+    },
+    ({ run, correctionState }) => {
+      const assertion = run.records.get(correctionState.attributedAssertionRef);
+      run.records.get(assertion.createdByTransitionRef).result = "malformed";
+    },
+    ({ run, correctionState }) => {
+      run.records.get(correctionState.attributedAssertionRef).unexpected = "extra";
+    },
+    ({ run, correctionState }) => {
+      run.records.get(correctionState.attributedAssertionRef).family = "unrelated_family";
+    },
+    ({ run, correctionState }) => {
+      run.records.get(correctionState.attributedAssertionRef).origin = "fixture";
+    },
+    ({ run, correctionState }) => {
+      const assertion = run.records.get(correctionState.attributedAssertionRef);
+      run.records.get(assertion.sourceActorRef).sourceActor = "substituted-user";
+    },
+    ({ run, correctionState }) => {
+      const assertion = run.records.get(correctionState.attributedAssertionRef);
+      run.relations.splice(run.relations.findIndex((relation) => (
+        relation.fromRef === assertion.reference && relation.relationKind === "source"
+      )), 1);
+    },
+    ({ run, correctionState }) => {
+      const assertion = run.records.get(correctionState.attributedAssertionRef);
+      const relation = run.relations.find((candidate) => (
+        candidate.fromRef === assertion.reference && candidate.relationKind === "basis"
+      ));
+      run.relations.push(structuredClone(relation));
+    }
+  ];
+  for (const attack of attacks) {
+    const completed = directCorrectionDecisionRun({ withFocusedPrefix: false });
+    attack(completed);
+    const before = retainedMutationSnapshot(completed.run);
+    assert.throws(() => completed.run.emitAvailableOutputs());
+    assert.deepEqual(retainedMutationSnapshot(completed.run), before);
+  }
+});
+
+test("processing rolls back partial derivation on a late integrity failure", () => {
+  const completed = laterOutcomeRun();
+  const request = explanationRequestInput();
+  completed.run.assertSourceFactConsistency([request]);
+  completed.run.ingest([request]);
+  const before = retainedMutationSnapshot(completed.run);
+  assert.throws(
+    () => completed.run.processCurrentInteraction(),
+    /temporal history basis is incomplete/
+  );
+  assert.deepEqual(retainedMutationSnapshot(completed.run), before);
+  assert.throws(
+    () => completed.run.processCurrentInteraction(),
+    /temporal history basis is incomplete/
+  );
+  assert.deepEqual(retainedMutationSnapshot(completed.run), before);
+});
+
+test("late direct and later-use failures roll back attribution and projection work", () => {
+  {
+    const completed = directCorrectionDecisionRun({ withFocusedPrefix: false });
+    const inputs = [
+      directContextInput(), directInterruptionInput(), directRequestInput(),
+      directChronologyInput(),
+      fixtureControlInput({
+        control: "user_governed_constraints", value: "exhaustive_selected_slice_scope",
+        occurrenceOrder: 12
+      }),
+      fixtureControlInput({ control: "consequence", value: "low", occurrenceOrder: 13 }),
+      fixtureControlInput({ control: "reversibility", value: "reversible", occurrenceOrder: 14 })
+    ];
+    completed.run.assertSourceFactConsistency(inputs);
+    completed.run.ingest(inputs);
+    const before = retainedMutationSnapshot(completed.run);
+    assert.throws(
+      () => completed.run.processCurrentInteraction(),
+      /redelivery|competing current correction/
+    );
+    assert.deepEqual(retainedMutationSnapshot(completed.run), before);
+  }
+  {
+    const completed = directCorrectionRealizedRun();
+    const activeTrial = [...completed.run.records.values()].find(
+      (record) => record.family === "active_delayed_correction_trial"
+    );
+    const controls = [...completed.run.records.values()].filter((record) => (
+      record.family === "input_fact" && record.role === "fixture_control_fact"
+      && ["user_governed_constraints", "consequence"].includes(record.payload.control)
+    )).map((record) => record.payload);
+    const inputs = [{
+      sourceFactRef: sourceRef(), kind: "context_label", sourceActor: "fixture-driver",
+      occurrenceOrder: 30, surfaceLabel: "voice_simulated",
+      activity: "focused_accuracy_drill", taskMode: "focused_production_drill",
+      consequence: "low", scenarioDay: 145, sessionId: "focused-opt-in-later"
+    }, {
+      sourceFactRef: sourceRef(), kind: "state_reference", sourceActor: "fixture-driver",
+      occurrenceOrder: 31, stateRef: activeTrial.reference
+    }, communicationInput({
+      occurrenceOrder: 32,
+      content: "For this drill, correct me immediately so I can fix each attempt.",
+      context: "focused_production_drill", semanticStatusOrigin: "unclassified"
+    }), ...controls];
+    completed.run.assertSourceFactConsistency(inputs);
+    completed.run.ingest(inputs);
+    activeTrial.currentStatus = "retired";
+    const interactionRef = completed.run.pendingInteractions[0].reference;
+    const before = retainedMutationSnapshot(completed.run);
+    assert.throws(() => completed.run.processCurrentInteraction());
+    assert.deepEqual(retainedMutationSnapshot(completed.run), before);
+    assert.equal([...completed.run.records.values()].some((record) => (
+      record.family === "lineage_preserving_projection"
+      && record.interactionRef === interactionRef
+    )), false);
+  }
+});
+
+test("premature explanation is processed as unavailable without wedging the run", () => {
+  const run = new RunState();
+  const request = explanationRequestInput();
+  run.assertSourceFactConsistency([request]);
+  run.ingest([request]);
+  assert.doesNotThrow(() => run.processCurrentInteraction());
+  assert.equal(run.pendingInteractions.length, 0);
+  assert.equal([...run.records.values()].filter(
+    (record) => record.family === "attributed_assertion"
+  ).length, 1);
+  assert.equal([...run.records.values()].some(
+    (record) => record.family === "explanation_support"
+  ), false);
+  const followUp = communicationInput({
+    occurrenceOrder: 41, content: "Continue with the practice.",
+    context: "spontaneous_production", semanticStatusOrigin: "unclassified"
+  });
+  run.assertSourceFactConsistency([followUp]);
+  run.ingest([followUp]);
+  assert.doesNotThrow(() => run.processCurrentInteraction());
+  assert.equal(run.pendingInteractions.length, 0);
+});
+
+test("multiple outstanding output families fail transparently without mutation", () => {
+  const selected = selectedProposalRun();
+  const controls = [
+    fixtureControlInput({
+      control: "user_governed_constraints", value: "exhaustive_selected_slice_scope",
+      occurrenceOrder: 12
+    }),
+    fixtureControlInput({ control: "consequence", value: "low", occurrenceOrder: 13 }),
+    fixtureControlInput({ control: "reversibility", value: "reversible", occurrenceOrder: 14 })
+  ];
+  selected.run.assertSourceFactConsistency(controls);
+  selected.run.ingest(controls);
+  selected.run.processCurrentInteraction();
+  const direct = [
+    directContextInput(), directInterruptionInput(), directRequestInput(),
+    directChronologyInput(), ...controls
+  ];
+  selected.run.assertSourceFactConsistency(direct);
+  selected.run.ingest(direct);
+  selected.run.processCurrentInteraction();
+  const before = retainedMutationSnapshot(selected.run);
+  assert.throws(() => selected.run.emitAvailableOutputs(), /output ambiguity/i);
+  assert.deepEqual(retainedMutationSnapshot(selected.run), before);
+});
+
+test("terminal outcome and explanation families reject unreferenced competitors", () => {
+  for (const family of ["later_outcome", "outcome_uncertainty"]) {
+    const completed = laterOutcomeRun();
+    const clone = structuredClone([...completed.run.records.values()].find(
+      (record) => record.family === family
+    ));
+    clone.reference = createReference("state");
+    completed.run.records.set(clone.reference, clone);
+    assert.throws(() => completed.run.validateLaterOutcomeClosure(completed.outcome));
+  }
+  for (const family of ["user_facing_explanation", "explanation_support", "explanation_limit"]) {
+    const completed = groundedExplanationRun();
+    const clone = structuredClone([...completed.run.records.values()].find(
+      (record) => record.family === family
+    ));
+    clone.reference = createReference("state");
+    completed.run.records.set(clone.reference, clone);
+    assert.throws(() => completed.run.validateExplanationClosure(completed.support));
+  }
+  {
+    const completed = groundedExplanationRun();
+    completed.support.limitationRefs.causal = completed.support.limitationRefs.scope;
+    assert.throws(() => completed.run.validateExplanationClosure(completed.support));
+  }
+  {
+    const completed = groundedExplanationRun();
+    completed.run.records.get(completed.support.createdByTransitionRef)
+      .resultReferences.push(completed.support.outcomeRef);
+    assert.throws(() => completed.run.validateExplanationClosure(completed.support));
   }
 });
 

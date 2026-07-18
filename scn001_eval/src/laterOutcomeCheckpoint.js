@@ -366,7 +366,7 @@ export function findExactExplanation(
 
 function validUncertainty(uncertainty, outcome, transition, coIntervention) {
   return hasExactKeys(uncertainty, UNCERTAINTY_KEYS)
-    && uncertainty.origin === "sut"
+    && uncertainty.family === "outcome_uncertainty" && uncertainty.origin === "sut"
     && uncertainty.uncertaintyType === "causal_and_co_intervention_limit"
     && uncertainty.causalStatus === "association_only"
     && uncertainty.alternativeCauses === "private_or_unobserved_not_excluded"
@@ -385,16 +385,12 @@ function validUncertainty(uncertainty, outcome, transition, coIntervention) {
 
 function validExplanation(explanation, support, communication, assertion) {
   return hasExactKeys(explanation, EXPLANATION_KEYS)
-    && explanation.origin === "sut"
+    && explanation.family === "user_facing_explanation" && explanation.origin === "sut"
     && explanation.explanationType === "bounded_retained_state_explanation"
     && explanation.requestCommunicationRef === communication?.reference
     && explanation.requestAssertionRef === assertion?.reference
     && explanation.supportRef === support.reference
-    && typeof explanation.userFacingText === "string"
-    && explanation.userFacingText.length > 0
-    && explanation.userFacingText.includes("spontaneous practice")
-    && explanation.userFacingText.includes("focused drill")
-    && explanation.userFacingText.includes("not proof of cause")
+    && hasBoundedExplanationSemantics(explanation.userFacingText)
     && explanation.scopeStatement === LIMITS[0][1]
     && explanation.epistemicStatement === LIMITS[1][1]
     && explanation.causalStatement === LIMITS[2][1]
@@ -408,11 +404,39 @@ function validExplanation(explanation, support, communication, assertion) {
 
 function validLimit(limit, expected, interactionRef, transition) {
   return hasExactKeys(limit, LIMIT_KEYS)
-    && limit.origin === "sut" && limit.limitType === expected[0]
+    && limit.family === "explanation_limit" && limit.origin === "sut"
+    && limit.limitType === expected[0]
     && limit.statement === expected[1] && limit.statusOrigin === "sut_transition"
     && limit.interactionRef === interactionRef
     && limit.effectiveOrder === limit.createdOrder
     && limit.createdByTransitionRef === transition.reference;
+}
+
+function hasBoundedExplanationSemantics(userFacingText) {
+  if (typeof userFacingText !== "string" || userFacingText.length === 0) return false;
+  const text = userFacingText.toLowerCase().replaceAll("’", "'");
+  const requiredCommitments = [
+    /(?:during|in|scoped to|applies? to)[^.!?]{0,100}spontaneous practice|spontaneous practice[^.!?]{0,100}(?:only|scope|applies?)/,
+    /focused drill[^.!?]{0,140}(?:won't|will not|does not|is not|excluded|immediate correction)/,
+    /(?:bounded|reversible|low-consequence)[^.!?]{0,100}trial|trial[^.!?]{0,100}(?:bounded|reversible|low-consequence)/,
+    /not proof of cause|does not prove caus|not causal proof/,
+    /\bnot\b[^.!?]{0,140}(?:fixed (?:user )?preference|fixed (?:learning )?style)/,
+    /\bnot\b[^.!?]{0,180}long-term (?:learning|efficacy|improvement)/
+  ];
+  const forbiddenCommitments = [
+    /\b(?:always|permanently)\s+(?:delay|apply|correct|use)\b/,
+    /\bpermanent (?:global )?(?:policy|preference|behavior|rule)\b/,
+    /\bglobal (?:correction )?(?:policy|preference|rule)\b/,
+    /\b(?:is|becomes?|establishes?|proves?)\b[^.!?]{0,40}\b(?:global |fixed |established )?preference\b/,
+    /\b(?:you have|your|establishes?|proves?) (?:a )?fixed learning style\b/,
+    /\b(?:caused?|causes|proves?) (?:better|improved|improvement|learning)\b/,
+    /\b(?:proves?|establishes?|guarantees?) (?:long-term|lasting) (?:learning|efficacy|improvement)\b/,
+    /\b(?:because|shows?|proves?|establishes?) (?:you were|your )?fatigue\b/,
+    /focused drill[^.!?]{0,120}(?:also|still|will|does) (?:apply|delay)/,
+    /\b(?:chain[- ]of[- ]thought|hidden reasoning|private reasoning)\b/
+  ];
+  return requiredCommitments.every((pattern) => pattern.test(text))
+    && forbiddenCommitments.every((pattern) => !pattern.test(text));
 }
 
 function validateTemporalAssessment(snapshot, evidence, assessment) {
@@ -485,27 +509,43 @@ function validateTemporalAssessment(snapshot, evidence, assessment) {
 function validateAttribution(snapshot, assertion, communication, interaction) {
   const records = indexRecords(snapshot);
   const transition = uniqueCreator(snapshot, assertion);
+  const ingestion = uniqueCreator(snapshot, interaction);
   const actor = records.get(assertion?.sourceActorRef);
   const outward = snapshot.relations.filter(
     (relation) => relation.fromRef === assertion?.reference
   );
+  const competing = snapshot.records.filter((record) => (
+    record.family === "attributed_assertion"
+    && record.sourceCommunicationRef === communication?.reference
+    && record.statusOrigin === "sut_transition"
+  ));
   if (!hasExactKeys(assertion, ATTRIBUTION_KEYS)
-    || assertion.origin !== "sut" || assertion.sourceCommunicationRef !== communication.reference
+    || assertion.family !== "attributed_assertion" || assertion.origin !== "sut"
+    || assertion.sourceCommunicationRef !== communication.reference
     || assertion.sourceActorRef !== communication.sourceActorRef
     || assertion.context !== communication.payload.context
     || assertion.occurrenceOrder !== communication.payload.occurrenceOrder
     || assertion.epistemicStatus !== "attributed_user_assertion"
     || assertion.statusOrigin !== "sut_transition"
     || assertion.interactionRef !== interaction.reference
+    || competing.length !== 1 || competing[0].reference !== assertion.reference
+    || hasExactKeys(transition, TRANSITION_KEYS) !== true
+    || transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
     || transition.transitionKind !== "attribute_current_communications"
+    || transition.interactionRef !== interaction.reference
     || JSON.stringify(transition.inputReferences) !== JSON.stringify([communication.reference])
     || JSON.stringify(transition.resultReferences) !== JSON.stringify([assertion.reference])
     || transition.result !== "accepted"
-    || actor?.sourceActor !== "synthetic-user-a"
+    || actor?.family !== "semantic_source" || actor.origin !== "fixture"
+    || actor.sourceActor !== "synthetic-user-a"
     || !hasExactRelations(outward, [
       [actor.reference, "semantic_source", "source"],
       [communication.reference, "attributed_communication", "basis"]
-    ], undefined, assertion, transition)) {
+    ], undefined, assertion, transition)
+    || communication.createdOrder >= interaction.createdOrder
+    || interaction.createdOrder >= ingestion.createdOrder
+    || ingestion.createdOrder >= assertion.createdOrder
+    || assertion.createdOrder >= transition.createdOrder) {
     throw checkpointError("Explanation attribution is malformed.");
   }
 }
