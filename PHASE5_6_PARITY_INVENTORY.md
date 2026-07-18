@@ -16,6 +16,12 @@ run-local source binding plus original/current ingestion and chronology. `G`
 means the bounded global family cardinality is checked. `P` means validation is
 passive, replay-stable, and covered by no-mutation attacks.
 
+Exact first-ingestion closure is bidirectional for fixture-initialized
+communications: every additional result must be a valid initialized assertion,
+and every newly retained fixture-initialized communication must contribute
+exactly one such result. Redelivery of an already retained communication does
+not create or require a second initialized assertion.
+
 SUT and evaluation use separate private implementations. The shared item is the
 test concept, not a semantic validator.
 

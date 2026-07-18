@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { createSutBoundary } from "../index.js";
 import { validateFocusedDrillInstructionClosure } from "../src/focusedDrill.js";
+import { validateRetainedInputFact } from "../src/retainedStateClosure.js";
 import { RunState, createReference } from "../src/runState.js";
 
 function sourceRef() {
@@ -1614,6 +1615,31 @@ test("binding ingestion accepts a valid fixture-initialized assertion result", (
   interaction = realized.run.pendingInteractions.at(-1);
   facts = interaction.inputReferences.map((reference) => realized.run.records.get(reference));
   assert.equal(realized.run.assessProposalResponseBinding(interaction, facts), undefined);
+});
+
+test("retained input rejects an omitted fixture-initialized assertion result", () => {
+  const run = new RunState();
+  const communication = communicationInput({
+    semanticStatusOrigin: "fixture_initialized",
+    context: "old_practice_history"
+  });
+  run.assertSourceFactConsistency([communication]);
+  const ingress = run.ingest([communication]);
+  const interaction = run.pendingInteractions[0];
+  const fact = run.records.get(ingress.acceptedInputRefs[0]);
+  const ingestion = run.records.get(interaction.createdByTransitionRef);
+  ingestion.resultReferences = [interaction.reference];
+
+  assert.throws(() => validateRetainedInputFact({
+    records: run.records,
+    relations: run.relations,
+    sourceFactBindings: run.sourceFactBindings,
+    fact,
+    origin: "fixture",
+    role: "communication",
+    interaction,
+    expectedSourceActor: "synthetic-user-a"
+  }), /retained input-fact closure is malformed/);
 });
 
 test("noncanonical response stays non-accepting and mismatch fidelity never becomes material match", () => {

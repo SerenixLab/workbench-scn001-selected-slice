@@ -177,6 +177,15 @@ function validateIngestionClosure(records, relations, interaction, ingestion, ex
   const additionalResults = ingestion?.resultReferences?.filter(
     (reference) => reference !== interaction?.reference
   ) ?? [];
+  const expectedInitializedCommunicationRefs = interaction?.inputReferences
+    ?.filter((reference) => {
+      const inputFact = records.get(reference);
+      return inputFact?.family === "input_fact"
+        && inputFact.origin === "fixture"
+        && inputFact.role === "communication"
+        && inputFact.firstInteractionRef === interaction.reference
+        && inputFact.payload?.semanticStatusOrigin === "fixture_initialized";
+    }) ?? [];
   if (!hasExactKeys(interaction, [
     "reference", "family", "origin", "inputReferences", "createdOrder",
     "createdByTransitionRef"
@@ -199,6 +208,9 @@ function validateIngestionClosure(records, relations, interaction, ingestion, ex
     || additionalResults.some((reference) => !isValidInitializedIngestionResult(
       records, relations, reference, ingestion, interaction
     ))
+    || !isDeepStrictEqual(additionalResults.map(
+      (reference) => records.get(reference)?.sourceCommunicationRef
+    ), expectedInitializedCommunicationRefs)
     || bases.length !== interaction.inputReferences.length
     || !sameReferenceSet(
       bases.map((relation) => relation.toRef), interaction.inputReferences

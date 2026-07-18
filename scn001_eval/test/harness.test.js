@@ -4089,6 +4089,54 @@ test("source-binding ledger rejects undeclared ingestion results atomically", ()
   assert.equal(ledger.readOnlyEvidence().length, 1);
 });
 
+test("source-binding ledger rejects an omitted initialized assertion atomically", () => {
+  const real = createSutBoundary();
+  const ledger = createSourceBindingLedger();
+  let corruptInspection = true;
+  let transitionRef;
+  const boundary = Object.freeze({
+    ...real,
+    ingestSutVisibleInputs(...args) {
+      const result = real.ingestSutVisibleInputs(...args);
+      transitionRef = result.transitionRef;
+      return result;
+    },
+    captureInspectionSnapshot(runRef) {
+      const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+      if (corruptInspection) {
+        const ingestion = snapshot.records.find(
+          (record) => record.reference === transitionRef
+        );
+        ingestion.resultReferences = ingestion.resultReferences.filter((reference) => (
+          snapshot.records.find((record) => record.reference === reference)?.family
+            !== "attributed_assertion"
+        ));
+      }
+      return snapshot;
+    }
+  });
+  const harness = createHarnessForMechanismTests(boundary, {
+    createSourceBindingLedger: () => ledger
+  });
+  const runRef = harness.startRun();
+  const records = [communicationFixtureRecord({
+    fixtureRecordId: "H-INIT-MISSING",
+    data: {
+      content: "I always freeze on particles.",
+      context: "old_practice_history",
+      semanticStatusOrigin: "fixture_initialized"
+    }
+  })];
+  assert.throws(
+    () => harness.deliverFixtureRecords(runRef, records),
+    /Successful ingress transition identity is malformed/
+  );
+  assert.deepEqual(ledger.readOnlyEvidence(), []);
+  corruptInspection = false;
+  assert.equal(harness.deliverFixtureRecords(runRef, records).acceptedInputRefs.length, 1);
+  assert.equal(ledger.readOnlyEvidence().length, 1);
+});
+
 test("source-binding ledgers preserve replay identity, isolate runs, and clear on end-run", () => {
   const first = createSourceBindingLedger();
   const second = createSourceBindingLedger();

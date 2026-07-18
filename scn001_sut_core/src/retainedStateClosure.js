@@ -52,6 +52,15 @@ export function validateRetainedInputFact({
     const additionalResults = candidateIngestion?.resultReferences?.filter(
       (reference) => reference !== candidateInteraction?.reference
     ) ?? [];
+    const expectedInitializedCommunicationRefs = candidateInteraction?.inputReferences
+      ?.filter((reference) => {
+        const inputFact = records.get(reference);
+        return inputFact?.family === "input_fact"
+          && inputFact.origin === "fixture"
+          && inputFact.role === "communication"
+          && inputFact.firstInteractionRef === candidateInteraction.reference
+          && inputFact.payload?.semanticStatusOrigin === "fixture_initialized";
+      }) ?? [];
     return hasExactKeys(candidateInteraction, INTERACTION_KEYS)
       && candidateInteraction.family === "interaction_segment"
       && candidateInteraction.origin === "sut"
@@ -75,6 +84,9 @@ export function validateRetainedInputFact({
       && additionalResults.every((reference) => isValidInitializedIngestionResult(
         records, relations, reference, candidateIngestion, candidateInteraction
       ))
+      && isDeepStrictEqual(additionalResults.map(
+        (reference) => records.get(reference)?.sourceCommunicationRef
+      ), expectedInitializedCommunicationRefs)
       && candidateIngestion.result === "accepted"
       && allBases.length === candidateInteraction.inputReferences.length
       && candidateInteraction.inputReferences.every((reference) => allBases.filter(
