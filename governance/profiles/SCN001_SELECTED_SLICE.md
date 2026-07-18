@@ -1,16 +1,16 @@
 # SCN-001 Selected-Slice Engineering Profile
 
-Profile version: `V0.4.1`
+Profile version: `V0.4.3`
 
 Status: `Draft`
 
-Date: 2026-07-10
+Date: 2026-07-18
 
-Base standard: `ENGINEERING_STANDARD.md` `V0.6.1`
+Base standard: `ENGINEERING_STANDARD.md` `V0.6.3`
 
 Decision basis:
 
-- `OPEN_QUESTIONS.md` `V0.2.21`
+- `OPEN_QUESTIONS.md` `V0.2.22`
 - `decisions/ADR-002-scn001-system-under-test-boundary.md` `R2`
 - `decisions/ADR-003-scn001-selected-slice-trial-time-contract.md` `R2`
 - `decisions/ADR-004-scn001-first-milestone-evaluation-policy.md` `R3`
@@ -58,7 +58,7 @@ Governing sources:
 
 - `ADR-001 R1`
 - `ADR-008 R2`
-- `OPEN_QUESTIONS.md V0.2.21`
+- `OPEN_QUESTIONS.md V0.2.22`
 - `ENG-BASE-REPO-001 R2`
 
 Scope: first `SCN-001` selected-slice implementation repository or workbench.
@@ -410,7 +410,7 @@ Rule revision: `R2`
 Governing sources:
 
 - `ADR-008 R2`
-- `ENG-CLAIM-001 R3`
+- `ENG-CLAIM-001 R4`
 
 Scope: tests, traces, demos, and reports that claim selected-slice behavior evidence.
 
@@ -1010,15 +1010,15 @@ Review question: does this reference reveal evaluation context by meaning, not j
 
 ### ENG-CONF-CLAIM-001 - Selected-Slice Claim Boundary
 
-Rule revision: `R3`
+Rule revision: `R4`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.21`
+- `OPEN_QUESTIONS.md V0.2.22`
 - `ADR-004 R3`
 - `ADR-005 R2`
 - `ADR-009 R4`
-- `ENG-CLAIM-001 R3`
+- `ENG-CLAIM-001 R4`
 
 Scope: SCN-001 reports, tests, traces, demos, README text, and implementation docs.
 
@@ -1045,11 +1045,13 @@ Forbidden shapes:
 Required checks:
 
 - docs and reports use bounded language;
-- first compatibility/evaluation-record claims trigger `EVAL-004`;
+- first behavior-configuration bindings or comparisons trigger `EVAL-004`;
+- first formal campaign authorization or authoritative record triggers
+  `EVAL-007`;
 - final scoring or scoreability criteria trigger `EVAL-005`;
 - preparation of the first actual completion-eligibility determination triggers
-  `EVAL-005` and requires the applicable accepted `EVAL-004` and `EVAL-005`
-  contracts;
+  `EVAL-005` and requires the applicable accepted `EVAL-004`, `EVAL-007`, and
+  `EVAL-005` contracts;
 - completion claims bind an attributable determination `D` to the exact
   required completion basis, including package `P`, applicable engineering
   promotion and claim-support gates, and the exact pre-reviewed bounded claim;

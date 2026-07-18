@@ -2776,8 +2776,8 @@ wording requires a grammar and regression update. This remains engineering and
 conformance evidence only, not a formal evaluation campaign, compatibility
 result, score, milestone completion, broader acceptance, readiness, or
 deployment claim. Phase 7 has not started and remains gated by the separately
-owner-governed `EVAL-004` and `EVAL-005` decisions. Phase 8 remains gated by
-`REPO-001`.
+owner-governed `EVAL-004`, `EVAL-007`, and `EVAL-005` decisions. Phase 8
+remains gated by `REPO-001`.
 
 ## Pre-Formal Fixture-Initialization Completeness Hardening
 
@@ -2816,8 +2816,53 @@ independent review before the current head is used as a formal-evidence
 baseline. Until that review is recorded, current-head counts are 44 applicable,
 5 not applicable, 7 review-only, and 37 uncovered, with none
 revalidation-required and none enforced. Phase 7 formal-record and campaign
-implementation also remains blocked by active owner-governed `EVAL-004` and
-`EVAL-005`; this hardening creates no formal evidence or governance resolution.
+implementation also remains blocked by active owner-governed `EVAL-004`,
+`EVAL-007`, and `EVAL-005`; this hardening creates no formal evidence or
+governance resolution.
+
+## Evaluation-Authority Split Governance Projection
+
+On 2026-07-18, the canonical meta baseline was refined in commits `e8ec3e7`
+and `3780a6c` before ADR drafting. `OPEN_QUESTIONS.md V0.2.22` restores
+`EVAL-004` to its permanent behavior-configuration decision target, creates
+linked active `EVAL-007` for evaluation configuration, prospective campaign
+authorization, formal-record authority, replayable evidence, evidence-universe
+and cutoff closure, invalidation, and supersession, and constrains `EVAL-005`
+to instantiate rather than reopen accepted `EVAL-003` campaign/run semantics.
+
+The source-bound engineering projection increments `ENG-CLAIM-001`,
+`ENG-CLAIM-002`, `ENG-CHANGE-001`, and `ENG-CONF-CLAIM-001` from `R3` to `R4`
+because their explicit required checks changed. `ENGINEERING_STANDARD.md
+V0.6.3` and selected-slice profile `V0.4.3` otherwise preserve the active rule
+set, rule targets, enforcement minima, and failure consequences. Canonical
+engineering revalidation record
+`engineering/revalidation/EVAL-AUTHORITY-SPLIT.md` explains the exact source-
+closure result. The local lock pins clean canonical meta commit `3780a6c` and
+the generated snapshots/digests for that basis.
+
+This projection changes no SUT/evaluation implementation, package manifest,
+public boundary, fixture, oracle, simulator, test behavior, or formal-evidence
+artifact. Local source/diff red-team review found no profile conflict, weakened
+claim control, reopened accepted decision, or `P -> D -> A` reversal. The
+projector and governance checker pass. A qualifying human source-bound
+revalidation and instruction-refresh review, and the locally required fresh
+independent generated-artifact review, are not self-attested by this task.
+
+Pending those reviews, the current-head disposition is:
+
+* 44 rules `applicable` and 5 `not-applicable`;
+* 1 applicable rule `review-only`;
+* 37 applicable rules `uncovered`;
+* 6 applicable rules `revalidation-required`;
+* no rule claimed `enforced`.
+
+The six source-bound revalidations are `ENG-BASE-REPO-001`, `ENG-CHANGE-001`,
+`ENG-CLAIM-001`, `ENG-CLAIM-002`, `ENG-CLAIM-WORKBENCH-001`, and
+`ENG-CONF-CLAIM-001`. `ENG-AGENT-CODEX-003` and `ENG-HEALTH-GEN-001` are
+`uncovered` for the new projection until their qualifying reviews are recorded.
+This honest pending status blocks promotion and claim use of the new projection;
+it does not prevent drafting proposed ADRs that remain explicitly non-
+authoritative.
 
 ## Complete Phase 5–6 Blocking Revalidation Record
 

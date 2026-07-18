@@ -1,17 +1,17 @@
 # Zoey Engineering Standard
 
-Document version: `V0.6.1`
+Document version: `V0.6.3`
 
 Status: `Draft`
 
-Date: 2026-07-10
+Date: 2026-07-18
 
 Release context:
 
 - `SYSTEM_THESIS.md` `V0.3.1`
 - `CANONICAL_SCENARIOS.md` `V0.2.2`
 - `STATE_AND_CONTROL_MODEL.md` `V0.4.1`
-- `OPEN_QUESTIONS.md` `V0.2.21`
+- `OPEN_QUESTIONS.md` `V0.2.22`
 - accepted ADRs through `decisions/ADR-009-scn001-first-selected-slice-milestone-completion-gate.md` `R4`
 
 Rule-level governing sources are listed on each rule. The release context is not a substitute for rule-level source references.
@@ -408,7 +408,7 @@ Rule revision: `R2`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.21`
+- `OPEN_QUESTIONS.md V0.2.22`
 
 Scope: every governed non-throwaway implementation repository or workbench.
 
@@ -1254,11 +1254,11 @@ Review question: did generation introduce hidden ownership, state, boundary, or 
 
 ### ENG-CLAIM-001 - Claim Domain Separation
 
-Rule revision: `R3`
+Rule revision: `R4`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.21`
+- `OPEN_QUESTIONS.md V0.2.22`
 - `ADR-009 R4`
 
 Scope: docs, tests, reports, traces, demos, README text, and review language.
@@ -1289,8 +1289,8 @@ Required checks:
   attributable completion-eligibility determination `D`, project-owner
   disposition `A`, and later current bounded-claim standing;
 - actual selected-slice completion determinations do not proceed until the
-  applicable accepted `EVAL-004` and `EVAL-005` contracts required by
-  `ADR-009 R4` exist.
+  applicable accepted `EVAL-004`, `EVAL-007`, and `EVAL-005` contracts required
+  by `ADR-009 R4` exist.
 
 Eligible protection mechanisms:
 
@@ -1317,11 +1317,11 @@ Review question: which claim domain does this artifact support, and what does it
 
 ### ENG-CLAIM-002 - Formal Evaluation Artifact Reservation
 
-Rule revision: `R3`
+Rule revision: `R4`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.21`
+- `OPEN_QUESTIONS.md V0.2.22`
 - `ADR-004 R3`
 - `ADR-005 R2`
 - `ADR-009 R4`
@@ -1342,7 +1342,7 @@ Forbidden shapes:
 - using internal scoring-related evaluation package data to imply final scoreability;
 - treating completion evidence package `P` as self-certifying eligibility;
 - preparing or relying on an actual completion-eligibility determination before
-  the applicable accepted `EVAL-004` and `EVAL-005` contracts exist;
+  the applicable accepted `EVAL-004`, `EVAL-007`, and `EVAL-005` contracts exist;
 - treating owner disposition `A` as formal evidence, eligibility derivation, or
   permission to waive a failed eligibility conjunct.
 
@@ -1353,7 +1353,7 @@ Required checks:
   eligibility determination, and owner disposition;
 - reserved completion artifacts preserve `ADR-009 R4` dependency direction
   `P -> D -> A` and exact-basis attribution without inventing the record schemas
-  reserved to `EVAL-004` and `EVAL-005`.
+  reserved to `EVAL-004`, `EVAL-007`, and `EVAL-005`.
 
 Eligible protection mechanisms:
 
@@ -1378,11 +1378,11 @@ Review question: does this artifact imply formal evaluation evidence before the 
 
 ### ENG-CHANGE-001 - Open Question Trigger Discipline
 
-Rule revision: `R3`
+Rule revision: `R4`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.21`
+- `OPEN_QUESTIONS.md V0.2.22`
 - `ADR-009 R4`
 
 Scope: implementation work that crosses unresolved governance frontiers.
@@ -1401,11 +1401,13 @@ Forbidden shapes:
 
 Required checks:
 
-- review asks whether the change triggers `EVAL-004`, `EVAL-005`, `DEP-003`,
-  `REPO-001`, `MEM-*`, `TRUST-*`, `PROD-*`, `SURF-*`, `CONT-*`, or `LEG-*`;
+- review asks whether the change triggers `EVAL-004`, `EVAL-007`, `EVAL-005`,
+  `DEP-003`, `REPO-001`, `MEM-*`, `TRUST-*`, `PROD-*`, `SURF-*`, `CONT-*`, or
+  `LEG-*`;
 - selected-slice completion work is reviewed for compliance with the accepted
-  `SLICE-005` resolution in `ADR-009 R4`, including the separate `EVAL-004` and
-  `EVAL-005` triggers, rather than treating `SLICE-005` as unresolved.
+  `SLICE-005` resolution in `ADR-009 R4`, including the separate `EVAL-004`,
+  `EVAL-007`, and `EVAL-005` triggers, rather than treating `SLICE-005` as
+  unresolved.
 
 Eligible protection mechanisms:
 
