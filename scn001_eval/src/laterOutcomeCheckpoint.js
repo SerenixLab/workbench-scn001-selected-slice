@@ -167,6 +167,7 @@ export function findExactLaterOutcome(
       ], "basis", uncertainty, transition
     )
     || !hasExactKeys(transition, TRANSITION_KEYS)
+    || transition.family !== "sut_transition_evidence"
     || transition.transitionKind !== "record_intervention_conditioned_later_outcome"
     || transition.origin !== "sut" || transition.interactionRef !== interaction?.reference
     || transition.result !== "intervention_conditioned_later_outcome_recorded"
@@ -306,7 +307,7 @@ export function findExactExplanation(
     (relation) => relation.fromRef === support.reference
   );
   if (!hasExactKeys(support, SUPPORT_KEYS)
-    || support.origin !== "sut"
+    || support.family !== "explanation_support" || support.origin !== "sut"
     || support.supportType !== "retained_behavior_change_lineage"
     || support.supportCompleteness !== "complete_selected_behavior_change_lineage"
     || support.hiddenChainOfThought !== "not_required_not_retained"
@@ -335,7 +336,7 @@ export function findExactExplanation(
       limit, LIMITS[index], support.interactionRef, transition
     ))
     || !hasExactKeys(transition, TRANSITION_KEYS)
-    || transition.origin !== "sut"
+    || transition.family !== "sut_transition_evidence" || transition.origin !== "sut"
     || transition.transitionKind !== "derive_grounded_later_behavior_explanation"
     || transition.interactionRef !== interaction?.reference
     || transition.result !== "grounded_later_behavior_explanation_derived"
@@ -414,31 +415,17 @@ function validLimit(limit, expected, interactionRef, transition) {
 
 function hasBoundedExplanationSemantics(userFacingText) {
   if (typeof userFacingText !== "string" || userFacingText.length === 0) return false;
-  const text = userFacingText.toLowerCase().replaceAll("’", "'");
-  const requiredCommitments = [
-    /(?:during|in|scoped to|applies? to)[^.!?]{0,100}spontaneous practice|spontaneous practice[^.!?]{0,100}(?:only|scope|applies?)/,
-    /focused drill[^.!?]{0,140}(?:won't|will not|does not|is not|excluded|immediate correction)/,
-    /(?:bounded|reversible|low-consequence)[^.!?]{0,100}trial|trial[^.!?]{0,100}(?:bounded|reversible|low-consequence)/,
-    /not proof of cause|does not prove caus|not causal proof/,
-    /\bnot\b[^.!?]{0,140}(?:fixed (?:user )?preference|fixed (?:learning )?style)/,
-    /\bnot\b[^.!?]{0,180}long-term (?:learning|efficacy|improvement)/
+  const sentences = userFacingText.trim().toLowerCase().replaceAll("’", "'")
+    .replaceAll(/\s+/g, " ").split(/(?<=[.!?])\s+/);
+  const approvedSentenceGrammar = [
+    /^(?:i'm|i am) (?:delaying|holding) minor corrections until you finish during spontaneous practice because you asked not to be interrupted here, and (?:i'm|i am) (?:testing|trying) that as a (?:low-consequence, reversible|reversible, low-consequence) trial informed by the earlier drill\.$/,
+    /^(?:in|during) a focused drill where you ask for immediate correction, (?:i won't|i will not) apply that delay\.$/,
+    /^this session was followed by longer speaking and you said the pacing felt easier, but that is an observation in this context(?:—|-|, )not proof of cause, (?:a fixed preference|a stable preference), or long-term learning\.$/
   ];
-  const forbiddenCommitments = [
-    /\b(?:always|permanently)\b[^.!?]{0,30}\b(?:appl(?:y|ies|ied)|delay(?:s|ed)?|correct(?:s|ed)?|use(?:s|d)?)\b/,
-    /\bpermanent (?:global )?(?:policy|preference|behavior|rule)\b/,
-    /\bglobal (?:correction )?(?:policy|preference|rule)\b/,
-    /\b(?:is|becomes?|establishes?|proves?)\b[^.!?]{0,40}\b(?:global |fixed |established )?preference\b/,
-    /\b(?:you have|your|establishes?|proves?) (?:a )?fixed learning style\b/,
-    /\b(?:caused|causes|made|makes|proves?)\b[^.!?]{0,50}\b(?:better|improved|improvement|learning|learn)\b/,
-    /\b(?:proves?|establishes?|guarantees?|shows?)\b[^.!?]{0,50}\b(?:long[- ]term|lasting|permanent)\b[^.!?]{0,30}\b(?:learning|efficacy|improvement|benefit)\b/,
-    /\b(?:because|shows?|proves?|establishes?|reason is)\b[^.!?]{0,50}\b(?:fatigue|fatigued|tiredness|tired)\b/,
-    /\b(?:you (?:were|are)|your)\b[^.!?]{0,20}\b(?:fatigue|fatigued|tiredness|tired)\b/,
-    /focused drill[^.!?]{0,120}(?:also|still|will|does)\s+(?:apply|delay)/,
-    /(?:apply|applies|delay|delays)[^.!?]{0,80}focused drill/,
-    /\b(?:chain[- ]of[- ]thought|hidden reasoning|private reasoning)\b/
-  ];
-  return requiredCommitments.every((pattern) => pattern.test(text))
-    && forbiddenCommitments.every((pattern) => !pattern.test(text));
+  return sentences.length === approvedSentenceGrammar.length
+    && sentences.every((sentence, index) => (
+      approvedSentenceGrammar[index].test(sentence)
+    ));
 }
 
 function validateTemporalAssessment(snapshot, evidence, assessment) {
@@ -460,6 +447,7 @@ function validateTemporalAssessment(snapshot, evidence, assessment) {
   const ageDays = chronology?.payload?.scenarioDay
     - observation?.payload?.occurrenceScenarioDay;
   if (!hasExactKeys(assessment, TEMPORAL_ASSESSMENT_KEYS)
+    || assessment.family !== "temporal_eligibility_assessment"
     || assessment.origin !== "sut"
     || assessment.useTarget !== "independent_current_skill_authority"
     || assessment.dimension !== observation?.payload?.dimension
@@ -469,12 +457,18 @@ function validateTemporalAssessment(snapshot, evidence, assessment) {
     || assessment.eligibility !== (ageDays > 90 ? "ineligible" : "eligible")
     || assessment.temporalUncertainty !== "none"
     || assessment.statusOrigin !== "sut_transition"
+    || transition.reference !== assessment.createdByTransitionRef
+    || !hasExactKeys(transition, TRANSITION_KEYS)
+    || transition.family !== "sut_transition_evidence"
     || transition.transitionKind !== "assess_temporal_eligibility"
     || transition.origin !== "sut" || transition.interactionRef !== interaction?.reference
     || transition.result !== "accepted"
     || JSON.stringify(transition.inputReferences) !== JSON.stringify(expectedInputRefs)
     || resultAssessments.length === 0
     || new Set(transition.resultReferences).size !== transition.resultReferences.length
+    || transition.resultReferences.filter(
+      (reference) => reference === assessment.reference
+    ).length !== 1
     || resultAssessments.some((item) => (
       item?.family !== "temporal_eligibility_assessment"
       || item.createdByTransitionRef !== transition.reference

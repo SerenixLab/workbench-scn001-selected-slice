@@ -3112,6 +3112,46 @@ test("focused-drill closure attacks fail before allocating or repairing retained
     assert.deepEqual(retainedMutationSnapshot(decision.run), before);
   }
   {
+    const decision = focusedDrillDecisionRun();
+    const communication = decision.run.records.get(
+      decision.instruction.sourceCommunicationRef
+    );
+    const assertion = decision.run.records.get(
+      decision.instruction.attributedAssertionRef
+    );
+    const clone = {
+      ...structuredClone(assertion), reference: createReference("assertion")
+    };
+    decision.run.records.set(clone.reference, clone);
+    const before = retainedMutationSnapshot(decision.run);
+    assert.throws(
+      () => decision.run.emitAvailableOutputs(),
+      /attribution closure is malformed/
+    );
+    assert.equal(clone.sourceCommunicationRef, communication.reference);
+    assert.deepEqual(retainedMutationSnapshot(decision.run), before);
+  }
+  {
+    const decision = focusedDrillDecisionRun();
+    const interaction = decision.run.records.get(decision.instruction.interactionRef);
+    const ingestion = decision.run.records.get(interaction.createdByTransitionRef);
+    const communicationRef = decision.instruction.sourceCommunicationRef;
+    const communicationBasis = decision.run.relations.find((relation) => (
+      relation.fromRef === ingestion.reference
+      && relation.toRef === communicationRef
+      && relation.targetRole === "ingested_input"
+    ));
+    interaction.inputReferences.push(communicationRef);
+    ingestion.inputReferences.push(communicationRef);
+    decision.run.relations.push(structuredClone(communicationBasis));
+    const before = retainedMutationSnapshot(decision.run);
+    assert.throws(
+      () => decision.run.emitAvailableOutputs(),
+      /retained input-fact closure is malformed/
+    );
+    assert.deepEqual(retainedMutationSnapshot(decision.run), before);
+  }
+  {
     const run = activationReadyRun();
     const inputs = [focusedDrillContextInput(), focusedDrillRequestInput()];
     run.assertSourceFactConsistency(inputs);
@@ -4336,6 +4376,28 @@ test("premature explanation is processed as unavailable without wedging the run"
   run.ingest([followUp]);
   assert.doesNotThrow(() => run.processCurrentInteraction());
   assert.equal(run.pendingInteractions.length, 0);
+});
+
+test("premature explanation rejects orphan terminal artifacts without mutation", () => {
+  for (const family of [
+    "user_facing_explanation", "explanation_support", "explanation_limit"
+  ]) {
+    const run = new RunState();
+    const request = explanationRequestInput();
+    run.assertSourceFactConsistency([request]);
+    run.ingest([request]);
+    const orphan = {
+      reference: createReference("state"), family, origin: "sut",
+      createdOrder: run.allocateOrder()
+    };
+    run.records.set(orphan.reference, orphan);
+    const before = retainedMutationSnapshot(run);
+    assert.throws(
+      () => run.processCurrentInteraction(),
+      /Explanation (?:support is ambiguous|artifacts exist without an outcome)/
+    );
+    assert.deepEqual(retainedMutationSnapshot(run), before);
+  }
 });
 
 test("multiple outstanding output families fail transparently without mutation", () => {

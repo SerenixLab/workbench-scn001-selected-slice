@@ -55,6 +55,9 @@ export function validateRetainedInputFact({
     return hasExactKeys(candidateInteraction, INTERACTION_KEYS)
       && candidateInteraction.family === "interaction_segment"
       && candidateInteraction.origin === "sut"
+      && Array.isArray(candidateInteraction.inputReferences)
+      && new Set(candidateInteraction.inputReferences).size
+        === candidateInteraction.inputReferences.length
       && hasExactKeys(candidateIngestion, TRANSITION_KEYS)
       && candidateIngestion.family === "sut_transition_evidence"
       && candidateIngestion.origin === "sut"
@@ -63,6 +66,9 @@ export function validateRetainedInputFact({
       && isDeepStrictEqual(
         candidateIngestion.inputReferences, candidateInteraction.inputReferences
       )
+      && Array.isArray(candidateIngestion.resultReferences)
+      && new Set(candidateIngestion.resultReferences).size
+        === candidateIngestion.resultReferences.length
       && candidateIngestion.resultReferences.filter(
         (reference) => reference === candidateInteraction.reference
       ).length === 1
@@ -71,12 +77,19 @@ export function validateRetainedInputFact({
       ))
       && candidateIngestion.result === "accepted"
       && allBases.length === candidateInteraction.inputReferences.length
-      && candidateInteraction.inputReferences.every((reference) => allBases.some(
+      && candidateInteraction.inputReferences.every((reference) => allBases.filter(
         (relation) => relation.toRef === reference
           && relation.targetRole === "ingested_input"
           && relation.assertedByRole === "sut"
           && relation.effectiveOrder === candidateIngestion.createdOrder
           && relation.createdOrder === candidateIngestion.createdOrder
+      ).length === 1)
+      && allBases.every((relation) => (
+        candidateInteraction.inputReferences.includes(relation.toRef)
+        && relation.targetRole === "ingested_input"
+        && relation.assertedByRole === "sut"
+        && relation.effectiveOrder === candidateIngestion.createdOrder
+        && relation.createdOrder === candidateIngestion.createdOrder
       ));
   };
   if (fact?.family !== "input_fact" || fact.origin !== origin || fact.role !== role

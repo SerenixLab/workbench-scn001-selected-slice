@@ -7,6 +7,11 @@ const TRANSITION_KEYS = Object.freeze([
   "inputReferences", "resultReferences", "createdOrder", "result"
 ]);
 
+const INTERACTION_KEYS = Object.freeze([
+  "reference", "family", "origin", "inputReferences", "createdOrder",
+  "createdByTransitionRef"
+]);
+
 const ATTRIBUTION_KEYS = Object.freeze([
   "reference", "family", "origin", "sourceCommunicationRef", "sourceActorRef",
   "context", "occurrenceOrder", "epistemicStatus", "statusOrigin",
@@ -845,12 +850,15 @@ export function validateBoundFact(snapshot, evidence, fact, origin) {
     || sources.length !== 1 || sources[0].toRef !== actor.reference
     || sources[0].targetRole !== "semantic_source"
     || !exactRelationMetadata(sources[0], fact.createdOrder, ingestion.createdOrder, "sut")
-    || interaction?.family !== "interaction_segment" || interaction.origin !== "sut"
+    || !hasExactKeys(interaction, INTERACTION_KEYS)
+    || interaction.family !== "interaction_segment" || interaction.origin !== "sut"
     || !interaction.inputReferences.includes(fact.reference)
     || interaction.inputReferences.length !== new Set(interaction.inputReferences).size
+    || !hasExactKeys(ingestion, TRANSITION_KEYS)
     || ingestion.family !== "sut_transition_evidence" || ingestion.origin !== "sut"
     || ingestion.transitionKind !== "ingest_sut_visible_inputs"
     || ingestion.interactionRef !== interaction.reference
+    || interaction.createdByTransitionRef !== ingestion.reference
     || JSON.stringify(ingestion.inputReferences) !== JSON.stringify(interaction.inputReferences)
     || JSON.stringify(ingestion.resultReferences) !== JSON.stringify([interaction.reference])
     || ingestion.result !== "accepted"

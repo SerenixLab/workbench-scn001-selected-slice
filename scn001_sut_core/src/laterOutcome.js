@@ -363,10 +363,32 @@ export function deriveExplanationParticipants({
   }
   const assertion = assertions[0];
   validateExplanationAttribution(records, relations, assertion, communication, interaction);
+  const existing = [...records.values()].filter(
+    (record) => record.family === "explanation_support"
+  );
+  const existingExplanations = [...records.values()].filter(
+    (record) => record.family === "user_facing_explanation"
+  );
+  const existingLimits = [...records.values()].filter(
+    (record) => record.family === "explanation_limit"
+  );
+  if (existing.length > 1 || existingExplanations.length > 1
+    || existingLimits.length > LIMITS.length
+    || (existing.length === 0 && (
+      existingExplanations.length !== 0 || existingLimits.length !== 0
+    ))) {
+    throw new SutStateIntegrityError("Explanation support is ambiguous.");
+  }
   const outcomes = [...records.values()].filter(
     (record) => record.family === "later_outcome"
   );
-  if (outcomes.length === 0) return undefined;
+  if (outcomes.length === 0) {
+    if (existing.length !== 0 || existingExplanations.length !== 0
+      || existingLimits.length !== 0) {
+      throw new SutStateIntegrityError("Explanation artifacts exist without an outcome.");
+    }
+    return undefined;
+  }
   if (outcomes.length !== 1) {
     throw new SutStateIntegrityError("Explanation requires one exact retained outcome.");
   }
@@ -411,22 +433,6 @@ export function deriveExplanationParticipants({
     realizationTransition: records.get(outcome.realizationTransitionRef),
     outcome, uncertainty, temporalAssessments, comparison, interaction
   };
-  const existing = [...records.values()].filter(
-    (record) => record.family === "explanation_support"
-  );
-  const existingExplanations = [...records.values()].filter(
-    (record) => record.family === "user_facing_explanation"
-  );
-  const existingLimits = [...records.values()].filter(
-    (record) => record.family === "explanation_limit"
-  );
-  if (existing.length > 1 || existingExplanations.length > 1
-    || existingLimits.length > LIMITS.length
-    || (existing.length === 0 && (
-      existingExplanations.length !== 0 || existingLimits.length !== 0
-    ))) {
-    throw new SutStateIntegrityError("Explanation support is ambiguous.");
-  }
   if (existing.length === 1) {
     return {
       kind: "reuse",

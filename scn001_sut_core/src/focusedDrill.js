@@ -581,6 +581,11 @@ function validateFocusedDrillAttribution(records, relations, assertion, communic
   const basisRelations = relations.filter((relation) => (
     relation.fromRef === assertion?.reference && relation.relationKind === "basis"
   ));
+  const competingAssertions = [...records.values()].filter((record) => (
+    record.family === "attributed_assertion"
+    && record.sourceCommunicationRef === communication?.reference
+    && record.statusOrigin === "sut_transition"
+  ));
   if (!hasExactKeys(assertion, [
     "reference", "family", "origin", "sourceCommunicationRef", "sourceActorRef",
     "context", "occurrenceOrder", "epistemicStatus", "statusOrigin", "interactionRef",
@@ -593,6 +598,8 @@ function validateFocusedDrillAttribution(records, relations, assertion, communic
     || assertion.epistemicStatus !== "attributed_user_assertion"
     || assertion.statusOrigin !== "sut_transition"
     || assertion.interactionRef !== interaction.reference
+    || competingAssertions.length !== 1
+    || competingAssertions[0].reference !== assertion.reference
     || actor?.family !== "semantic_source" || actor.origin !== "fixture"
     || actor.sourceActor !== "synthetic-user-a"
     || !hasExactKeys(transition, TRANSITION_KEYS)

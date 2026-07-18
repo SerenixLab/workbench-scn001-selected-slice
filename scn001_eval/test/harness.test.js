@@ -1438,6 +1438,34 @@ test("canonical later outcome remains intervention-conditioned and explanation i
   )), false);
 });
 
+test("explanation oracle accepts bounded wording within its closed grammar", () => {
+  const real = createSutBoundary();
+  let useVariant = false;
+  const boundary = Object.freeze({
+    ...real,
+    captureInspectionSnapshot(runRef) {
+      const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+      if (useVariant) {
+        snapshot.records.find(
+          (record) => record.family === "user_facing_explanation"
+        ).userFacingText = "I am holding minor corrections until you finish during "
+          + "spontaneous practice because you asked not to be interrupted here, and I am "
+          + "trying that as a reversible, low-consequence trial informed by the earlier "
+          + "drill. During a focused drill where you ask for immediate correction, I will "
+          + "not apply that delay. This session was followed by longer speaking and you said "
+          + "the pacing felt easier, but that is an observation in this context, not proof "
+          + "of cause, a stable preference, or long-term learning.";
+      }
+      return snapshot;
+    }
+  });
+  const harness = createEvaluationHarness(boundary);
+  const runRef = harness.startRun();
+  completeGroundedExplanation(harness, runRef);
+  useVariant = true;
+  assert.equal(harness.inspectExplanationCheckpoint(runRef).length, 1);
+});
+
 test("later facts and explanation prompt remain gated by exact prior checkpoints", () => {
   const boundary = createSutBoundary();
   const harness = createEvaluationHarness(boundary);
@@ -1641,6 +1669,11 @@ test("CP-LATER-OUTCOME rejects causal promotion and malformed closure passively"
         ...structuredClone(uncertainty),
         reference: "state_00000000-0000-0000-0000-000000000093"
       });
+    }],
+    ["outcome creator transition family rewrite", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.transitionKind === "record_intervention_conditioned_later_outcome"
+      )).family = "unrelated_family";
     }]
   ];
   for (const [name, attack] of attacks) {
@@ -1792,6 +1825,61 @@ test("CP-EXPLANATION rejects missing provenance and unsupported claims passively
     ["mixed hidden-reasoning claim", (snapshot) => {
       snapshot.records.find((record) => record.family === "user_facing_explanation")
         .userFacingText += " My private reasoning establishes this conclusion.";
+    }],
+    ["mixed default-global claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " From now on, I will use this delay by default in every setting.";
+    }],
+    ["mixed reverse causal claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " The improvement came from delaying corrections.";
+    }],
+    ["mixed durable-gains claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " This demonstrates durable gains.";
+    }],
+    ["mixed fatigue-explanation claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " Fatigue explains the result.";
+    }],
+    ["mixed learner-label claim", (snapshot) => {
+      snapshot.records.find((record) => record.family === "user_facing_explanation")
+        .userFacingText += " You are a correction-sensitive learner.";
+    }],
+    ["explanation creator transition family rewrite", (snapshot) => {
+      snapshot.records.find((record) => (
+        record.transitionKind === "derive_grounded_later_behavior_explanation"
+      )).family = "unrelated_family";
+    }],
+    ["temporal creator transition family rewrite", (snapshot) => {
+      const assessment = snapshot.records.find((record) => (
+        record.family === "temporal_eligibility_assessment"
+        && record.dimension === "particle_pattern_a"
+      ));
+      snapshot.records.find(
+        (record) => record.reference === assessment.createdByTransitionRef
+      ).family = "unrelated_family";
+    }],
+    ["bound-fact original interaction extra key", (snapshot) => {
+      const outcome = snapshot.records.find((record) => record.family === "later_outcome");
+      const fact = snapshot.records.find(
+        (record) => record.reference === outcome.outcomeFactRefs[0]
+      );
+      snapshot.records.find(
+        (record) => record.reference === fact.firstInteractionRef
+      ).unexpected = true;
+    }],
+    ["bound-fact original ingestion extra key", (snapshot) => {
+      const outcome = snapshot.records.find((record) => record.family === "later_outcome");
+      const fact = snapshot.records.find(
+        (record) => record.reference === outcome.outcomeFactRefs[0]
+      );
+      const interaction = snapshot.records.find(
+        (record) => record.reference === fact.firstInteractionRef
+      );
+      snapshot.records.find(
+        (record) => record.reference === interaction.createdByTransitionRef
+      ).unexpected = true;
     }],
     ["explanation assertion family rewrite", (snapshot) => {
       const support = snapshot.records.find(
@@ -3964,6 +4052,43 @@ test("failed post-ingress identity resolution commits no partial source bindings
   assert.equal(ledger.readOnlyEvidence().length, 2);
 });
 
+test("source-binding ledger rejects undeclared ingestion results atomically", () => {
+  const real = createSutBoundary();
+  const ledger = createSourceBindingLedger();
+  let corruptInspection = true;
+  let transitionRef;
+  const boundary = Object.freeze({
+    ...real,
+    ingestSutVisibleInputs(...args) {
+      const result = real.ingestSutVisibleInputs(...args);
+      transitionRef = result.transitionRef;
+      return result;
+    },
+    captureInspectionSnapshot(runRef) {
+      const snapshot = structuredClone(real.captureInspectionSnapshot(runRef));
+      if (corruptInspection) {
+        snapshot.records.find(
+          (record) => record.reference === transitionRef
+        ).resultReferences.push("state_undeclared_ingestion_result");
+      }
+      return snapshot;
+    }
+  });
+  const harness = createHarnessForMechanismTests(boundary, {
+    createSourceBindingLedger: () => ledger
+  });
+  const runRef = harness.startRun();
+  const records = [communicationFixtureRecord()];
+  assert.throws(
+    () => harness.deliverFixtureRecords(runRef, records),
+    /Successful ingress transition identity is malformed/
+  );
+  assert.deepEqual(ledger.readOnlyEvidence(), []);
+  corruptInspection = false;
+  assert.equal(harness.deliverFixtureRecords(runRef, records).acceptedInputRefs.length, 1);
+  assert.equal(ledger.readOnlyEvidence().length, 1);
+});
+
 test("source-binding ledgers preserve replay identity, isolate runs, and clear on end-run", () => {
   const first = createSourceBindingLedger();
   const second = createSourceBindingLedger();
@@ -4140,6 +4265,17 @@ test("focused-drill realization checkpoint rejects actor, ingestion, relation, a
       snapshot.records.find(
         (record) => record.reference === interaction.createdByTransitionRef
       ).inputReferences = [];
+    },
+    (snapshot) => {
+      const fact = snapshot.records.find(
+        (record) => record.role === "simulator_behavior_realization"
+      );
+      const interaction = snapshot.records.find(
+        (record) => record.reference === fact.firstInteractionRef
+      );
+      snapshot.records.find(
+        (record) => record.reference === interaction.createdByTransitionRef
+      ).unexpected = true;
     },
     (snapshot) => {
       snapshot.relations.find((relation) => (

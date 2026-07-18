@@ -1310,11 +1310,16 @@ function hasExactRetainedInputClosure(snapshot, fact, origin, role, sourceActor)
     && interaction.family === "interaction_segment" && interaction.origin === "sut"
     && interaction.inputReferences.includes(fact.reference)
     && interaction.inputReferences.length === new Set(interaction.inputReferences).size
+    && hasExactKeys(ingestion, [
+      "reference", "family", "origin", "transitionKind", "interactionRef",
+      "inputReferences", "resultReferences", "createdOrder", "result"
+    ])
     && ingestion.family === "sut_transition_evidence" && ingestion.origin === "sut"
     && ingestion.transitionKind === "ingest_sut_visible_inputs"
     && ingestion.interactionRef === interaction.reference
     && JSON.stringify(ingestion.inputReferences) === JSON.stringify(interaction.inputReferences)
     && JSON.stringify(ingestion.resultReferences) === JSON.stringify([interaction.reference])
+    && ingestion.resultReferences.length === new Set(ingestion.resultReferences).size
     && ingestion.result === "accepted"
     && sources.length === 1
     && hasRoleReference(sources, actor.reference, "semantic_source")

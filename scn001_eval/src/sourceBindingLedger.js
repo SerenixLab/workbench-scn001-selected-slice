@@ -174,6 +174,9 @@ function validateIngestionClosure(records, relations, interaction, ingestion, ex
   const bases = relations.filter((relation) => (
     relation.fromRef === ingestion?.reference && relation.relationKind === "basis"
   ));
+  const additionalResults = ingestion?.resultReferences?.filter(
+    (reference) => reference !== interaction?.reference
+  ) ?? [];
   if (!hasExactKeys(interaction, [
     "reference", "family", "origin", "inputReferences", "createdOrder",
     "createdByTransitionRef"
@@ -192,6 +195,10 @@ function validateIngestionClosure(records, relations, interaction, ingestion, ex
     || ingestion.resultReferences.filter((reference) => (
       reference === interaction.reference
     )).length !== 1
+    || new Set(ingestion.resultReferences).size !== ingestion.resultReferences.length
+    || additionalResults.some((reference) => !isValidInitializedIngestionResult(
+      records, relations, reference, ingestion, interaction
+    ))
     || bases.length !== interaction.inputReferences.length
     || !sameReferenceSet(
       bases.map((relation) => relation.toRef), interaction.inputReferences
@@ -203,6 +210,46 @@ function validateIngestionClosure(records, relations, interaction, ingestion, ex
     || interaction.createdOrder >= ingestion.createdOrder) {
     throw new Error("Successful ingress transition identity is malformed.");
   }
+}
+
+function isValidInitializedIngestionResult(
+  records, relations, reference, transition, interaction
+) {
+  const assertion = records.get(reference);
+  const communication = records.get(assertion?.sourceCommunicationRef);
+  const actor = records.get(assertion?.sourceActorRef);
+  const sources = relations.filter((relation) => (
+    relation.fromRef === reference && relation.relationKind === "source"
+  ));
+  const bases = relations.filter((relation) => (
+    relation.fromRef === reference && relation.relationKind === "basis"
+  ));
+  return assertion?.family === "attributed_assertion" && assertion.origin === "fixture"
+    && assertion.epistemicStatus === "attributed_user_assertion"
+    && assertion.statusOrigin === "fixture_initialized"
+    && assertion.interactionRef === interaction?.reference
+    && assertion.createdByTransitionRef === transition?.reference
+    && assertion.createdOrder < transition.createdOrder
+    && communication?.family === "input_fact" && communication.origin === "fixture"
+    && communication.role === "communication"
+    && communication.payload?.semanticStatusOrigin === "fixture_initialized"
+    && assertion.context === communication.payload.context
+    && assertion.occurrenceOrder === communication.payload.occurrenceOrder
+    && transition.inputReferences?.includes(communication.reference)
+    && actor?.family === "semantic_source" && actor.origin === "fixture"
+    && actor.sourceActor === communication.payload.sourceActor
+    && actor.reference === assertion.sourceActorRef
+    && communication.sourceActorRef === actor.reference
+    && sources.length === 1 && sources[0].toRef === actor.reference
+    && sources[0].targetRole === "semantic_source"
+    && sources[0].assertedByRole === "fixture"
+    && sources[0].effectiveOrder === assertion.createdOrder
+    && sources[0].createdOrder === transition.createdOrder
+    && bases.length === 1 && bases[0].toRef === communication.reference
+    && bases[0].targetRole === "initialized_communication"
+    && bases[0].assertedByRole === "fixture"
+    && bases[0].effectiveOrder === assertion.createdOrder
+    && bases[0].createdOrder === transition.createdOrder;
 }
 
 function uniqueReferences(references) {
