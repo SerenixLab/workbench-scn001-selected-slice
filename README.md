@@ -89,12 +89,16 @@ parity gaps. Fresh independent review passed exact corrective range
 status is therefore **implemented, locally green, and independently reviewed**.
 Targeted pre-formal hardening `a7d787f` additionally requires every newly
 retained fixture-initialized communication to contribute exactly one initialized
-assertion result on both SUT and evaluator ingress. All local gates pass at that
-head; the narrow delta awaits change-specific independent review before it may
-enter a formal-evidence baseline. Phase 7 remains separately blocked by its
-owner-governed decisions, and
-no formal evaluation, compatibility, scoring, completion, or extraction work
-has started.
+assertion result on both SUT and evaluator ingress. Fresh independent review of
+the complete initialization-hardening range `6e57840..6d8b41d` passed with no
+blocking finding, so the current implementation may serve as a prospective
+Phase 7 code baseline. That review cannot promote any existing run, capture,
+trace, checkpoint, or artifact into formal evidence. `ADR-010 R3`, `ADR-011
+R3`, and `ADR-012 R3` are accepted; Phase 7 remains blocked until their
+projected engineering rules, local conformance mapping, governance gates, and
+required reviews close. No formal campaign authorization, formal evaluation
+evidence, compatibility result, bounded campaign result, completion artifact,
+or extraction work has started.
 
 ## Local Commands
 
@@ -134,6 +138,22 @@ Durable system-project extraction is blocked pending `REPO-001` or an equivalent
 
 ## Current Semantic Frontier
 
-The selected engineering chain is implemented through `DP-OUTCOME-UPDATE` and `DP-EXPLAIN`, including exact `CP-CANONICAL-INTERVENTION` gating and the mandatory `CF-DRILL-OPT-IN` counterpressure. The next phase would create formal evaluation records, behavior-configuration comparisons, compatibility claims, campaign aggregation, or scoreability criteria.
+The selected engineering chain is implemented through `DP-OUTCOME-UPDATE` and
+`DP-EXPLAIN`, including exact `CP-CANONICAL-INTERVENTION` gating and the
+mandatory `CF-DRILL-OPT-IN` counterpressure. Accepted `ADR-010 R3`, `ADR-011
+R3`, and `ADR-012 R3` now govern the next phase's behavior/evaluation manifests,
+prospective campaign authority, durable formal records/evidence, campaign and
+namespace indexes, bounded aggregation, result standing, and claim ceiling.
 
-That phase is intentionally blocked until the applicable `EVAL-004` and `EVAL-005` contracts are activated and accepted. This workbench must not pre-invent their record identity, configuration metadata, aggregation, or scoring rules. No current artifact establishes behavioral compatibility, formal evidence, scoring, milestone acceptance, broader `SCN-001` acceptance, or production readiness. Durable repository extraction also remains blocked by `REPO-001`.
+Phase 7 may begin only after the current governance projection, local
+conformance remapping, instruction refresh, complete local gates, and required
+review closures pass. It must create every formal artifact prospectively under
+the accepted anchor/fresh-start chain; no current or historical development
+artifact is eligible for promotion. No current artifact establishes behavioral
+compatibility, formal evidence, scoreability, bounded pass/fail, milestone
+acceptance, broader `SCN-001` acceptance, or production readiness. Durable
+repository extraction remains blocked by `REPO-001`.
+
+`PHASE7_READINESS.md` is the current review-routing checklist. Its status remains
+`BLOCKED_PENDING_REVIEW` until the required human source-bound review and
+independent generated-projection review are committed.

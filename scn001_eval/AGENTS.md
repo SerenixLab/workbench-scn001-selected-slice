@@ -36,7 +36,27 @@ Simulator outputs returning to SUT use the same closed-ingress barrier as fixtur
 
 - `[ENG-CONF-CLAIM-001]` Development artifacts and engineering conformance results are not formal evaluation evidence.
 - `[ENG-CLAIM-001]` Keep engineering conformance, evaluated behavioral compatibility, and milestone acceptance separate.
-- `[ENG-CLAIM-002]` Do not claim formal evaluation evidence before the governing record contract allows it.
+- `[ENG-CLAIM-002]` Formal labels require a prospectively created and fully
+  closed accepted authority/result basis; never promote development artifacts
+  retroactively.
+
+## Phase 7 Formal Evaluation Rules
+
+- `[ENG-CONF-CONFIG-001]` Close exact configuration manifests, canonical
+  fingerprints, kind/schema mappings, and typed references before formal use.
+- `[ENG-CONF-AUTHORITY-001]` Require prospective external anchoring, causal
+  fresh start, outcome-independent allocation, and governed post-observation
+  decisions.
+- `[ENG-CONF-EVIDENCE-002]` Keep formal capture durable, replayable,
+  append-preserving, complete, non-circular, and evaluator-private where
+  required.
+- `[ENG-CONF-SCORE-001]` Preserve orthogonal result domains, exact path/class
+  closure, run-count/replacement policy, result standing, and bounded claims.
+
+Development artifacts created before the accepted prospective authority chain
+must remain non-formal even if their later fingerprints match. Do not implement
+formal artifact production until the local conformance ledger maps these rules
+and every required promotion/review gate is current.
 
 Logs, snapshots, replay, and restore paths must not reintroduce evaluation-only metadata into SUT behavior. Do not use captured SUT state as fixture input merely because capture can read it.
 

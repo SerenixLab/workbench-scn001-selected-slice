@@ -345,35 +345,87 @@ def parse_projected_artifact(repository_root: Path, record: dict[str, str]) -> A
     )
 
 
-def extract_index_rows(path: Path) -> dict[str, list[str]]:
-    rows: dict[str, list[str]] = {}
+def extract_index_row_entries(path: Path) -> list[tuple[str, dict[str, str]]]:
+    entries: list[tuple[str, dict[str, str]]] = []
+    headers: list[str] | None = None
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.startswith("|"):
+            headers = None
             continue
         cells = [cell.strip() for cell in line.split("|")[1:-1]]
         if not cells:
             continue
+        if cells[0] == "Rule ID":
+            headers = cells
+            continue
+        if cells[0] == "---":
+            continue
         match = re.fullmatch(r"`?(ENG-[A-Z-]+-[0-9]+)`?", cells[0])
-        if match:
-            rows[match.group(1)] = cells
+        if match and headers:
+            entries.append((match.group(1), dict(zip(headers, cells))))
+    return entries
+
+
+def extract_index_rows(path: Path) -> dict[str, dict[str, str]]:
+    rows: dict[str, dict[str, str]] = {}
+    for rule_id, row in extract_index_row_entries(path):
+        rows[rule_id] = row
     return rows
 
 
 def conformance_errors(repository_root: Path) -> list[str]:
     lock = json.loads((repository_root / "governance/ZOEY_GOVERNANCE.lock").read_text(encoding="utf-8"))
     conformance_path = repository_root / lock["conformance_index"]["path"]
-    rows = extract_index_rows(conformance_path)
-    expected = {record["rule_id"] for record in lock["rule_revisions"]}
+    entries = extract_index_row_entries(conformance_path)
+    rows: dict[str, dict[str, str]] = {}
+    duplicates: set[str] = set()
+    for rule_id, row in entries:
+        if rule_id in rows:
+            duplicates.add(rule_id)
+        rows[rule_id] = row
+
+    locked = {record["rule_id"]: record for record in lock["rule_revisions"]}
+    expected = set(locked)
     missing = sorted(expected - rows.keys())
     unexpected = sorted(rows.keys() - expected)
     errors = [f"conformance index missing {rule_id}" for rule_id in missing]
     errors.extend(f"conformance index has unknown {rule_id}" for rule_id in unexpected)
-    for rule_id, cells in rows.items():
-        if len(cells) < 5:
+    errors.extend(f"conformance index has duplicate {rule_id}" for rule_id in sorted(duplicates))
+    allowed_applicability = {"applicable", "not-applicable"}
+    allowed_status = {"enforced", "review-only", "uncovered", "revalidation-required", "N/A"}
+    for rule_id, row in rows.items():
+        required_columns = {
+            "Revision", "Rule source artifact", "Applicability",
+            "Rationale / applies to paths and change types", "Status",
+        }
+        if not required_columns.issubset(row):
             errors.append(f"conformance index row is incomplete: {rule_id}")
             continue
-        if cells[3] == "not-applicable" and not cells[4]:
+        revision = row["Revision"].strip("`")
+        source = row["Rule source artifact"].strip("`")
+        applicability = row["Applicability"].strip("`")
+        rationale = row["Rationale / applies to paths and change types"]
+        status = row["Status"].strip("`")
+        if rule_id in locked and revision != locked[rule_id]["revision"]:
+            errors.append(
+                f"conformance index revision mismatch for {rule_id}: "
+                f"{revision} != {locked[rule_id]['revision']}"
+            )
+        if rule_id in locked and source != locked[rule_id]["source_artifact"]:
+            errors.append(
+                f"conformance index source mismatch for {rule_id}: "
+                f"{source} != {locked[rule_id]['source_artifact']}"
+            )
+        if applicability not in allowed_applicability:
+            errors.append(f"conformance index applicability is invalid for {rule_id}: {applicability}")
+        if status not in allowed_status:
+            errors.append(f"conformance index status is invalid for {rule_id}: {status}")
+        if applicability == "not-applicable" and not rationale:
             errors.append(f"not-applicable rule has no rationale: {rule_id}")
+        if applicability == "not-applicable" and status != "N/A":
+            errors.append(f"not-applicable rule must use N/A status: {rule_id}")
+        if applicability == "applicable" and status == "N/A":
+            errors.append(f"applicable rule cannot use N/A status: {rule_id}")
     return errors
 
 

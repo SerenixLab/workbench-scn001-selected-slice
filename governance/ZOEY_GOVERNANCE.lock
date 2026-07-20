@@ -1,5 +1,5 @@
 {
-  "canonical_meta_commit": "3780a6c270cd520b6e84fa746d0410f873bffbf0",
+  "canonical_meta_commit": "a77a431ad1595a45db80c2f67a634971bebc7739",
   "canonical_meta_source": "Zoey/meta",
   "canonical_meta_worktree_state": "clean",
   "conformance_index": {
@@ -11,10 +11,10 @@
   "governing_source_snapshots": [
     {
       "canonical_path": "OPEN_QUESTIONS.md",
-      "content_digest": "879c40b3d7becc789684ab5775845df4cc902d25ce643f75ea3a7f1d0a79bdd7",
+      "content_digest": "f3420eb53cfc1a139fdec9f13db835024812b6fe33ce4476727450e0f89b6ffd",
       "id": "OPEN_QUESTIONS",
       "path": "governance/sources/OPEN_QUESTIONS.md",
-      "version_or_revision": "V0.2.22"
+      "version_or_revision": "V0.2.23"
     },
     {
       "canonical_path": "decisions/ADR-001-first-vertical-slice.md",
@@ -78,21 +78,42 @@
       "id": "ADR-009",
       "path": "governance/sources/ADR-009-scn001-first-selected-slice-milestone-completion-gate.md",
       "version_or_revision": "R4"
+    },
+    {
+      "canonical_path": "decisions/ADR-010-scn001-behavior-configuration-identity.md",
+      "content_digest": "f93d015d8f236084556bfb5e40f7898e0fa0eeedcc94a6ea0bf240cc36ba46ad",
+      "id": "ADR-010",
+      "path": "governance/sources/ADR-010-scn001-behavior-configuration-identity.md",
+      "version_or_revision": "R3"
+    },
+    {
+      "canonical_path": "decisions/ADR-011-scn001-formal-evaluation-record-authority.md",
+      "content_digest": "3ca4e268047b44a76247ff9ead14c839620a53142179738f380d4173d7810891",
+      "id": "ADR-011",
+      "path": "governance/sources/ADR-011-scn001-formal-evaluation-record-authority.md",
+      "version_or_revision": "R3"
+    },
+    {
+      "canonical_path": "decisions/ADR-012-scn001-selected-slice-scoreability.md",
+      "content_digest": "1d981ad1bb136b4bdc122b4c3ee09b593e5a60534f33f7538b620a295af9432f",
+      "id": "ADR-012",
+      "path": "governance/sources/ADR-012-scn001-selected-slice-scoreability.md",
+      "version_or_revision": "R3"
     }
   ],
   "integrations": [
     {
-      "content_digest": "119226ca29771ff83fe03878abcf84b4cac933d331835e7fa45473c793789178",
+      "content_digest": "cfce0d62092036200a810903343ee152a954d5c60d16f907a5cec862a717f7d4",
       "path": "governance/integrations/CODEX_INTEGRATION.md",
-      "version": "V0.2.1"
+      "version": "V0.2.2"
     }
   ],
   "lock_version": "V0.2.0",
   "profiles": [
     {
-      "content_digest": "d198982eecdc38dadd4fbab90ca5d62c19013185e639484bbb9cf981cfbb17ac",
+      "content_digest": "68070faacd402428568be5b92c6cce9e05fc041c057bd55b8ebef47d133ca14e",
       "path": "governance/profiles/SCN001_SELECTED_SLICE.md",
-      "version": "V0.4.3"
+      "version": "V0.5.0"
     }
   ],
   "rule_revisions": [
@@ -162,17 +183,17 @@
       "source_artifact": "ENGINEERING_STANDARD.md"
     },
     {
-      "revision": "R4",
+      "revision": "R5",
       "rule_id": "ENG-CHANGE-001",
       "source_artifact": "ENGINEERING_STANDARD.md"
     },
     {
-      "revision": "R4",
+      "revision": "R5",
       "rule_id": "ENG-CLAIM-001",
       "source_artifact": "ENGINEERING_STANDARD.md"
     },
     {
-      "revision": "R4",
+      "revision": "R5",
       "rule_id": "ENG-CLAIM-002",
       "source_artifact": "ENGINEERING_STANDARD.md"
     },
@@ -182,13 +203,23 @@
       "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
     },
     {
+      "revision": "R1",
+      "rule_id": "ENG-CONF-AUTHORITY-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
       "revision": "R2",
       "rule_id": "ENG-CONF-CAPTURE-001",
       "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
     },
     {
-      "revision": "R4",
+      "revision": "R5",
       "rule_id": "ENG-CONF-CLAIM-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R1",
+      "rule_id": "ENG-CONF-CONFIG-001",
       "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
     },
     {
@@ -204,6 +235,11 @@
     {
       "revision": "R2",
       "rule_id": "ENG-CONF-EVIDENCE-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R1",
+      "rule_id": "ENG-CONF-EVIDENCE-002",
       "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
     },
     {
@@ -259,6 +295,11 @@
     {
       "revision": "R3",
       "rule_id": "ENG-CONF-RUN-001",
+      "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
+    },
+    {
+      "revision": "R1",
+      "rule_id": "ENG-CONF-SCORE-001",
       "source_artifact": "profiles/SCN001_SELECTED_SLICE.md"
     },
     {
@@ -344,8 +385,8 @@
   ],
   "serialization": "json",
   "standard": {
-    "content_digest": "673965437f00e1028150a0ce18c62dfa40b4ee979499cc074e27ed522f5a38aa",
+    "content_digest": "86356b729dea6a148e49b2921db8a366f5ce3d574f5365aa25cfdf0d7017fffa",
     "path": "governance/ENGINEERING_STANDARD.md",
-    "version": "V0.6.3"
+    "version": "V0.6.4"
   }
 }

@@ -1,16 +1,16 @@
 # SCN-001 Selected-Slice Engineering Profile
 
-Profile version: `V0.4.3`
+Profile version: `V0.5.0`
 
 Status: `Draft`
 
-Date: 2026-07-18
+Date: 2026-07-20
 
-Base standard: `ENGINEERING_STANDARD.md` `V0.6.3`
+Base standard: `ENGINEERING_STANDARD.md` `V0.6.4`
 
 Decision basis:
 
-- `OPEN_QUESTIONS.md` `V0.2.22`
+- `OPEN_QUESTIONS.md` `V0.2.23`
 - `decisions/ADR-002-scn001-system-under-test-boundary.md` `R2`
 - `decisions/ADR-003-scn001-selected-slice-trial-time-contract.md` `R2`
 - `decisions/ADR-004-scn001-first-milestone-evaluation-policy.md` `R3`
@@ -19,6 +19,9 @@ Decision basis:
 - `decisions/ADR-007-scn001-selected-slice-dependency-identity.md` `R3`
 - `decisions/ADR-008-scn001-selected-slice-internal-boundary.md` `R2`
 - `decisions/ADR-009-scn001-first-selected-slice-milestone-completion-gate.md` `R4`
+- `decisions/ADR-010-scn001-behavior-configuration-identity.md` `R3`
+- `decisions/ADR-011-scn001-formal-evaluation-record-authority.md` `R3`
+- `decisions/ADR-012-scn001-selected-slice-scoreability.md` `R3`
 
 ## Purpose
 
@@ -58,7 +61,7 @@ Governing sources:
 
 - `ADR-001 R1`
 - `ADR-008 R2`
-- `OPEN_QUESTIONS.md V0.2.22`
+- `OPEN_QUESTIONS.md V0.2.23`
 - `ENG-BASE-REPO-001 R2`
 
 Scope: first `SCN-001` selected-slice implementation repository or workbench.
@@ -410,7 +413,7 @@ Rule revision: `R2`
 Governing sources:
 
 - `ADR-008 R2`
-- `ENG-CLAIM-001 R4`
+- `ENG-CLAIM-001 R5`
 
 Scope: tests, traces, demos, and reports that claim selected-slice behavior evidence.
 
@@ -1008,17 +1011,384 @@ Failure consequences:
 
 Review question: does this reference reveal evaluation context by meaning, not just by word choice?
 
-### ENG-CONF-CLAIM-001 - Selected-Slice Claim Boundary
+### ENG-CONF-CONFIG-001 - Formal Configuration Identity Closure
 
-Rule revision: `R4`
+Rule revision: `R1`
 
 Governing sources:
 
-- `OPEN_QUESTIONS.md V0.2.22`
+- `ADR-010 R3`
+- `ADR-011 R3`
+
+Scope: Phase 7 behavior/evaluation manifests, canonicalization, fingerprints,
+configuration comparison, material-change classification, and every exact
+reference to those artifacts.
+
+Applies when: code creates, validates, stores, compares, corrects, supersedes,
+or references a behavior- or evaluation-configuration artifact.
+
+Rule: formal configuration identity uses the closed immutable manifest,
+canonical payload/assertion, typed applicability, artifact-kind/schema mapping,
+domain-separated fingerprint, provenance, and exact-reference contracts in
+`ADR-010 R3` and `ADR-011 R3`. Repeated values close to their sole authority;
+identity never establishes authority, validity, or pass status.
+
+Forbidden shapes:
+
+- using a combined-repository commit, package version, model name, prompt label,
+  mutable tag, path, or timestamp as complete configuration identity;
+- omitting or marking behavior/evaluation-affecting material unknown in a formal
+  manifest;
+- free-form applicability, artifact kinds, schema IDs, decision kinds, or
+  evidence kinds;
+- raw serialization, implicit defaults, duplicate keys, missing hash-domain
+  separation, or hashing a mutable envelope/fingerprint into itself;
+- ID-only, kind-only, or fingerprint-only cross-artifact references;
+- silently retargeting a campaign after manifest correction or selecting a
+  favorable alias/supersession chain.
+
+Required checks:
+
+- validate the closed V1 kind/schema mappings and exact-reference fields;
+- independently recompute RFC8785-JCS payload/assertion fingerprints under the
+  declared domains and reject mismatches before use;
+- prove closed SUT/evaluator source, dependency, runtime, public-boundary,
+  policy, prompt/model/tool/provider, fixture/oracle, and governing-basis
+  identity with typed applicability;
+- verify provenance and supersession lineage through the manifest-artifact
+  fingerprint while keeping storage paths and annotations non-semantic;
+- classify comparisons and material changes fail-closed under the accepted
+  schema/domain/payload rules.
+
+Eligible protection mechanisms:
+
+- structural
+- static
+- automated-test
+- manual-review
+
+Expected test modes:
+
+- contract
+- negative
+- property
+- regression
+
+Minimum promotion enforcement: schema validation, independent fingerprint
+recomputation, negative malformed-reference/canonicalization tests, and recorded
+material-change review.
+
+Minimum promotion integration:
+
+- local-recorded
+- CI-required
+
+Minimum claim-support enforcement: every claim-bearing configuration reference
+resolves to the exact validated manifest artifact and payload fingerprints.
+
+Failure consequences:
+
+- merge-blocking
+- promotion-blocking
+- claim-blocking
+
+Review question: can any behavior/evaluation-affecting input, manifest assertion,
+or correction lineage change without producing the exact required identity and
+reference consequence?
+
+### ENG-CONF-AUTHORITY-001 - Prospective Formal Authority
+
+Rule revision: `R1`
+
+Governing sources:
+
+- `ADR-004 R3`
+- `ADR-005 R2`
+- `ADR-011 R3`
+- `ADR-012 R3`
+
+Scope: deterministic qualification, campaign authorization, external anchors,
+formal attempt allocation, lifecycle, invalidity, replacement, suspension, and
+post-observation authority decisions.
+
+Applies when: Phase 7 prepares qualification output, authorizes a campaign,
+starts or allocates an attempt, or changes the authority/lifecycle disposition
+of observed formal material.
+
+Rule: formal execution is prospective. The exact qualification plan and
+campaign authorization are indexed and externally anchored before their first
+material output, and every attempt is allocated outcome-independently before
+material SUT output through a causal post-anchor fresh-start chain. Later
+invalidity, correction, reclassification, supersession, or reconciliation is
+append-preserving and uses the accepted actor/review authority.
+
+Forbidden shapes:
+
+- self-authored timestamps, local commits, mutable refs, producer-controlled
+  receipts, signatures, hashes, or paths as authority by themselves;
+- anchoring metadata while reusing output observed before the anchor/fresh start;
+- retrying qualification until two executions agree or choosing attempt slots,
+  seeds, run-count branches, invalidity, or replacement from observed outcomes;
+- using a qualification result before it is sealed, independently validated,
+  and included in the authorizing namespace revision;
+- exceeding replacement limits, hiding attempts, replacing a valid hard
+  failure, or letting the producer unilaterally withdraw adverse evidence.
+
+Required checks:
+
+- validate complete anchored qualification allocation and exact comparison
+  profile before accepting a qualification result;
+- derive campaign run count mechanically from the accepted policy and exact
+  eligible qualification basis;
+- capture and verify exact external receipt bytes/digest/custody plus the
+  gate-launched or independently witnessed fresh-start chain;
+- preallocate attempt identity/selection basis and preserve exact predecessor/
+  replacement links and orthogonal lifecycle, validity, hard-failure, and claim
+  state;
+- require independent review and owner authority for applicable post-observation
+  reclassification, invalidation, supersession, or namespace reconciliation.
+
+Eligible protection mechanisms:
+
+- structural
+- static
+- automated-test
+- manual-review
+
+Expected test modes:
+
+- contract
+- negative
+- replay
+- regression
+
+Allowed review actors:
+
+- human-review
+- agent-review
+
+Minimum promotion enforcement: prospective-anchor/fresh-start validation,
+outcome-independent allocation tests, lifecycle/replacement state-machine tests,
+and recorded qualifying review for authority-changing decisions.
+
+Minimum promotion integration:
+
+- local-recorded
+- CI-required
+
+Minimum claim-support enforcement: authority claims resolve to the exact
+pre-output authorization/index/receipt/start chain and accepted review history.
+
+Failure consequences:
+
+- merge-blocking
+- promotion-blocking
+- claim-blocking
+
+Review question: could any formal output, allocation, retry, or adverse-evidence
+disposition have been selected after its outcome was known?
+
+Notes: independent agent review may satisfy only technical validation checks.
+Every ADR-011 action reserved to the project owner still requires an explicit
+recorded project-owner decision; neither the producer nor an agent reviewer may
+substitute for that authority.
+
+### ENG-CONF-EVIDENCE-002 - Durable Formal Evidence Closure
+
+Rule revision: `R1`
+
+Governing sources:
+
+- `ADR-002 R2`
+- `ADR-008 R2`
+- `ADR-011 R3`
+
+Scope: formal run records, replayable capture, raw attachments, evaluation
+decisions, campaign indexes, authority-namespace indexes, bounded-result
+closure, and completion-evidence inputs.
+
+Applies when: Phase 7 captures, seals, indexes, validates, corrects, replays, or
+uses claim-relevant formal evaluation material.
+
+Rule: every material interaction and decision is durably captured as an
+immutable typed artifact with byte-verifiable custody, exact references, and
+append-preserving history. Formal authority requires the complete accepted run
+predicate, frozen campaign-evidence index, effective externally ordered
+authority-namespace revision, and independent validation; sealing or indexing
+alone is insufficient.
+
+Forbidden shapes:
+
+- process-local/in-memory-only evidence or reconstruction after the run;
+- normalizing raw bytes before digest verification;
+- evaluator-private evidence becoming SUT-visible or capture/reporting repairing
+  missing SUT state, relations, or behavior;
+- omitting failed, invalid, abandoned, replacement, unstarted/dispositioned,
+  superseded, adverse, or authority-pending history;
+- mutating/deleting sealed artifacts or using latest-wins conflict resolution;
+- campaign/result/index self-certification cycles, including `C -> R` or a
+  result citing the later namespace revision that indexes it.
+
+Required checks:
+
+- validate evidence envelopes, exact delivered projections, raw byte length/
+  digest/custody, and deterministic replay sufficient for the claimed check;
+- seal immutable run records with complete ordered delivery/capture, lifecycle,
+  validity, checkpoint, and artifact references;
+- freeze a complete campaign index and prove exact member/count/cutoff closure;
+- maintain one effective fast-forward authority namespace with external receipt
+  closure, fork quarantine, and outcome-independent reconciliation;
+- independently recompute record/result/index closure and retain invalid or
+  authority-pending records without scoring them as valid SUT runs.
+
+Eligible protection mechanisms:
+
+- structural
+- static
+- automated-test
+- manual-review
+
+Expected test modes:
+
+- contract
+- negative
+- replay
+- property
+- regression
+
+Minimum promotion enforcement: durable-custody/digest tests, completeness and
+cycle checks, append-only history tests, replay validation, and independent
+closure recomputation.
+
+Minimum promotion integration:
+
+- local-recorded
+- CI-required
+
+Minimum claim-support enforcement: each formal-evidence claim resolves through
+the complete accepted authority predicate and exact effective namespace basis.
+
+Failure consequences:
+
+- merge-blocking
+- promotion-blocking
+- claim-blocking
+
+Review question: can missing, mutable, circular, evaluator-leaking, or omitted
+evidence still appear sealed, complete, authoritative, or favorable?
+
+### ENG-CONF-SCORE-001 - Bounded Campaign Scoreability
+
+Rule revision: `R1`
+
+Governing sources:
+
 - `ADR-004 R3`
 - `ADR-005 R2`
 - `ADR-009 R4`
-- `ENG-CLAIM-001 R4`
+- `ADR-011 R3`
+- `ADR-012 R3`
+
+Scope: Phase 7 path/claim obligation mapping, deterministic run-count selection,
+run and campaign aggregation, bounded result/standing, failure artifacts, and
+completion-evidence consumption.
+
+Applies when: code classifies formal run outcomes, aggregates a campaign,
+produces or validates a bounded result/standing decision, or emits bounded
+pass/fail/indeterminate claim text.
+
+Rule: scoreability is conjunctive and nonnumeric across the four required paths
+and five mandatory claim classes, preserving orthogonal run validity, global
+hard-invariant, per-claim obligation, and lifecycle domains. Run count,
+replacement, stopping, configuration disposition, evidence closure, exact
+bounded claim text, exclusion language, and result standing follow
+`ADR-012 R3`; no class/path substitutes for another.
+
+Forbidden shapes:
+
+- one flat status enum, weighted/averaged/voted results, compensating strength,
+  optional stopping, favorable run selection, or counterfactual substitution;
+- treating `NOT_REACHED`, `NOT_APPLICABLE`, invalidity, suspension,
+  supersession, or missing authority/evidence as a pass or bounded SUT failure;
+- `NOT_APPLICABLE` on required pressure or rejecting it on a declared non-
+  pressure combination;
+- one-run selection without an eligible exact qualification basis and declared
+  divergence contingency;
+- resetting an unchanged behavior failure through evaluation/configuration
+  change or claiming longitudinal drift resistance, durable adaptation,
+  arbitrary-language safety, statistical reliability, production readiness,
+  full `SCN-001`, or milestone completion.
+
+Required checks:
+
+- prove complete four-path/five-class obligation mapping and exact accepted
+  closure or the sole permitted never-started disposition after authoritative
+  global hard failure;
+- derive and validate the exact one-run/three-run policy, qualification basis,
+  divergence suspension/contingency, invalid replacement cap, and campaign stop
+  conditions;
+- preserve configuration/campaign supersession and valid hard-failure
+  attribution without silent retargeting;
+- independently recompute `BOUNDED_PASS`, `BOUNDED_FAIL`, or
+  `NOT_YET_DETERMINABLE` from the frozen authoritative basis and exact result-
+  standing chain;
+- bind the maximum bounded claim/failure/indeterminacy text and `GROW-002`
+  exclusion without implying every class was reached after early hard failure.
+
+Eligible protection mechanisms:
+
+- structural
+- static
+- automated-test
+- manual-review
+
+Expected test modes:
+
+- contract
+- negative
+- property
+- regression
+
+Minimum promotion enforcement: exhaustive status/coverage truth-table tests,
+qualification/run-count/replacement tests, hard-failure early-closure tests,
+independent aggregation recomputation, and claim-language review.
+
+Minimum promotion integration:
+
+- local-recorded
+- CI-required
+
+Minimum claim-support enforcement: bounded claims resolve to the exact sealed,
+validated, externally closed, later-indexed result and effective standing and
+do not exceed the accepted claim ceiling.
+
+Failure consequences:
+
+- merge-blocking
+- promotion-blocking
+- claim-blocking
+
+Review question: can any missing path/class, invalid attempt, authority defect,
+configuration change, or excluded claim be hidden inside a favorable result?
+
+### ENG-CONF-CLAIM-001 - Selected-Slice Claim Boundary
+
+Rule revision: `R5`
+
+Governing sources:
+
+- `OPEN_QUESTIONS.md V0.2.23`
+- `ADR-004 R3`
+- `ADR-005 R2`
+- `ADR-009 R4`
+- `ADR-010 R3`
+- `ADR-011 R3`
+- `ADR-012 R3`
+- `ENG-CLAIM-001 R5`
+- `ENG-CONF-CONFIG-001 R1`
+- `ENG-CONF-AUTHORITY-001 R1`
+- `ENG-CONF-EVIDENCE-002 R1`
+- `ENG-CONF-SCORE-001 R1`
 
 Scope: SCN-001 reports, tests, traces, demos, README text, and implementation docs.
 
@@ -1033,7 +1403,8 @@ accepted `ADR-009 R4` exact-basis `P -> D -> A` contract.
 Forbidden shapes:
 
 - calling a development trace formal campaign evidence;
-- using `score`, `pass`, `accepted_slice`, or equivalent labels to imply final acceptance before governing questions resolve;
+- using `score`, `pass`, `accepted_slice`, or equivalent labels without the
+  exact accepted artifact, authority, result, standing, and claim basis;
 - claiming full SCN-001 or production readiness from selected-slice conformance tests;
 - treating partial success in any proper subset of the five mandatory claim
   classes as milestone completion;
@@ -1045,13 +1416,11 @@ Forbidden shapes:
 Required checks:
 
 - docs and reports use bounded language;
-- first behavior-configuration bindings or comparisons trigger `EVAL-004`;
-- first formal campaign authorization or authoritative record triggers
-  `EVAL-007`;
-- final scoring or scoreability criteria trigger `EVAL-005`;
-- preparation of the first actual completion-eligibility determination triggers
-  `EVAL-005` and requires the applicable accepted `EVAL-004`, `EVAL-007`, and
-  `EVAL-005` contracts;
+- behavior/evaluation comparisons and formal artifacts comply with the accepted
+  configuration, authority, evidence, and scoreability rules cited above;
+- formal-run claims establish the complete `ADR-011 R3` authority predicate;
+- bounded pass/fail claims establish the exact `ADR-012 R3` result and standing
+  closure without converting missing authority/evidence into SUT failure;
 - completion claims bind an attributable determination `D` to the exact
   required completion basis, including package `P`, applicable engineering
   promotion and claim-support gates, and the exact pre-reviewed bounded claim;
@@ -1074,7 +1443,9 @@ Minimum promotion integration:
 - local-recorded
 - CI-required
 
-Minimum claim-support enforcement: claim-bearing artifacts are review-checked and do not use reserved formal-evaluation status before triggers resolve.
+Minimum claim-support enforcement: claim-bearing artifacts resolve to exact
+accepted manifest, authority, evidence-index, bounded-result, standing, and
+claim-ceiling evidence and remain within the bounded selected-slice scope.
 
 Failure consequences:
 
@@ -1092,6 +1463,12 @@ Before selected-slice engineering claims rely on implementation evidence, the lo
 - dependency/effective-endpoint integrity;
 - inspection passivity;
 - simulator/capture isolation;
+- formal configuration identity and exact-reference closure;
+- prospective authorization, external-anchor, fresh-start, and allocation
+  independence;
+- durable evidence custody, replay, completeness, append-only history, and
+  namespace closure;
+- bounded path/claim aggregation, result standing, and claim-ceiling closure;
 - claim-language review;
 - governance integrity.
 
@@ -1114,3 +1491,16 @@ Use these as attack prompts when reviewing implementation:
 - Can the harness choose the output the simulator realizes?
 - Can logs, snapshots, or replay artifacts reintroduce evaluation metadata into SUT behavior?
 - Can a development artifact be described as formal evaluation evidence?
+- Can a manifest or exact reference pass with an unknown/mismatched kind,
+  schema, fingerprint, applicability, or authority field?
+- Can locally timed, locally committed, or previously observed output be made
+  formal by attaching a later anchor or matching fingerprint?
+- Can a qualification retry, seed, attempt slot, invalidity, or replacement be
+  selected after observing a favorable or adverse outcome?
+- Can an omitted/authority-pending attempt, mutable record, incomplete frozen
+  index, namespace fork, or result/index cycle still appear authoritative?
+- Can a missing path/class, invalid attempt, or absent authority/evidence be
+  averaged, relabeled, early-stopped, or hidden inside a bounded pass/fail?
+- Can `GROW-002`, finite explanation grammar, statistical reliability,
+  production readiness, full `SCN-001`, or milestone completion leak into the
+  bounded campaign claim?

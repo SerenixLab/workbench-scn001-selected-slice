@@ -737,7 +737,7 @@ test("public proposal output routes once and SUT records exact realization witho
   assert.doesNotMatch(JSON.stringify(snapshot), /P-USER-ACCEPT/);
 });
 
-test("generic formal delivery rejects user responses before projection or SUT mutation", () => {
+test("generic development delivery rejects user responses before projection or SUT mutation", () => {
   const harness = createEvaluationHarness(createSutBoundary());
   const runRef = harness.startRun();
   const before = harness.captureInspectionSnapshot(runRef);
@@ -899,7 +899,7 @@ test("activation assessment and active trial identities are isolated across inde
   );
 });
 
-test("formal harness stages the complete focused-drill trajectory through both exact checkpoints", () => {
+test("development harness stages the complete focused-drill trajectory through both exact checkpoints", () => {
   const boundary = createSutBoundary();
   const harness = createEvaluationHarness(boundary);
   const runRef = harness.startRun();
@@ -1028,7 +1028,7 @@ test("formal harness stages the complete focused-drill trajectory through both e
   assert.deepEqual(harness.captureInspectionSnapshot(runRef), beforeReplay);
 });
 
-test("formal harness reaches exact delayed candidate assessment and active trial", () => {
+test("development harness reaches exact delayed candidate assessment and active trial", () => {
   const harness = createEvaluationHarness(createSutBoundary());
   const runRef = harness.startRun();
   const directInputs = spontaneousCorrectionRecords();
@@ -1315,7 +1315,7 @@ test("CP-DELAY-ACTIVE rejects malformed assessment and trial closure passively",
   }
 });
 
-test("formal later-use path rechecks scope, emits, and records exact realization", () => {
+test("development later-use path rechecks scope, emits, and records exact realization", () => {
   const boundary = createSutBoundary();
   const harness = createEvaluationHarness(boundary);
   const runRef = harness.startRun();
@@ -4649,7 +4649,7 @@ test("routing failures do not commit transport success and remain retryable", ()
   }
 });
 
-test("formal harness rejects dependency overrides and package root exposes no simulator plugin seam", async () => {
+test("development harness rejects dependency overrides and package root exposes no simulator plugin seam", async () => {
   const boundary = createSutBoundary();
   assert.throws(
     () => createEvaluationHarness(boundary, { renderOutput() {} }),

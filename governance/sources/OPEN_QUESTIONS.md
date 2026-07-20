@@ -1,12 +1,21 @@
 # Zoey Open Questions
 
-Document version: `V0.2.22`
+Document version: `V0.2.23`
 
 Thesis baseline: `SYSTEM_THESIS.md` `V0.3.1`
 
 Scenario baseline: `CANONICAL_SCENARIOS.md` `V0.2.2`
 
 State/control baseline: `STATE_AND_CONTROL_MODEL.md` `V0.4.1`
+
+Register release `V0.2.23` records the project owner's 2026-07-20 coordinated
+acceptance of `ADR-010 R3`, `ADR-011 R3`, and `ADR-012 R3`. It resolves
+`EVAL-004`, `EVAL-007`, and `EVAL-005` with outcome `Decision`, resolves
+`GROW-002` with the milestone-bounded exclusion defined by `ADR-012 R3`, creates
+no `ASM-*` entry, and closes the decision frontier that gated Phase 7. Phase 7
+remains subject to engineering-source re-triage/projection and current
+workbench governance controls; this register release does not authorize a
+campaign, create formal evidence, or complete the milestone.
 
 ## Purpose
 
@@ -156,38 +165,28 @@ Do not include:
 
 ## Active Decision Frontier
 
-Current milestone: establish formal evaluation governance for the first
-synthetic `SCN-001` selected-slice campaign under the accepted `ADR-004 R3`,
-`ADR-005 R2`, and `ADR-009 R4` contracts. The engineering chain through scoped
-trial formation, direct and later behavior, bounded outcome, and grounded
-explanation is implemented and independently revalidated. The current frontier
-is the behavior-configuration identity contract together with the separate
-formal-record authority contract, followed by the scoreability boundary and
-unresolved-question treatment required before formal campaign evidence can be
-created or used.
+Current milestone: project the accepted formal-evaluation governance into the
+engineering sources and prepare Phase 7 implementation for the first synthetic
+`SCN-001` selected-slice campaign under `ADR-004 R3`, `ADR-005 R2`,
+`ADR-009 R4`, `ADR-010 R3`, `ADR-011 R3`, and `ADR-012 R3`.
 
 Active questions:
 
-- `EVAL-004`
-- `EVAL-007`
-- `EVAL-005`
+- none.
 
-Decision order:
+Resolved decision order:
 
-- resolve `EVAL-004` before binding formal evidence to a behavior configuration
-  or making a behavior-configuration comparison;
-- resolve `EVAL-007` after or alongside `EVAL-004`, but before authorizing a
-  campaign or creating the first authoritative formal evaluation record;
-- resolve `EVAL-005` after or alongside those contracts, but before
-  defining scoreability, running a formal campaign for a bounded pass/fail
-  claim, or preparing a completion-eligibility determination.
+- `EVAL-004` is resolved by accepted `ADR-010 R3`;
+- `EVAL-007` is resolved by accepted `ADR-011 R3` after its compatible
+  `EVAL-004` dependency;
+- `EVAL-005` is resolved by accepted `ADR-012 R3` after its compatible
+  `EVAL-004` and `EVAL-007` dependencies.
 
-`GROW-002` requires explicit re-triage within `EVAL-005`. Its longitudinal-eval
-trigger is not established merely by the bounded selected-slice trajectory, so
-it remains `Deferred` unless the scoreability decision brings longitudinal
-drift detection into milestone scope. `EVAL-005` must classify it as a blocking
-criterion, a named bounded exclusion, or an identified fixture assumption with
-an explicit claim ceiling; silence is not an acceptable disposition.
+`GROW-002` is resolved for `SCN001-SSFO-V0.2.0` by the bounded exclusion in
+accepted `ADR-012 R3`. Longitudinal anti-correction/agreement-drift detection is
+outside the bounded selected-slice claim; later longitudinal-evaluation scope
+requires a new linked question. No working assumption substitutes for that
+exclusion.
 
 Pending trigger checks before runtime maintenance, repository extraction,
 production scope, trust boundaries, or broader slice evidence:
@@ -253,33 +252,28 @@ eligibility determination, then project-owner disposition. Historical owner
 acceptance remains distinct from current bounded-claim standing if later
 adverse evidence or governing-source changes require re-triage.
 
-`EVAL-004`, `EVAL-007`, and `EVAL-005` are active because the selected slice is
-now preparing its first formal evaluation governance and scoreability contract.
-`EVAL-004` remains the behavior-configuration decision registered since
-`V0.2.0`. `EVAL-007` owns the materially distinct evaluation-configuration,
-record-authority, replayability, evidence-universe, cutoff, invalidation, and
-supersession decision anticipated by `ADR-009 R4`. All three must resolve before
-formal campaign evidence or an actual completion determination relies on their
-contracts.
-
-The active questions block Phase 7 formal-record, campaign, comparison,
-scoreability, and compatibility-claim implementation. Legacy reading,
-non-committing experiments, document review, engineering-gate strengthening,
-and non-claiming development runs may continue. No implementation, oracle
-result, development run, engineering-conformance result, partial claim-class
-result, or evidence package may be described as formal campaign evidence or
-milestone completion outside the accepted contracts.
+`EVAL-004`, `EVAL-007`, and `EVAL-005` are resolved by the coordinated accepted
+decision set. Their former decision block is removed. Phase 7 implementation
+must still wait for the engineering standard/profile re-triage and projection
+required by those decisions and must satisfy current workbench promotion and
+review controls. No development run or pre-acceptance artifact is
+retrospectively promoted into formal evidence.
 
 `REPO-001` remains deferred and does not block the governed `SCN-001`
 workbench. It triggers before the first durable repository is created under
 `projects/` or before workbench implementation is proposed for extraction into
 a durable Zoey system-project boundary.
 
-## Active Questions
+## Historical V0.2.22 Frontier Detail
+
+The following question formulations preserve the immediately preceding
+decision-frontier history. They are non-authoritative for current status; the
+Open Question Index and resolved tombstones in `V0.2.23` govern.
 
 ### EVAL-004
 
-- **Status:** `Active`
+- **Historical status (`V0.2.22`):** `Active`; resolved in `V0.2.23` by
+  accepted `ADR-010 R3`.
 - **Question:** What behavior-configuration metadata and identity must each
   formal evaluation record bind?
 - **Why It Matters:** formal evidence and configuration-history comparison must
@@ -328,7 +322,8 @@ a durable Zoey system-project boundary.
 
 ### EVAL-007
 
-- **Status:** `Active`
+- **Historical status (`V0.2.22`):** `Active`; resolved in `V0.2.23` by
+  accepted `ADR-011 R3`.
 - **Question:** What evaluation-configuration, formal-record authority,
   replayable-evidence, evidence-universe, cutoff, invalidation, and supersession
   contract makes an evaluation record authoritative?
@@ -382,7 +377,8 @@ a durable Zoey system-project boundary.
 
 ### EVAL-005
 
-- **Status:** `Active`
+- **Historical status (`V0.2.22`):** `Active`; resolved in `V0.2.23` by
+  accepted `ADR-012 R3`.
 - **Question:** For the selected slice and declared SUT boundary, which
   unresolved questions affect specific pass criteria, which require bounded
   exclusion, and which may be carried as identified fixture assumptions without
@@ -460,7 +456,7 @@ a durable Zoey system-project boundary.
 | `TIME-001` | Deferred | Scheduler, reminders, due state, expiry, background temporal maintenance, or full longitudinal governed-clock semantics enter active milestone scope | `SLICE-001` | S1, S2, SCM | What governed-clock contract is needed for reproducible expiry, freshness, due state, and longitudinal time? |
 | `TIME-002` | Resolved | Accepted by `ADR-003` Decision B | `EVAL-006` | S1, S2, SCM | What minimal selected-slice chronology and staleness contract supports stale-history handling, trial-basis freshness, and later-session ordering without designing a general governed-clock system? |
 | `GROW-001` | Resolved | Accepted by `ADR-003` Decision A | `EVAL-006` | S1, SCM | What selected-slice minimum criteria distinguish situational behavior, trial candidate, active scoped behavioral trial, and unsupported durable developmental adaptation? |
-| `GROW-002` | Deferred | `SCN-001` longitudinal eval enters milestone scope | `GROW-001`, `EVAL-002` | S1, T | What trajectory signals detect anti-correction or agreement drift without a full personality model? |
+| `GROW-002` | Resolved | Bounded exclusion accepted by `ADR-012 R3` | `GROW-001`, `EVAL-002` | S1, T | What trajectory signals detect anti-correction or agreement drift without a full personality model? |
 | `GROW-003` | Deferred | Behavior-affecting replacement is proposed | - | T, SCM | What continuity reference must exist before evaluating model, runtime, prompt, specialist, or context-policy change? |
 | `GROW-004` | Deferred | Continuity evaluation work begins | `GROW-003` | T, SCM | What evidence lets valid developmental behavior enter established Zoey continuity? |
 | `GROW-005` | Deferred | User-facing durable adaptation is proposed | `GROW-001` | T, SCM, PROD | What inspection and correction path is required before durable cross-session adaptations are enabled? |
@@ -479,10 +475,10 @@ a durable Zoey system-project boundary.
 | `EVAL-001` | Resolved | Accepted by `ADR-004` Decision A | `SLICE-001`, `EVAL-006`, `GROW-001`, `TIME-002` | S1, S2, SCM | Does the first slice test context discovery, or does the harness inject curated context? |
 | `EVAL-002` | Resolved | Accepted by `ADR-005 R2` | `SLICE-001`, `EVAL-006`, `EVAL-001`, `EVAL-003`, `GROW-001`, `TIME-002` | S1, S2, SCM | What fixture and oracle data must the selected scenario expose without requiring hidden chain-of-thought? |
 | `EVAL-003` | Resolved | Accepted by `ADR-004` Decision B | `SLICE-001`, `EVAL-006`, `GROW-001`, `TIME-002` | S1, S2 | How are nondeterministic runs accepted, and which invariant failures are hard failures? |
-| `EVAL-004` | Active | The selected slice is preparing its first evaluation record, comparison, or compatibility claim | `EVAL-002`, `EVAL-003`, `EVAL-006` | S1, S2, SCM | What behavior-configuration metadata must each evaluation record include? |
-| `EVAL-005` | Active | The selected slice is preparing to define scoring or claim scenario scoreability | `EVAL-002`, `EVAL-003`, `EVAL-004`, `EVAL-006`, `EVAL-007` | S1, S2 | For the selected slice and declared system-under-test boundary, which unresolved questions affect specific pass criteria, and which may be carried as identified fixture assumptions without strengthening the evaluation claim? |
+| `EVAL-004` | Resolved | Accepted by `ADR-010 R3` | `EVAL-002`, `EVAL-003`, `EVAL-006` | S1, S2, SCM | What behavior-configuration metadata must each evaluation record include? |
+| `EVAL-005` | Resolved | Accepted by `ADR-012 R3` | `EVAL-002`, `EVAL-003`, `EVAL-004`, `EVAL-006`, `EVAL-007` | S1, S2 | For the selected slice and declared system-under-test boundary, which unresolved questions affect specific pass criteria, and which may be carried as identified fixture assumptions without strengthening the evaluation claim? |
 | `EVAL-006` | Resolved | Accepted by `ADR-002` | `SLICE-001` | S1, S2, SCM | What is inside the system-under-test boundary for the selected slice, and which semantic inputs, control facts, time events, actor-assurance facts, external-system behavior, or cognitive candidates are supplied by the harness or simulated dependencies? |
-| `EVAL-007` | Active | The selected slice is preparing to authorize its first formal campaign or create its first authoritative formal record | `EVAL-002`, `EVAL-003`, `EVAL-004`, `EVAL-006` | S1, S2, SCM | What evaluation-configuration, formal-record authority, replayable-evidence, evidence-universe, cutoff, invalidation, and supersession contract makes an evaluation record authoritative? |
+| `EVAL-007` | Resolved | Accepted by `ADR-011 R3` | `EVAL-002`, `EVAL-003`, `EVAL-004`, `EVAL-006` | S1, S2, SCM | What evaluation-configuration, formal-record authority, replayable-evidence, evidence-universe, cutoff, invalidation, and supersession contract makes an evaluation record authoritative? |
 | `LEG-001` | Deferred | Migration inventory starts | `SLICE-001` | T, LEG | Which legacy directories are migration candidates, reference-only, archive-only, or out of scope? |
 | `LEG-002` | Deferred | Legacy component reuse is considered | `LEG-001` | T, LEG | What criteria reject or rewrite legacy material that encodes Iris/Yuki identity or authority assumptions? |
 | `LEG-003` | Deferred | Selected slice needs legacy help | `SLICE-001`, `LEG-002` | T, LEG | For the selected slice's required responsibilities, which concrete legacy components or patterns may be reused or adapted under Zoey rules, and which remain reference-only? |
@@ -741,6 +737,117 @@ Future Trigger: material change to selected-slice fixture/oracle semantics, inab
 
 Date: 2026-07-08
 
+### EVAL-004
+
+Outcome: `Decision`
+
+Decision Authority / Accepted By: project owner by accepting `ADR-010 R3`.
+
+Resolution Artifact:
+`decisions/ADR-010-scn001-behavior-configuration-identity.md`.
+
+Resolved Against / Scope: the first synthetic `SCN-001` selected-slice
+milestone uses a hybrid immutable behavior-configuration manifest with closed
+typed applicability, canonical behavior and manifest assertions, domain-
+separated fingerprints, immutable provenance/correction lineage, exact
+artifact-kind/schema identity, and fail-closed material-change/comparison
+rules. Identity does not establish record authority, validity, or success.
+
+Supersedes / Split From: none; formal-record authority remains the separate
+`EVAL-007` decision resolved by `ADR-011 R3`.
+
+Future Trigger: a required behavior-affecting input cannot be represented under
+the accepted closure; canonicalization/hash construction proves inconsistent;
+the selected slice requires cross-configuration semantic equivalence; or a
+broader milestone requires a new behavior-identity contract.
+
+Date: 2026-07-20
+
+### EVAL-007
+
+Outcome: `Decision`
+
+Decision Authority / Accepted By: project owner by accepting `ADR-011 R3`.
+
+Resolution Artifact:
+`decisions/ADR-011-scn001-formal-evaluation-record-authority.md`.
+
+Resolved Against / Scope: the first synthetic `SCN-001` selected-slice
+milestone uses prospective, manifest-bound, append-preserving formal-evaluation
+authority with deterministic qualification, externally anchored campaign
+authorization, immutable run/evidence/decision/result artifacts, replayable
+capture, frozen evidence and namespace indexes, independent validation,
+fail-closed cutoff closure, and correction/invalidation/supersession without
+history deletion. Acceptance does not authorize a campaign or promote earlier
+development evidence.
+
+Supersedes / Split From: split from the behavior-configuration identity target
+retained by `EVAL-004`; consumes accepted `ADR-010 R3`.
+
+Future Trigger: the repository-local namespace cannot establish completeness;
+durable replay cannot preserve evaluator-private custody; stronger signer or
+third-party attestation becomes necessary; the prospective anchor profile
+cannot provide stable external ordering; or a broader milestone requires a new
+record-authority contract.
+
+Date: 2026-07-20
+
+### EVAL-005
+
+Outcome: `Decision`
+
+Decision Authority / Accepted By: project owner by accepting `ADR-012 R3`.
+
+Resolution Artifact:
+`decisions/ADR-012-scn001-selected-slice-scoreability.md`.
+
+Resolved Against / Scope: `SCN001-SSFO-V0.2.0` scoreability is a bounded,
+conjunctive, nonnumeric determination over four required paths and all five
+mandatory claim classes under the accepted conditional run-count policy,
+orthogonal validity/hard-failure/claim outcomes, exact never-started closure,
+frozen authoritative evidence, and the declared bounded claim ceiling. No
+`ASM-*` working assumption is accepted, and this decision does not establish
+statistical reliability, production readiness, full `SCN-001` acceptance, or
+milestone completion.
+
+Supersedes / Split From: none; consumes accepted `ADR-010 R3` and `ADR-011 R3`
+without reopening `ADR-004 R3` or `ADR-005 R2` run semantics.
+
+Future Trigger: deterministic preflight cannot establish oracle-material
+equivalence; fixture/oracle path, claim, obligation, or invalidity semantics
+change; the finite explanation oracle must support broader claims; or a later
+milestone seeks statistical, production, longitudinal, or full-scenario
+scoreability.
+
+Date: 2026-07-20
+
+### GROW-002
+
+Outcome: `Bounded exclusion`
+
+Decision Authority / Accepted By: project owner by accepting `ADR-012 R3`.
+
+Resolution Artifact:
+`decisions/ADR-012-scn001-selected-slice-scoreability.md`.
+
+Resolved Against / Scope: longitudinal anti-correction and agreement-drift
+detection is excluded from `SCN001-SSFO-V0.2.0`. The bounded milestone may
+evaluate only fixture-conditioned direct correction, later scoped use,
+intervention-conditioned outcome, and retained-basis explanation obligations;
+it may not claim longitudinal drift detection, durable adaptation quality, or
+full personality continuity. No working assumption substitutes for the
+excluded capability.
+
+Supersedes / Split From: none; this closes the original question only for the
+named bounded milestone and claim ceiling.
+
+Future Trigger: longitudinal evaluation, cross-campaign trajectory claims,
+durable developmental adaptation, anti-correction detection, or agreement-
+drift detection enters scope; create a new linked question rather than reopening
+this ID.
+
+Date: 2026-07-20
+
 ### INIT-003
 
 Outcome: `Merged`
@@ -835,20 +942,12 @@ The register is acceptable only if:
 
 ## Next Decision Step
 
-Prepare proposed decision artifacts for the active evaluation frontier without
-starting Phase 7 implementation:
-
-1. resolve `EVAL-004` for behavior-configuration identity and comparison;
-2. resolve linked `EVAL-007` for evaluation configuration, prospective campaign
-   authorization, formal-record authority, replayable evidence, evidence-
-   universe/cutoff closure, invalidation, and supersession;
-3. resolve `EVAL-005` for selected-slice scoreability and unresolved-question
-   treatment while inheriting `ADR-004 R3` and `ADR-005 R2` run semantics.
-
-The three questions must resolve through project-owner acceptance before Phase
-7 creates or relies on formal campaign evidence. Conformance or semantic
-stabilization of already implemented behavior may continue, but it does not
-become formal evidence and does not satisfy the active decisions.
+Re-triage and project the accepted `ADR-010 R3`, `ADR-011 R3`, and `ADR-012 R3`
+contracts into the engineering standard/profile sources, then re-run the
+current workbench governance and independent-review gates before Phase 7
+implements formal-evaluation artifacts. Implementation must begin prospectively;
+no development run or pre-acceptance artifact may be promoted into formal
+campaign evidence.
 
 Keep `DEP-003` non-active unless runtime maintenance semantics block
 implementation. Continue checking `REPO-001` and the selected-slice `MEM`,
@@ -857,5 +956,5 @@ before work or claims cross their registered boundaries.
 
 Engineering conformance, development runs, oracle results, partial claim-class
 eligibility, and evidence-package construction remain distinct from milestone
-completion. The accepted `ADR-009 R4` `P -> D -> A` contract governs any future
-completion claim.
+completion. Accepted `ADR-009 R4` and `ADR-012 R3` govern any future bounded
+campaign result and completion claim through the `P -> D -> A` contract.

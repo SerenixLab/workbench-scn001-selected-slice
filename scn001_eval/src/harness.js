@@ -160,7 +160,7 @@ const RESERVED_LATER_OUTCOME_FIXTURE_IDS = new Set([
 ]);
 export function createEvaluationHarness(sutBoundary, ...extraArguments) {
   if (extraArguments.length !== 0) {
-    throw new Error("The formal evaluation harness accepts only the SUT public boundary.");
+    throw new Error("The development evaluation harness accepts only the SUT public boundary.");
   }
   return createHarnessForMechanismTests(sutBoundary);
 }
@@ -203,7 +203,7 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
 
     deliverFixtureRecords(runRef, fixtureRecords) {
       if (Array.isArray(fixtureRecords) && fixtureRecords.some((record) => record?.role === "user_response")) {
-        throw new Error("Generic formal fixture delivery cannot deliver user_response records.");
+        throw new Error("Generic development fixture delivery cannot deliver user_response records.");
       }
       if (Array.isArray(fixtureRecords) && fixtureRecords.some((record) => (
         RESERVED_FOCUSED_DRILL_FIXTURE_IDS.has(record?.fixtureRecordId)
