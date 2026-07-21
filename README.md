@@ -146,14 +146,16 @@ prospective campaign authority, durable formal records/evidence, campaign and
 namespace indexes, bounded aggregation, result standing, and claim ceiling.
 
 Phase 7 start review is complete. Section 7A implements configuration identity,
-canonical fingerprints, exact references, and fail-closed comparisons; it does
-not authorize or execute a campaign. Every eventual formal artifact must still
-be created prospectively under the accepted anchor/fresh-start chain; no current
-or historical development artifact is eligible for promotion. No current
-artifact establishes behavioral compatibility, formal evidence, scoreability,
-bounded pass/fail, milestone acceptance, broader `SCN-001` acceptance, or
-production readiness. Durable repository extraction remains blocked by
-`REPO-001`.
+canonical fingerprints, exact references, and fail-closed comparisons. Section
+7B implements prospective qualification/campaign authority, allocation,
+anchor/fresh-start prerequisites, invalidity/replacement limits, and owner-only
+material decisions. It intentionally returns no execution-start grant until 7C
+can resolve durable namespace and receipt artifacts. Every eventual formal
+artifact must still be created prospectively; no current or historical
+development artifact is eligible for promotion. No current artifact establishes
+behavioral compatibility, formal evidence, scoreability, bounded pass/fail,
+milestone acceptance, broader `SCN-001` acceptance, or production readiness.
+Durable repository extraction remains blocked by `REPO-001`.
 
 `PHASE7_READINESS.md` records the completed start approval and the strict
 boundary between implementation readiness and formal campaign authority.

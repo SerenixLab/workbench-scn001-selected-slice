@@ -62,10 +62,14 @@ gate before this status is used as an implementation-start decision.
 ## Implementation Start
 
 Phase 7 implementation started from approved clean baseline `e6e1dc1` on
-2026-07-21. Section 7A activates only `ENG-CONF-CONFIG-001 R1` and implements
-configuration schemas, canonical identities, exact references, and comparison
-controls. Qualification/campaign authority, durable formal evidence, and
-scoreability remain separately untriggered until their own sections begin.
+2026-07-21. Section 7A, committed at `e947dfe`, activates
+`ENG-CONF-CONFIG-001 R1` and implements configuration schemas, canonical
+identities, exact references, and comparison controls. Section 7B activates
+`ENG-CONF-AUTHORITY-001 R1` for prospective qualification, authorization,
+allocation, anchor/start prerequisites, invalidity/replacement, and material
+authority decisions. Durable formal evidence and scoreability remain separately
+untriggered until their own sections begin; 7B cannot grant execution start
+without 7C artifact resolution.
 
 ## First Phase 7 Change Requirements
 

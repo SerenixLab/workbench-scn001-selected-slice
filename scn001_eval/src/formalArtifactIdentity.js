@@ -53,6 +53,16 @@ export const EVIDENCE_KINDS = Object.freeze([
 ]);
 
 export const SHA256_PATTERN = /^sha256:[0-9a-f]{64}$/;
+const CONFIGURATION_MANIFEST_KINDS = Object.freeze([
+  "BEHAVIOR_CONFIGURATION_MANIFEST",
+  "EVALUATION_CONFIGURATION_MANIFEST"
+]);
+const IMPLEMENTED_CANONICAL_ARTIFACT_KINDS = Object.freeze([
+  "DETERMINISTIC_QUALIFICATION_PLAN",
+  "DETERMINISTIC_QUALIFICATION_RESULT",
+  "CAMPAIGN_AUTHORIZATION",
+  "EVALUATION_DECISION"
+]);
 
 export function canonicalizeJson(value) {
   return canonicalize(value, "$", new Set());
@@ -97,16 +107,122 @@ export function validateExactArtifactReference(reference, { allowedKinds } = {})
   return reference;
 }
 
-export function createExactArtifactReference(artifact) {
+export function createCanonicalArtifact(input) {
+  assertExactKeys(input, ["artifact_id", "artifact_kind", "identity_payload"], [
+    "annotations"
+  ], "canonical artifact input");
+  if (CONFIGURATION_MANIFEST_KINDS.includes(input.artifact_kind)) {
+    throw new Error("Configuration manifests require their dual-fingerprint constructor.");
+  }
+  if (!IMPLEMENTED_CANONICAL_ARTIFACT_KINDS.includes(input.artifact_kind)) {
+    throw new Error(`Artifact kind ${input.artifact_kind} has no implemented closed schema.`);
+  }
+  validateArtifactKindSchema(
+    input.artifact_kind,
+    ARTIFACT_KIND_SCHEMA[input.artifact_kind]
+  );
+  assertOpaqueId(input.artifact_id, "canonical artifact input.artifact_id");
+  assertExactKeys(input.identity_payload, [
+    "artifact_kind", "schema_id", "schema_revision"
+  ], Object.keys(input.identity_payload).filter((key) => ![
+    "artifact_kind", "schema_id", "schema_revision"
+  ].includes(key)), "canonical artifact identity payload");
+  validateArtifactKindSchema(
+    input.identity_payload.artifact_kind,
+    input.identity_payload.schema_id
+  );
+  if (input.identity_payload.artifact_kind !== input.artifact_kind
+    || input.identity_payload.schema_revision !== 1) {
+    throw new Error("Canonical artifact payload identity does not match its envelope.");
+  }
+  if (Object.hasOwn(input, "annotations")) validateJsonObject(input.annotations, "annotations");
+  canonicalizeJson(input.identity_payload);
+  const artifact = {
+    artifact_id: input.artifact_id,
+    artifact_kind: input.artifact_kind,
+    schema_id: input.identity_payload.schema_id,
+    schema_revision: 1,
+    identity_payload: structuredClone(input.identity_payload),
+    canonicalization_scheme: "RFC8785-JCS",
+    canonicalization_revision: 1,
+    hash_algorithm: "sha-256",
+    hash_domain: ARTIFACT_HASH_DOMAIN[input.artifact_kind],
+    content_fingerprint: fingerprintCanonicalJson(
+      ARTIFACT_HASH_DOMAIN[input.artifact_kind], input.identity_payload
+    )
+  };
+  if (Object.hasOwn(input, "annotations")) artifact.annotations = structuredClone(input.annotations);
+  validateCanonicalArtifact(artifact, { allowedKinds: [input.artifact_kind] });
+  return deepFreeze(artifact);
+}
+
+export function validateCanonicalArtifact(artifact, { allowedKinds } = {}) {
   assertExactKeys(artifact, [
     "artifact_id",
     "artifact_kind",
     "schema_id",
     "schema_revision",
+    "identity_payload",
+    "canonicalization_scheme",
+    "canonicalization_revision",
+    "hash_algorithm",
+    "hash_domain",
     "content_fingerprint"
-  ], [], "referenceable artifact identity");
-  validateExactArtifactReference(artifact);
-  return deepFreeze(structuredClone(artifact));
+  ], ["annotations"], "canonical artifact");
+  if (CONFIGURATION_MANIFEST_KINDS.includes(artifact.artifact_kind)) {
+    throw new Error("Configuration manifests are not generic canonical artifacts.");
+  }
+  if (allowedKinds && !allowedKinds.includes(artifact.artifact_kind)) {
+    throw new Error(`Artifact kind ${artifact.artifact_kind} is not allowed here.`);
+  }
+  validateArtifactKindSchema(artifact.artifact_kind, artifact.schema_id);
+  assertOpaqueId(artifact.artifact_id, "canonical artifact.artifact_id");
+  if (artifact.schema_revision !== 1 || artifact.canonicalization_scheme !== "RFC8785-JCS"
+    || artifact.canonicalization_revision !== 1 || artifact.hash_algorithm !== "sha-256"
+    || artifact.hash_domain !== ARTIFACT_HASH_DOMAIN[artifact.artifact_kind]) {
+    throw new Error("Canonical artifact schema/hash contract is invalid.");
+  }
+  assertPlainObject(artifact.identity_payload, "canonical artifact.identity_payload");
+  validateArtifactKindSchema(
+    artifact.identity_payload.artifact_kind,
+    artifact.identity_payload.schema_id
+  );
+  if (artifact.identity_payload.artifact_kind !== artifact.artifact_kind
+    || artifact.identity_payload.schema_revision !== artifact.schema_revision) {
+    throw new Error("Canonical artifact payload identity conflicts with its envelope.");
+  }
+  validateGroupedKind(artifact.identity_payload, artifact.artifact_kind);
+  assertSha256(artifact.content_fingerprint, "canonical artifact.content_fingerprint");
+  canonicalizeJson(artifact.identity_payload);
+  if (fingerprintCanonicalJson(artifact.hash_domain, artifact.identity_payload)
+    !== artifact.content_fingerprint) {
+    throw new Error("Canonical artifact content fingerprint mismatch.");
+  }
+  if (Object.hasOwn(artifact, "annotations")) validateJsonObject(artifact.annotations, "annotations");
+  return artifact;
+}
+
+export function createExactArtifactReference(artifact) {
+  validateCanonicalArtifact(artifact);
+  const reference = {
+    artifact_id: artifact.artifact_id,
+    artifact_kind: artifact.artifact_kind,
+    schema_id: artifact.schema_id,
+    schema_revision: artifact.schema_revision,
+    content_fingerprint: artifact.content_fingerprint
+  };
+  validateExactArtifactReference(reference);
+  return deepFreeze(reference);
+}
+
+export function resolveExactArtifactReference(reference, artifact, { allowedKinds } = {}) {
+  validateExactArtifactReference(reference, { allowedKinds });
+  validateCanonicalArtifact(artifact, { allowedKinds });
+  const expected = createExactArtifactReference(artifact);
+  if (canonicalizeJson(reference) !== canonicalizeJson(expected)) {
+    throw new Error("Exact artifact reference does not resolve to the exact artifact.");
+  }
+  return artifact;
 }
 
 export function assertExactKeys(value, required, optional, label) {
@@ -174,6 +290,22 @@ export function deepFreeze(value) {
     for (const child of Object.values(value)) deepFreeze(child);
   }
   return value;
+}
+
+function validateJsonObject(value, label) {
+  assertPlainObject(value, label);
+  canonicalizeJson(value);
+}
+
+function validateGroupedKind(payload, artifactKind) {
+  if (artifactKind === "EVALUATION_DECISION"
+    && !DECISION_KINDS.includes(payload.decision_kind)) {
+    throw new Error("Evaluation decision has an unknown decision_kind.");
+  }
+  if (artifactKind === "FORMAL_EVIDENCE_ARTIFACT"
+    && !EVIDENCE_KINDS.includes(payload.evidence_kind)) {
+    throw new Error("Formal evidence artifact has an unknown evidence_kind.");
+  }
 }
 
 function canonicalize(value, path, ancestors) {
