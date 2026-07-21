@@ -22,6 +22,8 @@ import {
   REQUIRED_CLAIM_CLASSES,
   REQUIRED_PATHS,
   validateCampaignAuthorization,
+  validateInitialRunInvalidityDecision,
+  validateMaterialAuthorityDecision,
   validateQualificationPlan,
   validateQualificationResult
 } from "./formalAuthority.js";
@@ -30,6 +32,8 @@ import {
   validateAuthorityNamespaceIndex,
   validateCampaignEvidenceIndex,
   validateFormalEvidenceArtifact,
+  verifyDurableCampaignIndexHistory,
+  verifyDurableQualificationEvidence,
   verifyDurableEvidence,
   verifySingleEffectiveNamespaceHead
 } from "./formalEvidence.js";
@@ -80,6 +84,7 @@ export async function createBoundedCampaignResult(input) {
   assertExactKeys(input, [
     "store", "artifact_id", "result_id", "authorization", "authority_context",
     "campaign_index", "closure_namespace", "closure_receipt", "run_records",
+    "campaign_decisions", "qualification_evidence_artifacts",
     "historical_campaigns", "additional_unresolved_closure", "producer_identity", "validator_identity",
     "validation_result", "created_at", "created_by", "supersedes_result",
     "supersession_decision"
@@ -95,6 +100,10 @@ export async function createBoundedCampaignResult(input) {
     campaign_authorization_ref: createExactArtifactReference(input.authorization),
     campaign_index_ref: createExactArtifactReference(input.campaign_index),
     pre_result_namespace_ref: createExactArtifactReference(input.closure_namespace),
+    pre_result_cutoff: {
+      namespace_revision: input.closure_namespace.identity_payload.revision,
+      cutoff_label: input.closure_namespace.identity_payload.cutoff_label
+    },
     closure_receipt_ref: createExactArtifactReference(input.closure_receipt),
     qualification_plan_ref: structuredClone(input.authorization.identity_payload.qualification_plan_ref),
     qualification_result_ref: structuredClone(input.authorization.identity_payload.qualification_result_ref),
@@ -103,6 +112,7 @@ export async function createBoundedCampaignResult(input) {
     attempt_inventory_digest: fingerprintCanonicalJson(
       "zoey:campaign-attempt-inventory:v1", input.campaign_index.identity_payload.attempt_inventory
     ),
+    attempt_inventory: structuredClone(input.campaign_index.identity_payload.attempt_inventory),
     path_claim_results: computed.pathClaimResults,
     claim_class_results: computed.claimClassResults,
     valid_run_refs: computed.validRunRefs,
@@ -148,8 +158,9 @@ export async function validateBoundedCampaignResult(result, context) {
     "artifact_kind", "schema_id", "schema_revision", "result_id",
     "behavior_manifest_ref", "evaluation_manifest_ref", "campaign_authorization_ref",
     "campaign_index_ref", "pre_result_namespace_ref", "closure_receipt_ref",
+    "pre_result_cutoff",
     "qualification_plan_ref", "qualification_result_ref", "run_count_branch",
-    "planned_valid_runs_per_path", "attempt_inventory_digest", "path_claim_results",
+    "planned_valid_runs_per_path", "attempt_inventory_digest", "attempt_inventory", "path_claim_results",
     "claim_class_results", "valid_run_refs", "invalid_run_refs", "hard_failure_refs",
     "unresolved_closure", "scoreability_policy", "question_matrix", "bounded_result",
     "decisive_basis", "bounded_claim", "grow_002_exclusion", "producer_identity",
@@ -182,7 +193,12 @@ export async function validateBoundedCampaignResult(result, context) {
       !== context.authorization.identity_payload.planned_valid_runs_per_path
     || payload.attempt_inventory_digest !== fingerprintCanonicalJson(
       "zoey:campaign-attempt-inventory:v1", context.campaign_index.identity_payload.attempt_inventory
-    )) throw new Error("Bounded result repeats a conflicting authority/configuration fact.");
+    ) || canonicalizeJson(payload.attempt_inventory)
+      !== canonicalizeJson(context.campaign_index.identity_payload.attempt_inventory)
+    || canonicalizeJson(payload.pre_result_cutoff) !== canonicalizeJson({
+      namespace_revision: context.closure_namespace.identity_payload.revision,
+      cutoff_label: context.closure_namespace.identity_payload.cutoff_label
+    })) throw new Error("Bounded result repeats a conflicting authority/configuration fact.");
   const computed = await computeBoundedResult(context);
   for (const [field, expected] of Object.entries({
     path_claim_results: computed.pathClaimResults,
@@ -375,6 +391,316 @@ export function resolveResultStanding(result, decisions) {
   return heads[0];
 }
 
+export function createClaimInvalidationDecision(input) {
+  assertExactKeys(input, [
+    "artifact_id", "offending_artifact_ref", "result", "campaign_authorization",
+    "prior_invalidation", "superseding_artifact_ref", "supported_claim_ceiling",
+    "observed_overclaim", "reason_code", "basis_evidence_refs", "proposed_by",
+    "independent_reviewer", "review_attestation_ref", "owner_identity",
+    "owner_decision", "effective_at", "effective_by"
+  ], [], "claim invalidation decision input");
+  validateCanonicalArtifact(input.result, { allowedKinds: ["BOUNDED_CAMPAIGN_RESULT"] });
+  validateCanonicalArtifact(input.campaign_authorization, {
+    allowedKinds: ["CAMPAIGN_AUTHORIZATION"]
+  });
+  if (input.prior_invalidation !== null) validateClaimInvalidationDecision(
+    input.prior_invalidation
+  );
+  const claim = {
+    observed_overclaim: input.observed_overclaim,
+    supported_claim_ceiling: input.supported_claim_ceiling
+  };
+  const payload = {
+    artifact_kind: "EVALUATION_DECISION",
+    schema_id: ARTIFACT_KIND_SCHEMA.EVALUATION_DECISION,
+    schema_revision: 1,
+    decision_kind: "CLAIM_INVALIDATION",
+    offending_artifact_ref: structuredClone(input.offending_artifact_ref),
+    affected_result_ref: createExactArtifactReference(input.result),
+    affected_campaign_authorization_ref: createExactArtifactReference(
+      input.campaign_authorization
+    ),
+    prior_invalidation_ref: input.prior_invalidation === null
+      ? null : createExactArtifactReference(input.prior_invalidation),
+    superseding_artifact_ref: input.superseding_artifact_ref === null
+      ? null : structuredClone(input.superseding_artifact_ref),
+    supported_claim_ceiling: input.supported_claim_ceiling,
+    observed_overclaim: input.observed_overclaim,
+    observed_claim_fingerprint: fingerprintCanonicalJson(
+      "zoey:observed-overclaim:v1", claim
+    ),
+    reason_code: input.reason_code,
+    basis_evidence_refs: structuredClone(input.basis_evidence_refs),
+    disposition: "INVALIDATED_FOR_FORMAL_USE",
+    proposed_by: input.proposed_by,
+    independent_reviewer: input.independent_reviewer,
+    review_attestation_ref: structuredClone(input.review_attestation_ref),
+    owner_identity: input.owner_identity,
+    owner_decision: input.owner_decision,
+    effective_at: input.effective_at,
+    effective_by: input.effective_by
+  };
+  const decision = buildArtifact(input.artifact_id, "EVALUATION_DECISION", payload);
+  validateClaimInvalidationDecision(decision, {
+    result: input.result,
+    campaignAuthorization: input.campaign_authorization,
+    priorInvalidation: input.prior_invalidation
+  });
+  return decision;
+}
+
+export function validateClaimInvalidationDecision(decision, context = {}) {
+  validateCanonicalArtifact(decision, { allowedKinds: ["EVALUATION_DECISION"] });
+  const payload = decision.identity_payload;
+  assertExactKeys(payload, [
+    "artifact_kind", "schema_id", "schema_revision", "decision_kind",
+    "offending_artifact_ref", "affected_result_ref",
+    "affected_campaign_authorization_ref", "prior_invalidation_ref",
+    "superseding_artifact_ref", "supported_claim_ceiling", "observed_overclaim",
+    "observed_claim_fingerprint", "reason_code", "basis_evidence_refs", "disposition",
+    "proposed_by", "independent_reviewer", "review_attestation_ref", "owner_identity",
+    "owner_decision", "effective_at", "effective_by"
+  ], [], "claim invalidation decision payload");
+  if (payload.decision_kind !== "CLAIM_INVALIDATION"
+    || payload.disposition !== "INVALIDATED_FOR_FORMAL_USE") {
+    throw new Error("Claim invalidation kind/disposition is invalid.");
+  }
+  validateExactArtifactReference(payload.offending_artifact_ref, {
+    allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT", "BOUNDED_CAMPAIGN_RESULT"]
+  });
+  validateExactArtifactReference(payload.affected_result_ref, {
+    allowedKinds: ["BOUNDED_CAMPAIGN_RESULT"]
+  });
+  validateExactArtifactReference(payload.affected_campaign_authorization_ref, {
+    allowedKinds: ["CAMPAIGN_AUTHORIZATION"]
+  });
+  if (payload.prior_invalidation_ref !== null) validateExactArtifactReference(
+    payload.prior_invalidation_ref, { allowedKinds: ["EVALUATION_DECISION"] }
+  );
+  if (payload.superseding_artifact_ref !== null) validateExactArtifactReference(
+    payload.superseding_artifact_ref,
+    { allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT", "BOUNDED_CAMPAIGN_RESULT"] }
+  );
+  assertNonemptyString(payload.supported_claim_ceiling, "supported claim ceiling");
+  assertNonemptyString(payload.observed_overclaim, "observed overclaim");
+  if (payload.observed_overclaim === payload.supported_claim_ceiling) {
+    throw new Error("Claim invalidation must identify an overclaim beyond its ceiling.");
+  }
+  const claim = {
+    observed_overclaim: payload.observed_overclaim,
+    supported_claim_ceiling: payload.supported_claim_ceiling
+  };
+  assertSha256(payload.observed_claim_fingerprint, "observed claim fingerprint");
+  if (payload.observed_claim_fingerprint !== fingerprintCanonicalJson(
+    "zoey:observed-overclaim:v1", claim
+  )) throw new Error("Observed overclaim fingerprint is invalid.");
+  assertOpaqueId(payload.reason_code, "claim invalidation reason_code");
+  validateReferenceList(payload.basis_evidence_refs, ["FORMAL_EVIDENCE_ARTIFACT"]);
+  if (payload.basis_evidence_refs.length === 0) {
+    throw new Error("Claim invalidation requires durable basis evidence.");
+  }
+  validateExactArtifactReference(payload.review_attestation_ref, {
+    allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT"]
+  });
+  if (new Set([
+    payload.proposed_by, payload.independent_reviewer, payload.owner_identity
+  ]).size !== 3 || payload.owner_decision !== "ACCEPTED"
+    || payload.effective_by !== payload.owner_identity) {
+    throw new Error("Claim invalidation requires independent review and owner acceptance.");
+  }
+  for (const actor of [
+    payload.proposed_by, payload.independent_reviewer, payload.owner_identity
+  ]) assertOpaqueId(actor, "claim invalidation actor");
+  validateCreated(payload.effective_at, payload.effective_by);
+  if (context.result) {
+    resolveExactArtifactReference(payload.affected_result_ref, context.result, {
+      allowedKinds: ["BOUNDED_CAMPAIGN_RESULT"]
+    });
+    if (payload.supported_claim_ceiling
+      !== context.result.identity_payload.bounded_claim.ceiling) {
+      throw new Error("Claim invalidation does not repeat the exact result claim ceiling.");
+    }
+  }
+  if (context.campaignAuthorization) {
+    resolveExactArtifactReference(
+      payload.affected_campaign_authorization_ref, context.campaignAuthorization,
+      { allowedKinds: ["CAMPAIGN_AUTHORIZATION"] }
+    );
+    if (context.result && canonicalizeJson(
+      context.result.identity_payload.campaign_authorization_ref
+    ) !== canonicalizeJson(payload.affected_campaign_authorization_ref)) {
+      throw new Error("Claim invalidation crosses result/campaign authority.");
+    }
+  }
+  if (context.priorInvalidation !== undefined) validateClaimInvalidationPredecessor(
+    decision, context.priorInvalidation
+  );
+  return decision;
+}
+
+export function resolveClaimInvalidationHistory(decisions) {
+  if (!Array.isArray(decisions) || decisions.length === 0) {
+    throw new Error("Claim invalidation history is empty.");
+  }
+  const byReference = new Map();
+  const predecessors = new Set();
+  for (const decision of decisions) {
+    validateClaimInvalidationDecision(decision);
+    const identity = canonicalizeJson(createExactArtifactReference(decision));
+    if (byReference.has(identity)) throw new Error("Claim invalidation history duplicates a decision.");
+    byReference.set(identity, decision);
+    if (decision.identity_payload.prior_invalidation_ref !== null) {
+      predecessors.add(canonicalizeJson(decision.identity_payload.prior_invalidation_ref));
+    }
+  }
+  const heads = decisions.filter((decision) => !predecessors.has(
+    canonicalizeJson(createExactArtifactReference(decision))
+  ));
+  if (heads.length !== 1) throw new Error("Claim invalidation history has a fork.");
+  let current = heads[0];
+  const visited = new Set();
+  while (current.identity_payload.prior_invalidation_ref !== null) {
+    const identity = canonicalizeJson(createExactArtifactReference(current));
+    if (visited.has(identity)) throw new Error("Claim invalidation history has a cycle.");
+    visited.add(identity);
+    const prior = byReference.get(canonicalizeJson(
+      current.identity_payload.prior_invalidation_ref
+    ));
+    if (!prior) throw new Error("Claim invalidation predecessor is missing.");
+    validateClaimInvalidationPredecessor(current, prior);
+    current = prior;
+  }
+  return heads[0];
+}
+
+export async function resolveClaimInvalidationAuthority(input) {
+  assertExactKeys(input, [
+    "store", "result", "campaign_authorization", "decisions",
+    "indexing_namespace", "indexing_receipt"
+  ], [], "claim invalidation authority input");
+  validateCanonicalArtifact(input.result, { allowedKinds: ["BOUNDED_CAMPAIGN_RESULT"] });
+  validateCanonicalArtifact(input.campaign_authorization, {
+    allowedKinds: ["CAMPAIGN_AUTHORIZATION"]
+  });
+  validateAuthorityNamespaceIndex(input.indexing_namespace);
+  const head = resolveClaimInvalidationHistory(input.decisions);
+  const indexed = new Set(input.indexing_namespace.identity_payload.decision_refs.map(
+    canonicalizeJson
+  ));
+  const expectedClaimDecisions = [];
+  for (const reference of input.indexing_namespace.identity_payload.decision_refs) {
+    const candidate = await input.store.readArtifact(
+      reference,
+      (artifact) => validateCanonicalArtifact(artifact, { allowedKinds: ["EVALUATION_DECISION"] })
+    );
+    if (candidate.identity_payload.decision_kind === "CLAIM_INVALIDATION"
+      && canonicalizeJson(candidate.identity_payload.affected_result_ref) === canonicalizeJson(
+        createExactArtifactReference(input.result)
+      ) && canonicalizeJson(candidate.identity_payload.offending_artifact_ref) === canonicalizeJson(
+        head.identity_payload.offending_artifact_ref
+      )) expectedClaimDecisions.push(canonicalizeJson(reference));
+  }
+  const suppliedClaimDecisions = input.decisions.map(
+    (decision) => canonicalizeJson(createExactArtifactReference(decision))
+  );
+  if (canonicalizeJson([...expectedClaimDecisions].sort())
+    !== canonicalizeJson([...suppliedClaimDecisions].sort())) {
+    throw new Error("Claim invalidation context omits or imports an indexed history decision.");
+  }
+  for (const decision of input.decisions) {
+    validateClaimInvalidationDecision(decision, {
+      result: input.result,
+      campaignAuthorization: input.campaign_authorization
+    });
+    const reference = createExactArtifactReference(decision);
+    if (!indexed.has(canonicalizeJson(reference))) {
+      throw new Error("Effective namespace omits part of the claim invalidation history.");
+    }
+    await input.store.readArtifact(reference, validateClaimInvalidationDecision);
+    for (const evidenceRef of [
+      ...decision.identity_payload.basis_evidence_refs,
+      decision.identity_payload.review_attestation_ref
+    ]) {
+      const evidence = await input.store.readArtifact(evidenceRef, validateFormalEvidenceArtifact);
+      await verifyDurableEvidence(input.store, evidence);
+    }
+    if (decision.identity_payload.superseding_artifact_ref !== null) {
+      const supersedingRef = decision.identity_payload.superseding_artifact_ref;
+      const superseding = await input.store.readArtifact(
+        supersedingRef,
+        supersedingRef.artifact_kind === "FORMAL_EVIDENCE_ARTIFACT"
+          ? validateFormalEvidenceArtifact
+          : (artifact) => validateCanonicalArtifact(
+            artifact, { allowedKinds: ["BOUNDED_CAMPAIGN_RESULT"] }
+          )
+      );
+      if (superseding.artifact_kind === "FORMAL_EVIDENCE_ARTIFACT") {
+        await verifyDurableEvidence(input.store, superseding);
+      }
+    }
+  }
+  const offending = await input.store.readArtifact(
+    head.identity_payload.offending_artifact_ref,
+    head.identity_payload.offending_artifact_ref.artifact_kind === "FORMAL_EVIDENCE_ARTIFACT"
+      ? validateFormalEvidenceArtifact
+      : (artifact) => validateCanonicalArtifact(
+        artifact, { allowedKinds: ["BOUNDED_CAMPAIGN_RESULT"] }
+      )
+  );
+  if (offending.artifact_kind === "FORMAL_EVIDENCE_ARTIFACT") {
+    await verifyDurableEvidence(input.store, offending);
+  }
+  await verifyDurableEvidence(input.store, input.indexing_receipt);
+  const receipt = input.indexing_receipt.identity_payload.semantic_envelope;
+  if (input.indexing_receipt.identity_payload.evidence_kind !== "ANCHOR_RECEIPT"
+    || canonicalizeJson(receipt.namespace_index_ref) !== canonicalizeJson(
+      createExactArtifactReference(input.indexing_namespace)
+    ) || canonicalizeJson(receipt.authority_subject_ref) !== canonicalizeJson(
+      createExactArtifactReference(input.campaign_authorization)
+    ) || input.indexing_receipt.identity_payload.producer_identity
+      === head.identity_payload.proposed_by) {
+    throw new Error("Claim invalidation lacks its exact independent namespace receipt.");
+  }
+  const namespaceHead = await verifySingleEffectiveNamespaceHead(
+    input.store, input.indexing_namespace.identity_payload.namespace_id
+  );
+  if (canonicalizeJson(createExactArtifactReference(namespaceHead)) !== canonicalizeJson(
+    createExactArtifactReference(input.indexing_namespace)
+  )) throw new Error("Claim invalidation is indexed only by a non-effective namespace revision.");
+  return deepFreeze({
+    decision_ref: createExactArtifactReference(head),
+    affected_result_ref: structuredClone(head.identity_payload.affected_result_ref),
+    indexing_namespace_ref: createExactArtifactReference(input.indexing_namespace),
+    indexing_receipt_ref: createExactArtifactReference(input.indexing_receipt),
+    disposition: head.identity_payload.disposition,
+    authority_status: "AUTHORITATIVE_CLAIM_INVALIDATION"
+  });
+}
+
+function validateClaimInvalidationPredecessor(decision, prior) {
+  const payload = decision.identity_payload;
+  if (prior === null) {
+    if (payload.prior_invalidation_ref !== null) {
+      throw new Error("Initial claim invalidation unexpectedly names a predecessor.");
+    }
+    return;
+  }
+  resolveExactArtifactReference(payload.prior_invalidation_ref, prior, {
+    allowedKinds: ["EVALUATION_DECISION"]
+  });
+  const previous = prior.identity_payload;
+  for (const field of [
+    "offending_artifact_ref", "affected_result_ref", "affected_campaign_authorization_ref"
+  ]) {
+    if (canonicalizeJson(payload[field]) !== canonicalizeJson(previous[field])) {
+      throw new Error("Claim invalidation history crosses its exact subject authority.");
+    }
+  }
+  if (Date.parse(payload.effective_at) <= Date.parse(previous.effective_at)) {
+    throw new Error("Claim invalidation successor must become effective after its predecessor.");
+  }
+}
+
 function validateStandingTransition(prior, current) {
   const priorPayload = prior.identity_payload;
   const currentPayload = current.identity_payload;
@@ -415,7 +741,7 @@ export async function resolveBoundedResultAuthority(input) {
   if (input.indexing_receipt.identity_payload.evidence_kind !== "ANCHOR_RECEIPT"
     || canonicalizeJson(receipt.namespace_index_ref)
       !== canonicalizeJson(createExactArtifactReference(input.indexing_namespace))
-    || canonicalizeJson(receipt.authorization_ref) !== canonicalizeJson(authorizationRef)
+    || canonicalizeJson(receipt.authority_subject_ref) !== canonicalizeJson(authorizationRef)
     || receipt.profile
       !== input.result_context.authorization.identity_payload.anchor_requirement.profile
     || receipt.authority_ref
@@ -450,6 +776,25 @@ export async function resolveBoundedResultAuthority(input) {
   if (!input.standing_decisions.every((decision) => indexedDecisionRefs.has(
     canonicalizeJson(createExactArtifactReference(decision))
   ))) throw new Error("Effective namespace omits part of the exact result standing chain.");
+  const indexedStandingRefs = [];
+  for (const reference of input.indexing_namespace.identity_payload.decision_refs) {
+    const candidate = await input.store.readArtifact(
+      reference,
+      (artifact) => validateCanonicalArtifact(artifact, { allowedKinds: ["EVALUATION_DECISION"] })
+    );
+    if (candidate.identity_payload.decision_kind === "BOUNDED_RESULT_STANDING"
+      && canonicalizeJson(candidate.identity_payload.result_ref)
+        === canonicalizeJson(resultRef)) {
+      indexedStandingRefs.push(canonicalizeJson(reference));
+    }
+  }
+  const suppliedStandingRefs = input.standing_decisions.map(
+    (decision) => canonicalizeJson(createExactArtifactReference(decision))
+  );
+  if (canonicalizeJson(indexedStandingRefs.sort())
+    !== canonicalizeJson(suppliedStandingRefs.sort())) {
+    throw new Error("Result standing context omits or imports an indexed history decision.");
+  }
   return deepFreeze({
     result_ref: resultRef,
     indexing_namespace_ref: createExactArtifactReference(input.indexing_namespace),
@@ -477,6 +822,7 @@ export function createResultIndexingNamespace(input) {
   for (const decision of input.standing_decisions) {
     validateResultStandingDecision(decision, { result: input.result });
   }
+  resolveResultStanding(input.result, input.standing_decisions);
   const resultRef = createExactArtifactReference(input.result);
   const decisionRefs = [
     ...prior.decision_refs,
@@ -498,6 +844,7 @@ export function createResultIndexingNamespace(input) {
     revision: prior.revision + 1,
     authority_identity: prior.authority_identity,
     prior_index: input.prior_namespace,
+    prior_index_receipt_ref: createExactArtifactReference(input.predecessor_receipt),
     qualification_plan_refs: prior.qualification_plan_refs,
     qualification_result_refs: prior.qualification_result_refs,
     campaign_authorization_refs: prior.campaign_authorization_refs,
@@ -543,7 +890,7 @@ async function computeBoundedResult(input) {
     );
   }
   if (input.authorization.identity_payload.qualification_result_ref !== null) {
-    await input.store.readArtifact(
+    const qualificationResult = await input.store.readArtifact(
       input.authorization.identity_payload.qualification_result_ref,
       (artifact) => validateQualificationResult(artifact, {
         plan: input.authority_context.qualification_plan,
@@ -551,20 +898,36 @@ async function computeBoundedResult(input) {
         evaluationManifest: input.authority_context.evaluation_manifest
       })
     );
+    await verifyDurableQualificationEvidence(
+      input.store, input.authority_context.qualification_plan,
+      qualificationResult, input.qualification_evidence_artifacts,
+      input.closure_namespace
+    );
   }
   const campaignIndexRef = createExactArtifactReference(input.campaign_index);
   await input.store.readArtifact(campaignIndexRef, (artifact) => validateCampaignEvidenceIndex(
     artifact, { authorization: input.authorization }
   ));
+  await verifyDurableCampaignIndexHistory(
+    input.store, input.campaign_index, input.authorization
+  );
+  const campaignAuthorizingNamespace = await input.store.readArtifact(
+    input.campaign_index.identity_payload.authorizing_namespace_ref,
+    validateAuthorityNamespaceIndex
+  );
+  if (!await namespaceDescendsFrom(
+    input.store, input.closure_namespace, campaignAuthorizingNamespace
+  )) throw new Error("Campaign index authorizing namespace is outside closure history.");
   for (const evidenceRef of input.campaign_index.identity_payload.evidence_refs) {
     const evidence = await input.store.readArtifact(evidenceRef, validateFormalEvidenceArtifact);
     await verifyDurableEvidence(input.store, evidence);
   }
   for (const decisionRef of input.campaign_index.identity_payload.decision_refs) {
-    await input.store.readArtifact(decisionRef, (artifact) => validateCanonicalArtifact(
-      artifact, { allowedKinds: ["EVALUATION_DECISION"] }
-    ));
+    validateExactArtifactReference(decisionRef, { allowedKinds: ["EVALUATION_DECISION"] });
   }
+  await verifyCampaignDecisionClosure(
+    input.store, input.campaign_index, input.authorization, input.campaign_decisions
+  );
   if (!input.closure_namespace.identity_payload.campaign_index_refs.some(
     (reference) => canonicalizeJson(reference) === canonicalizeJson(campaignIndexRef)
   )) throw new Error("Pre-result namespace does not include the exact frozen campaign index.");
@@ -573,7 +936,7 @@ async function computeBoundedResult(input) {
   if (input.closure_receipt.identity_payload.evidence_kind !== "ANCHOR_RECEIPT"
     || canonicalizeJson(receiptSemantics.namespace_index_ref)
       !== canonicalizeJson(createExactArtifactReference(input.closure_namespace))
-    || canonicalizeJson(receiptSemantics.authorization_ref)
+    || canonicalizeJson(receiptSemantics.authority_subject_ref)
       !== canonicalizeJson(authorizationRef)
     || receiptSemantics.profile !== input.authorization.identity_payload.anchor_requirement.profile
     || receiptSemantics.authority_ref
@@ -654,7 +1017,8 @@ async function computeBoundedResult(input) {
   );
   for (const campaign of input.historical_campaigns) {
     assertExactKeys(campaign, [
-      "authorization", "authority_context", "campaign_index", "run_records"
+      "authorization", "authority_context", "campaign_index", "run_records",
+      "campaign_decisions", "qualification_evidence_artifacts"
     ], [], "historical campaign context");
     if (!Array.isArray(campaign.run_records)) {
       throw new Error("Historical campaign run context must be an array.");
@@ -693,13 +1057,18 @@ async function computeBoundedResult(input) {
       );
     }
     if (campaign.authorization.identity_payload.qualification_result_ref !== null) {
-      await input.store.readArtifact(
+      const qualificationResult = await input.store.readArtifact(
         campaign.authorization.identity_payload.qualification_result_ref,
         (artifact) => validateQualificationResult(artifact, {
           plan: campaign.authority_context.qualification_plan,
           behaviorManifest: campaign.authority_context.behavior_manifest,
           evaluationManifest: campaign.authority_context.evaluation_manifest
         })
+      );
+      await verifyDurableQualificationEvidence(
+        input.store, campaign.authority_context.qualification_plan,
+        qualificationResult, campaign.qualification_evidence_artifacts,
+        input.closure_namespace
       );
     }
     await input.store.readArtifact(
@@ -708,15 +1077,24 @@ async function computeBoundedResult(input) {
         authorization: campaign.authorization
       })
     );
+    await verifyDurableCampaignIndexHistory(
+      input.store, campaign.campaign_index, campaign.authorization
+    );
+    const historicalAuthorizingNamespace = await input.store.readArtifact(
+      campaign.campaign_index.identity_payload.authorizing_namespace_ref,
+      validateAuthorityNamespaceIndex
+    );
+    if (!await namespaceDescendsFrom(
+      input.store, input.closure_namespace, historicalAuthorizingNamespace
+    )) throw new Error("Historical campaign authorizing namespace is outside closure history.");
     for (const evidenceRef of campaign.campaign_index.identity_payload.evidence_refs) {
       const evidence = await input.store.readArtifact(evidenceRef, validateFormalEvidenceArtifact);
       await verifyDurableEvidence(input.store, evidence);
     }
-    for (const decisionRef of campaign.campaign_index.identity_payload.decision_refs) {
-      await input.store.readArtifact(decisionRef, (artifact) => validateCanonicalArtifact(
-        artifact, { allowedKinds: ["EVALUATION_DECISION"] }
-      ));
-    }
+    await verifyCampaignDecisionClosure(
+      input.store, campaign.campaign_index, campaign.authorization,
+      campaign.campaign_decisions
+    );
     const historicalRunRefs = new Set(
       campaign.campaign_index.identity_payload.run_record_refs.map(canonicalizeJson)
     );
@@ -1022,9 +1400,106 @@ function namespaceContainsAuthorizationBinding(namespace, authorization) {
   ));
 }
 
+async function verifyCampaignDecisionClosure(store, campaignIndex, authorization, decisions) {
+  if (!Array.isArray(decisions)) throw new Error("Campaign decision context must be an array.");
+  const indexed = new Set(campaignIndex.identity_payload.decision_refs.map(canonicalizeJson));
+  const supplied = new Map();
+  for (const decision of decisions) {
+    const reference = createExactArtifactReference(decision);
+    const identity = canonicalizeJson(reference);
+    if (!indexed.has(identity) || supplied.has(identity)) {
+      throw new Error("Campaign decision context imports or duplicates an unindexed decision.");
+    }
+    const kind = decision.identity_payload.decision_kind;
+    const validator = kind === "RUN_INVALIDITY"
+      ? (artifact) => validateInitialRunInvalidityDecision(artifact, authorization)
+      : (artifact) => validateMaterialAuthorityDecision(artifact);
+    if (kind !== "RUN_INVALIDITY" && ![
+      "AUTHORITY_INVALIDATION", "RECORD_CORRECTION",
+      "ORACLE_POLICY_RECLASSIFICATION", "QUALIFICATION_RESULT_CORRECTION",
+      "CAMPAIGN_SUPERSESSION", "NAMESPACE_RECONCILIATION"
+    ].includes(kind)) {
+      throw new Error("Campaign index contains a decision outside its closed authority domain.");
+    }
+    validator(decision);
+    if (kind !== "RUN_INVALIDITY") {
+      validateMaterialDecisionCampaignScope(decision, campaignIndex, authorization);
+    }
+    await store.readArtifact(reference, validator);
+    const payload = decision.identity_payload;
+    for (const evidenceRef of [
+      ...payload.basis_evidence_refs,
+      ...(kind === "RUN_INVALIDITY" ? [] : [payload.review_attestation_ref])
+    ]) {
+      const evidence = await store.readArtifact(evidenceRef, validateFormalEvidenceArtifact);
+      await verifyDurableEvidence(store, evidence);
+    }
+    if (kind === "RUN_INVALIDITY") {
+      const attempt = campaignIndex.identity_payload.attempt_inventory.find((entry) => (
+        canonicalizeJson(entry.invalidity_decision_ref) === identity
+      ));
+      if (!attempt || attempt.attempt_id !== payload.attempt_id
+        || canonicalizeJson(attempt.run_record_ref) !== canonicalizeJson(payload.run_record_ref)) {
+        throw new Error("Run-invalidity decision does not close its exact indexed attempt/run.");
+      }
+    }
+    supplied.set(identity, decision);
+  }
+  if (supplied.size !== indexed.size) {
+    throw new Error("Campaign decision context does not close every indexed decision.");
+  }
+  const qualificationCorrections = decisions.filter((decision) => {
+    const payload = decision.identity_payload;
+    return payload.decision_kind === "QUALIFICATION_RESULT_CORRECTION"
+      && canonicalizeJson(payload.subject_ref) === canonicalizeJson(
+        campaignIndex.identity_payload.qualification_result_ref
+      );
+  });
+  const qualificationInvalidations = qualificationCorrections.filter((decision) => {
+    const payload = decision.identity_payload;
+    return payload.reason_code === "deterministic_qualification_invalidated"
+      && payload.original_disposition === "QUALIFIED"
+      && payload.replacement_disposition
+        === "INVALIDATED_BY_POST_QUALIFICATION_DIVERGENCE"
+      && canonicalizeJson(payload.affected_claims)
+        === canonicalizeJson([...REQUIRED_CLAIM_CLASSES].sort());
+  });
+  const suspendedForDivergence = campaignIndex.identity_payload.campaign_lifecycle === "suspended"
+    && campaignIndex.identity_payload.lifecycle_reason
+      === "deterministic_qualification_invalidated";
+  if (qualificationCorrections.length !== qualificationInvalidations.length
+    || suspendedForDivergence !== (qualificationInvalidations.length === 1)
+    || qualificationInvalidations.length > 1) {
+    throw new Error(
+      "Post-qualification divergence must close exactly to campaign suspension and one decision."
+    );
+  }
+}
+
+function validateMaterialDecisionCampaignScope(decision, campaignIndex, authorization) {
+  const subject = decision.identity_payload.subject_ref;
+  const indexed = {
+    CAMPAIGN_AUTHORIZATION: [createExactArtifactReference(authorization)],
+    FORMAL_RUN_RECORD: campaignIndex.identity_payload.run_record_refs,
+    FORMAL_EVIDENCE_ARTIFACT: campaignIndex.identity_payload.evidence_refs,
+    EVALUATION_DECISION: campaignIndex.identity_payload.decision_refs,
+    DETERMINISTIC_QUALIFICATION_RESULT: [
+      campaignIndex.identity_payload.qualification_result_ref
+    ].filter(Boolean),
+    AUTHORITY_NAMESPACE_INDEX: [campaignIndex.identity_payload.authorizing_namespace_ref],
+    CAMPAIGN_EVIDENCE_INDEX: [campaignIndex.identity_payload.prior_index_ref].filter(Boolean)
+  };
+  if (!Object.hasOwn(indexed, subject.artifact_kind)
+    || !indexed[subject.artifact_kind].some(
+      (reference) => canonicalizeJson(reference) === canonicalizeJson(subject)
+    )) {
+    throw new Error("Material authority decision targets an artifact outside its campaign scope.");
+  }
+}
+
 function boundedClaim(result, basis) {
   if (result === "BOUNDED_PASS") {
-    return deepFreeze({
+    return fingerprintedClaim({
       summary: "Under synthetic SCN-001 selected-slice fixture/oracle package SCN001-SSFO-V0.2.0, the exact declared behavior and evaluation configuration, and the authoritative formal campaign and evidence cutoff, the tested behavior configuration passed the conjunctive gate across the five mandatory selected-slice claim classes.",
       ceiling: RESULT_CEILING
     });
@@ -1033,14 +1508,21 @@ function boundedClaim(result, basis) {
     const earlyHardBoundary = basis.decisive_kind === "HARD_INVARIANT"
       ? " The gate requires all five classes; this decisive global invariant ended the campaign and does not imply that every class was reached."
       : "";
-    return deepFreeze({
+    return fingerprintedClaim({
       summary: `Under synthetic SCN-001 selected-slice fixture/oracle package SCN001-SSFO-V0.2.0, the exact declared behavior and evaluation configuration, and the authoritative formal campaign and evidence cutoff, the tested behavior configuration failed the conjunctive gate across the five mandatory selected-slice claim classes because ${basis.statement}.${earlyHardBoundary}`,
       ceiling: RESULT_CEILING
     });
   }
-  return deepFreeze({
+  return fingerprintedClaim({
     summary: `No bounded pass/fail determination is supported for the exact declared behavior and evaluation configuration because ${basis.statement} remains unresolved. This is campaign indeterminacy, not a SUT failure or pass.`,
     ceiling: INDETERMINATE_CEILING
+  });
+}
+
+function fingerprintedClaim(claim) {
+  return deepFreeze({
+    ...claim,
+    claim_fingerprint: fingerprintCanonicalJson("zoey:bounded-claim:v1", claim)
   });
 }
 

@@ -181,6 +181,15 @@ test("manifest comparison separates identity, metadata-only differences, and unr
     compareBehaviorConfigurationManifests(first, second),
     BEHAVIOR_COMPARISON.METADATA_ONLY_DIFFERENCE
   );
+  const conflictingAliasInput = behaviorManifestInput();
+  conflictingAliasInput.created_at = "2026-07-21T10:02:00Z";
+  conflictingAliasInput.provenance.source_commit = "c".repeat(40);
+  const conflictingAlias = createBehaviorConfigurationManifest(conflictingAliasInput);
+  assert.equal(first.manifest_id, conflictingAlias.manifest_id);
+  assert.equal(
+    compareBehaviorConfigurationManifests(first, conflictingAlias),
+    BEHAVIOR_COMPARISON.COMPARABILITY_UNRESOLVED
+  );
   const malformed = structuredClone(first);
   malformed.behavior_fingerprint = digest("0");
   assert.equal(

@@ -156,7 +156,12 @@ of the otherwise-ungranted 7B execution preflight. Section 7D implements sealed
 formal run records, independent durable authority replay, exact orthogonal run
 outcomes/findings, one/three-run conjunctive path/class aggregation, fail-closed
 historical closure, bounded claim ceilings, immutable result standing, and
-non-circular later-index result authority. These are implementation mechanisms
+non-circular later-index result authority. The final whole-range adversarial
+closure also binds durable qualification evidence to every planned execution,
+requires exact externally attested namespace ancestry, replays typed and
+campaign-scoped decisions, preserves complete run/result inventory and raw
+digests, suspends one-run scoring after accepted deterministic divergence, and
+adds immutable claim-invalidation authority. These are implementation mechanisms
 exercised only with synthetic test objects; no project-owner namespace
 designation, external anchor event, formal execution, real bounded result, or
 standing decision has occurred.
@@ -168,5 +173,6 @@ campaign, bounded pass/fail,
 milestone acceptance, broader `SCN-001` acceptance, or production readiness.
 Durable repository extraction remains blocked by `REPO-001`.
 
-`PHASE7_READINESS.md` records the completed start approval and the strict
-boundary between implementation readiness and formal campaign authority.
+`PHASE7_READINESS.md` records the completed start approval, locally complete
+Phase 7 implementation, pending fresh exact-commit independent review, and the
+strict boundary between implementation completion and formal campaign authority.

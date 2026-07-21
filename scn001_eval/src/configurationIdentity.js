@@ -213,6 +213,10 @@ function compareConfigurationManifests(left, right, kind, payloadField, outcomes
       ? outcomes.BEHAVIOR_CONFIGURATION_CHANGED
       : outcomes.EVALUATION_CONFIGURATION_CHANGED;
   }
+  if (left.manifest_id === right.manifest_id
+    && left.manifest_artifact_fingerprint !== right.manifest_artifact_fingerprint) {
+    return outcomes.COMPARABILITY_UNRESOLVED;
+  }
   if (left.manifest_artifact_fingerprint === right.manifest_artifact_fingerprint) {
     return outcomes.IDENTICAL;
   }

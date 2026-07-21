@@ -3818,3 +3818,63 @@ formal reliance. No owner campaign input is needed to finish implementation,
 but real execution remains blocked until the project owner prospectively
 designates the effective authority inputs and the required external platform
 produces the protected receipts defined by the accepted contracts.
+
+## Phase 7 Whole-Range Adversarial Closure
+
+Closure date: 2026-07-21.
+
+Starting workbench commit: `423bcda`.
+
+After sections 7A-7D were individually implemented and committed, a new
+cross-section red-team pass audited the complete accepted `ADR-010 R3` through
+`ADR-012 R3` authority chain rather than treating the four sections as isolated
+schemas. It found and corrected integration gaps that the section-local tests
+did not expose:
+
+- deterministic qualification now has its own prospectively indexed and
+  externally produced plan receipt, one causally distinct fresh-start artifact
+  per planned execution, execution/path-bound oracle captures, exact projection
+  and comparator-input digests, and a result-validator-produced attestation;
+- every namespace successor carries and durably replays the exact external
+  receipt for its predecessor, checks that the receipt subject and declaration
+  belong to that predecessor, and rejects producer-controlled ordering;
+- frozen campaign-index ancestry is durably replayed, its authorizing namespace
+  must be in closure history, and every indexed decision is typed, stored,
+  evidence-resolved, and restricted to its exact campaign scope;
+- sealed runs bind a distinct selection-independence artifact and preserve both
+  exact capture references and raw-byte digests by evidence kind;
+- campaign lifecycle and reason are separate closed fields; accepted
+  post-qualification divergence requires exactly one qualification-invalidation
+  decision and suspends the one-run campaign before scoring can continue;
+- bounded results preserve the full frozen attempt inventory, exact namespace
+  cutoff, and a separately recomputable bounded-claim fingerprint;
+- immutable claim-invalidation decisions bind the offending artifact, observed
+  overclaim, supported ceiling, result/campaign, evidence, independent review,
+  owner acceptance, supersession history, effective namespace, and external
+  receipt; and
+- configuration comparison now treats one manifest ID with conflicting valid
+  artifact fingerprints as unresolved authority ambiguity rather than a benign
+  metadata-only difference.
+
+Hostile regressions cover missing qualification artifacts, missing selection
+evidence, conflicting manifest aliases, qualification-divergence suspension,
+claim-invalidation forks and actor collapse, complete result inventory/cutoff,
+and durable claim-invalidation authority. The full local gate passes 453 tests
+with none failed or skipped. Governance, formatting, syntax, dependency,
+boundary, state, and aggregate gates all pass; `git diff --check` also passes.
+
+Current authoritative status counts remain:
+
+- 48 rules `applicable` and 5 `not-applicable`;
+- 6 applicable rules `review-only`;
+- 42 applicable rules `uncovered`;
+- no applicable rule `revalidation-required`; and
+- no rule claimed `enforced`.
+
+This closes Phase 7 implementation locally at the mechanism, regression, and
+documentation level. Fresh independent review of the final exact commit is
+still pending and remains required before formal reliance. All test artifacts
+are synthetic and permanently non-formal. No effective project-owner namespace,
+real external anchor event, formal campaign execution, authoritative bounded
+result, claim permission, milestone disposition, or repository extraction has
+been created or implied.

@@ -130,6 +130,15 @@ test("run sealing rejects actor collapse, missing control evidence, and cross-at
   );
   await assert.rejects(() => createFormalRunRecord(missingControl), /missing required|absent/);
 
+  const missingSelection = runInput(setup, first);
+  missingSelection.evidence_artifacts = missingSelection.evidence_artifacts.filter(
+    (artifact) => createExactArtifactReference(artifact).artifact_id
+      !== missingSelection.selection_independence_evidence_ref.artifact_id
+  );
+  await assert.rejects(
+    () => createFormalRunRecord(missingSelection), /missing required|absent/
+  );
+
   const crossed = runInput(setup, first);
   crossed.evidence_artifacts[4] = second.evidenceArtifacts[4];
   await assert.rejects(() => createFormalRunRecord(crossed), /crosses campaign, attempt, or path|evidence list/);
@@ -147,8 +156,12 @@ function runInput(setup, attempt, overrides = {}) {
     start_grant: attempt.startGrant,
     attempt_allocation: attempt.attemptAllocation,
     evidence_artifacts: attempt.evidenceArtifacts,
+    qualification_evidence_artifacts: setup.qualificationEvidenceArtifacts,
     initial_state_evidence_ref: createExactArtifactReference(attempt.initialState),
     isolation_evidence_ref: createExactArtifactReference(attempt.isolation),
+    selection_independence_evidence_ref: createExactArtifactReference(
+      attempt.selectionIndependence
+    ),
     delivered_bundle_ids: [`bundle:${attempt.slot.attempt_id}`],
     ordered_delivery_refs: attempt.orderedDeliveryRefs,
     provider_handles: {

@@ -6,7 +6,11 @@ import {
   createExactArtifactReference,
   fingerprintCanonicalJson
 } from "../src/formalArtifactIdentity.js";
-import { REQUIRED_CLAIM_CLASSES } from "../src/formalAuthority.js";
+import {
+  createMaterialAuthorityDecision,
+  REQUIRED_CLAIM_CLASSES,
+  validateMaterialAuthorityDecision
+} from "../src/formalAuthority.js";
 import {
   createAuthorityNamespaceIndex,
   createCampaignEvidenceIndex,
@@ -17,12 +21,16 @@ import {
 } from "../src/formalEvidence.js";
 import { createFailureFinding } from "../src/formalRunRecord.js";
 import {
+  createClaimInvalidationDecision,
   createBoundedCampaignResult,
   createResultIndexingNamespace,
   createResultStandingDecision,
   resolveBoundedResultAuthority,
+  resolveClaimInvalidationAuthority,
+  resolveClaimInvalidationHistory,
   resolveResultStanding,
   validateBoundedCampaignResult,
+  validateClaimInvalidationDecision,
   validateResultStandingDecision
 } from "../src/boundedScoring.js";
 import {
@@ -45,6 +53,15 @@ test("complete conjunctive closure produces a pending bounded pass", async () =>
   assert.equal(result.identity_payload.authority_status,
     "RESULT_AUTHORITY_PENDING_INDEX_CLOSURE");
   assert.match(result.identity_payload.bounded_claim.ceiling, /does not establish full SCN-001/);
+  assert.match(result.identity_payload.bounded_claim.claim_fingerprint, /^sha256:[0-9a-f]{64}$/);
+  assert.deepEqual(
+    result.identity_payload.attempt_inventory,
+    campaign.campaignIndex.identity_payload.attempt_inventory
+  );
+  assert.deepEqual(result.identity_payload.pre_result_cutoff, {
+    namespace_revision: campaign.closureNamespace.identity_payload.revision,
+    cutoff_label: campaign.closureNamespace.identity_payload.cutoff_label
+  });
 });
 
 test("missing valid coverage remains indeterminate and never becomes bounded failure", async () => {
@@ -64,11 +81,12 @@ test("an un-attributed campaign index in the namespace blocks favorable aggregat
   ));
   const prior = campaign.closureNamespace.identity_payload;
   const expandedNamespace = createAuthorityNamespaceIndex({
-    artifact_id: "artifact:namespace-index:unattributed-history:003",
+    artifact_id: "artifact:namespace-index:unattributed-history:004",
     namespace_id: prior.namespace_id,
-    revision: 3,
+    revision: 4,
     authority_identity: prior.authority_identity,
     prior_index: campaign.closureNamespace,
+    prior_index_receipt_ref: createExactArtifactReference(campaign.closureReceipt),
     qualification_plan_refs: prior.qualification_plan_refs,
     qualification_result_refs: prior.qualification_result_refs,
     campaign_authorization_refs: prior.campaign_authorization_refs,
@@ -84,7 +102,7 @@ test("an un-attributed campaign index in the namespace blocks favorable aggregat
     ].sort(referenceSort),
     manifest_bindings: prior.manifest_bindings,
     anchor_declarations: prior.anchor_declarations,
-    cutoff_label: "namespace:unattributed-history:003",
+    cutoff_label: "namespace:unattributed-history:004",
     producer_identity: "actor:zoey-project-owner",
     validator_identity: "actor:namespace-index-validator",
     validation_result: "VALIDATED",
@@ -119,11 +137,12 @@ test("closed historical non-pressure results cannot manufacture a later failure"
   );
   const prior = campaign.closureNamespace.identity_payload;
   const expandedNamespace = createAuthorityNamespaceIndex({
-    artifact_id: "artifact:namespace-index:closed-history:003",
+    artifact_id: "artifact:namespace-index:closed-history:004",
     namespace_id: prior.namespace_id,
-    revision: 3,
+    revision: 4,
     authority_identity: prior.authority_identity,
     prior_index: campaign.closureNamespace,
+    prior_index_receipt_ref: createExactArtifactReference(campaign.closureReceipt),
     qualification_plan_refs: prior.qualification_plan_refs,
     qualification_result_refs: prior.qualification_result_refs,
     campaign_authorization_refs: prior.campaign_authorization_refs,
@@ -139,7 +158,7 @@ test("closed historical non-pressure results cannot manufacture a later failure"
     ].sort(referenceSort),
     manifest_bindings: prior.manifest_bindings,
     anchor_declarations: prior.anchor_declarations,
-    cutoff_label: "namespace:closed-history:003",
+    cutoff_label: "namespace:closed-history:004",
     producer_identity: "actor:zoey-project-owner",
     validator_identity: "actor:namespace-index-validator",
     validation_result: "VALIDATED",
@@ -160,7 +179,9 @@ test("closed historical non-pressure results cannot manufacture a later failure"
       authorization: campaign.setup.campaignAuthorization,
       authority_context: campaign.setup.authorityContext,
       campaign_index: historicalIndex,
-      run_records: campaign.runs
+      run_records: campaign.runs,
+      campaign_decisions: [],
+      qualification_evidence_artifacts: campaign.setup.qualificationEvidenceArtifacts
     }]
   };
   const result = await createBoundedCampaignResult(input);
@@ -319,12 +340,12 @@ test("result becomes claim-authoritative only through later indexed CURRENT stan
   const standing = currentStanding(result, campaign.closureReceipt);
   await campaign.setup.store.writeArtifact(standing, validateResultStandingDecision);
   const indexingNamespace = createResultIndexingNamespace({
-    artifact_id: "artifact:namespace-index:result-indexing:003",
+    artifact_id: "artifact:namespace-index:result-indexing:004",
     prior_namespace: campaign.closureNamespace,
     predecessor_receipt: campaign.closureReceipt,
     result,
     standing_decisions: [standing],
-    cutoff_label: "namespace:result-indexing:003",
+    cutoff_label: "namespace:result-indexing:004",
     producer_identity: "actor:zoey-project-owner",
     validator_identity: "actor:namespace-index-validator",
     created_at: "2026-07-21T17:00:00Z",
@@ -398,6 +419,18 @@ test("standing history is immutable, owner-reviewed, and fork-intolerant", async
     effective_by: "actor:zoey-project-owner"
   });
   assert.throws(() => resolveResultStanding(result, [current, reevaluate, fork]), /fork/);
+  assert.throws(() => createResultIndexingNamespace({
+    artifact_id: "artifact:namespace-index:standing-fork",
+    prior_namespace: campaign.closureNamespace,
+    predecessor_receipt: campaign.closureReceipt,
+    result,
+    standing_decisions: [current, reevaluate, fork],
+    cutoff_label: "namespace:standing-fork",
+    producer_identity: "actor:zoey-project-owner",
+    validator_identity: "actor:namespace-index-validator",
+    created_at: "2026-07-21T17:15:00Z",
+    created_by: "actor:zoey-project-owner"
+  }), /fork/);
 
   const superseded = createResultStandingDecision({
     artifact_id: "artifact:standing:terminal:003",
@@ -439,6 +472,236 @@ test("standing history is immutable, owner-reviewed, and fork-intolerant", async
     artifact_id: "artifact:standing:self-reviewed",
     independent_reviewer: "actor:standing-producer"
   }), /independent review and owner acceptance/);
+});
+
+test("claim invalidation binds the exact overclaim, ceiling, owner review, and history", async () => {
+  const campaign = await completeCampaign("PASS");
+  const resultContext = resultInput(campaign);
+  const result = await createBoundedCampaignResult(resultContext);
+  await campaign.setup.store.writeArtifact(
+    result, (artifact) => validateBoundedCampaignResult(artifact, resultContext)
+  );
+  const standing = currentStanding(result, campaign.closureReceipt);
+  await campaign.setup.store.writeArtifact(standing, validateResultStandingDecision);
+  const resultNamespace = createResultIndexingNamespace({
+    artifact_id: "artifact:namespace-index:claim-result:004",
+    prior_namespace: campaign.closureNamespace,
+    predecessor_receipt: campaign.closureReceipt,
+    result,
+    standing_decisions: [standing],
+    cutoff_label: "namespace:claim-result:004",
+    producer_identity: "actor:zoey-project-owner",
+    validator_identity: "actor:namespace-index-validator",
+    created_at: "2026-07-21T17:00:00Z",
+    created_by: "actor:zoey-project-owner"
+  });
+  await campaign.setup.store.writeArtifact(resultNamespace, validateAuthorityNamespaceIndex);
+  const resultReceipt = await namespaceReceipt(
+    campaign.setup, resultNamespace, "claim-result", "2026-07-21T17:05:00Z"
+  );
+  const evidenceRef = createExactArtifactReference(resultReceipt);
+  const base = {
+    artifact_id: "artifact:claim-invalidation:001",
+    offending_artifact_ref: evidenceRef,
+    result,
+    campaign_authorization: campaign.setup.campaignAuthorization,
+    prior_invalidation: null,
+    superseding_artifact_ref: null,
+    supported_claim_ceiling: result.identity_payload.bounded_claim.ceiling,
+    observed_overclaim: "Zoey has complete production-ready memory and durable adaptation.",
+    reason_code: "claim:exceeds-selected-slice-ceiling",
+    basis_evidence_refs: [evidenceRef],
+    proposed_by: "actor:claim-auditor",
+    independent_reviewer: "actor:claim-reviewer",
+    review_attestation_ref: evidenceRef,
+    owner_identity: "actor:zoey-project-owner",
+    owner_decision: "ACCEPTED",
+    effective_at: "2026-07-21T17:20:00Z",
+    effective_by: "actor:zoey-project-owner"
+  };
+  const initial = createClaimInvalidationDecision(base);
+  validateClaimInvalidationDecision(initial, {
+    result,
+    campaignAuthorization: campaign.setup.campaignAuthorization,
+    priorInvalidation: null
+  });
+  assert.match(initial.identity_payload.observed_claim_fingerprint, /^sha256:[0-9a-f]{64}$/);
+  const successor = createClaimInvalidationDecision({
+    ...base,
+    artifact_id: "artifact:claim-invalidation:002",
+    prior_invalidation: initial,
+    superseding_artifact_ref: createExactArtifactReference(result),
+    reason_code: "claim:superseding-presentation-recorded",
+    effective_at: "2026-07-21T17:21:00Z"
+  });
+  assert.equal(resolveClaimInvalidationHistory([initial, successor]).content_fingerprint,
+    successor.content_fingerprint);
+  await campaign.setup.store.writeArtifact(initial, validateClaimInvalidationDecision);
+  await campaign.setup.store.writeArtifact(successor, validateClaimInvalidationDecision);
+  const priorNamespace = resultNamespace.identity_payload;
+  const claimNamespace = createAuthorityNamespaceIndex({
+    artifact_id: "artifact:namespace-index:claim-invalidation:005",
+    namespace_id: priorNamespace.namespace_id,
+    revision: 5,
+    authority_identity: priorNamespace.authority_identity,
+    prior_index: resultNamespace,
+    prior_index_receipt_ref: createExactArtifactReference(resultReceipt),
+    qualification_plan_refs: priorNamespace.qualification_plan_refs,
+    qualification_result_refs: priorNamespace.qualification_result_refs,
+    campaign_authorization_refs: priorNamespace.campaign_authorization_refs,
+    campaign_index_refs: priorNamespace.campaign_index_refs,
+    bounded_result_refs: priorNamespace.bounded_result_refs,
+    decision_refs: [
+      ...priorNamespace.decision_refs,
+      createExactArtifactReference(initial),
+      createExactArtifactReference(successor)
+    ].sort(referenceSort),
+    anchor_receipt_refs: [
+      ...priorNamespace.anchor_receipt_refs,
+      createExactArtifactReference(resultReceipt)
+    ].sort(referenceSort),
+    manifest_bindings: priorNamespace.manifest_bindings,
+    anchor_declarations: priorNamespace.anchor_declarations,
+    cutoff_label: "namespace:claim-invalidation:005",
+    producer_identity: "actor:zoey-project-owner",
+    validator_identity: "actor:namespace-index-validator",
+    validation_result: "VALIDATED",
+    created_at: "2026-07-21T17:25:00Z",
+    created_by: "actor:zoey-project-owner"
+  });
+  await campaign.setup.store.writeArtifact(claimNamespace, validateAuthorityNamespaceIndex);
+  const claimReceipt = await namespaceReceipt(
+    campaign.setup, claimNamespace, "claim-invalidation", "2026-07-21T17:30:00Z"
+  );
+  const authority = await resolveClaimInvalidationAuthority({
+    store: campaign.setup.store,
+    result,
+    campaign_authorization: campaign.setup.campaignAuthorization,
+    decisions: [initial, successor],
+    indexing_namespace: claimNamespace,
+    indexing_receipt: claimReceipt
+  });
+  assert.equal(authority.authority_status, "AUTHORITATIVE_CLAIM_INVALIDATION");
+  assert.throws(() => createClaimInvalidationDecision({
+    ...base,
+    artifact_id: "artifact:claim-invalidation:self-approved",
+    independent_reviewer: "actor:claim-auditor"
+  }), /independent review/);
+  const fork = createClaimInvalidationDecision({
+    ...base,
+    artifact_id: "artifact:claim-invalidation:fork",
+    prior_invalidation: initial,
+    effective_at: "2026-07-21T17:22:00Z"
+  });
+  assert.throws(
+    () => resolveClaimInvalidationHistory([initial, successor, fork]), /fork/
+  );
+});
+
+test("post-qualification divergence suspends one-run scoring through one exact decision", async () => {
+  const campaign = await completeCampaign("PASS");
+  const evidenceRef = createExactArtifactReference(campaign.setup.anchorReceipt);
+  const decision = createMaterialAuthorityDecision({
+    artifact_id: "artifact:qualification-invalidation:001",
+    decision_kind: "QUALIFICATION_RESULT_CORRECTION",
+    subject_ref: createExactArtifactReference(campaign.setup.qualificationResult),
+    prior_decision_ref: null,
+    reason_code: "deterministic_qualification_invalidated",
+    original_disposition: "QUALIFIED",
+    replacement_disposition: "INVALIDATED_BY_POST_QUALIFICATION_DIVERGENCE",
+    basis_delta_digest: digest("9"),
+    basis_evidence_refs: [evidenceRef],
+    proposed_by: "actor:divergence-investigator",
+    independent_reviewer: "actor:divergence-reviewer",
+    review_attestation_ref: evidenceRef,
+    owner_identity: "actor:zoey-project-owner",
+    owner_decision: "ACCEPTED",
+    affected_claims: [...REQUIRED_CLAIM_CLASSES].sort(),
+    effective_at: "2026-07-21T16:10:00Z",
+    effective_by: "actor:zoey-project-owner"
+  });
+  await campaign.setup.store.writeArtifact(decision, validateMaterialAuthorityDecision);
+  const priorIndex = campaign.campaignIndex.identity_payload;
+  const suspendedIndex = createCampaignEvidenceIndex({
+    artifact_id: "artifact:campaign-index:qualification-suspended",
+    campaign_authorization: campaign.setup.campaignAuthorization,
+    authorizing_namespace: campaign.setup.namespace,
+    attempt_inventory: priorIndex.attempt_inventory,
+    evidence_refs: priorIndex.evidence_refs,
+    run_record_refs: priorIndex.run_record_refs,
+    decision_refs: [createExactArtifactReference(decision)],
+    anchor_receipt_refs: priorIndex.anchor_receipt_refs,
+    qualification_plan_ref: priorIndex.qualification_plan_ref,
+    qualification_result_ref: priorIndex.qualification_result_ref,
+    prior_index: campaign.campaignIndex,
+    campaign_lifecycle: "suspended",
+    lifecycle_reason: "deterministic_qualification_invalidated",
+    cutoff_label: "campaign:qualification-suspended",
+    producer_identity: "actor:campaign-index-producer",
+    validator_identity: "actor:campaign-index-validator",
+    validation_result: "VALIDATED",
+    frozen_at: "2026-07-21T16:15:00Z",
+    frozen_by: "actor:campaign-index-validator"
+  });
+  await campaign.setup.store.writeArtifact(suspendedIndex, (artifact) => (
+    validateCampaignEvidenceIndex(artifact, {
+      authorization: campaign.setup.campaignAuthorization
+    })
+  ));
+  const priorNamespace = campaign.closureNamespace.identity_payload;
+  const closureNamespace = createAuthorityNamespaceIndex({
+    artifact_id: "artifact:namespace-index:qualification-suspended:004",
+    namespace_id: priorNamespace.namespace_id,
+    revision: 4,
+    authority_identity: priorNamespace.authority_identity,
+    prior_index: campaign.closureNamespace,
+    prior_index_receipt_ref: createExactArtifactReference(campaign.closureReceipt),
+    qualification_plan_refs: priorNamespace.qualification_plan_refs,
+    qualification_result_refs: priorNamespace.qualification_result_refs,
+    campaign_authorization_refs: priorNamespace.campaign_authorization_refs,
+    campaign_index_refs: [
+      ...priorNamespace.campaign_index_refs,
+      createExactArtifactReference(suspendedIndex)
+    ].sort(referenceSort),
+    bounded_result_refs: priorNamespace.bounded_result_refs,
+    decision_refs: [createExactArtifactReference(decision)],
+    anchor_receipt_refs: [
+      ...priorNamespace.anchor_receipt_refs,
+      createExactArtifactReference(campaign.closureReceipt)
+    ].sort(referenceSort),
+    manifest_bindings: priorNamespace.manifest_bindings,
+    anchor_declarations: priorNamespace.anchor_declarations,
+    cutoff_label: "namespace:qualification-suspended:004",
+    producer_identity: "actor:zoey-project-owner",
+    validator_identity: "actor:namespace-index-validator",
+    validation_result: "VALIDATED",
+    created_at: "2026-07-21T16:20:00Z",
+    created_by: "actor:zoey-project-owner"
+  });
+  await campaign.setup.store.writeArtifact(closureNamespace, validateAuthorityNamespaceIndex);
+  const closureReceipt = await namespaceReceipt(
+    campaign.setup, closureNamespace, "qualification-suspended", "2026-07-21T16:25:00Z"
+  );
+  const input = {
+    ...resultInput(campaign),
+    artifact_id: "artifact:bounded-result:qualification-suspended",
+    result_id: "result:bounded:qualification-suspended",
+    campaign_index: suspendedIndex,
+    closure_namespace: closureNamespace,
+    closure_receipt: closureReceipt,
+    campaign_decisions: [decision],
+    historical_campaigns: [{
+      authorization: campaign.setup.campaignAuthorization,
+      authority_context: campaign.setup.authorityContext,
+      campaign_index: campaign.campaignIndex,
+      run_records: campaign.runs,
+      campaign_decisions: [],
+      qualification_evidence_artifacts: campaign.setup.qualificationEvidenceArtifacts
+    }]
+  };
+  const result = await createBoundedCampaignResult(input);
+  assert.equal(result.identity_payload.bounded_result, "NOT_YET_DETERMINABLE");
+  assert.match(result.identity_payload.decisive_basis.statement, /not closed/);
 });
 
 async function completeCampaign(
@@ -547,6 +810,8 @@ async function completeCampaign(
     qualification_result_ref: createExactArtifactReference(setup.qualificationResult),
     prior_index: null,
     campaign_lifecycle: "closed",
+    lifecycle_reason: mode === "HARD_FAIL"
+      ? "authoritative_global_hard_failure" : "planned_attempt_set_closed",
     cutoff_label: `campaign:${mode.toLowerCase()}:closed`,
     producer_identity: "actor:campaign-index-producer",
     validator_identity: "actor:campaign-index-validator",
@@ -568,21 +833,25 @@ async function completeCampaign(
 function campaignClosureNamespace(setup, campaignIndex) {
   const prior = setup.namespace.identity_payload;
   return createAuthorityNamespaceIndex({
-    artifact_id: "artifact:namespace-index:campaign-closure:002",
+    artifact_id: "artifact:namespace-index:campaign-closure:003",
     namespace_id: prior.namespace_id,
-    revision: 2,
+    revision: 3,
     authority_identity: prior.authority_identity,
     prior_index: setup.namespace,
+    prior_index_receipt_ref: createExactArtifactReference(setup.anchorReceipt),
     qualification_plan_refs: prior.qualification_plan_refs,
     qualification_result_refs: prior.qualification_result_refs,
     campaign_authorization_refs: prior.campaign_authorization_refs,
     campaign_index_refs: [createExactArtifactReference(campaignIndex)],
     bounded_result_refs: [],
     decision_refs: [],
-    anchor_receipt_refs: [createExactArtifactReference(setup.anchorReceipt)],
+    anchor_receipt_refs: [
+      ...prior.anchor_receipt_refs,
+      createExactArtifactReference(setup.anchorReceipt)
+    ].sort(referenceSort),
     manifest_bindings: prior.manifest_bindings,
     anchor_declarations: prior.anchor_declarations,
-    cutoff_label: "namespace:campaign-closure:002",
+    cutoff_label: "namespace:campaign-closure:003",
     producer_identity: "actor:zoey-project-owner",
     validator_identity: "actor:namespace-index-validator",
     validation_result: "VALIDATED",
@@ -608,7 +877,7 @@ async function namespaceReceipt(setup, namespace, suffix, sealedAt) {
     raw_bytes: bytes,
     semantic_envelope: {
       profile: "PROTECTED_REMOTE_GATE",
-      authorization_ref: authorizationRef,
+      authority_subject_ref: authorizationRef,
       namespace_index_ref: namespaceRef,
       external_commit_sha: suffix === "result-indexing" ? "c".repeat(40) : "d".repeat(40),
       authority_ref: "refs/heads/formal-authority",
@@ -618,7 +887,7 @@ async function namespaceReceipt(setup, namespace, suffix, sealedAt) {
     },
     created_order: null,
     delivered_order: null,
-    producer_identity: "actor:campaign-producer",
+    producer_identity: "actor:external-anchor-platform",
     validator_identity: "actor:external-gate-validator",
     sealed_at: sealedAt
   });
@@ -635,6 +904,8 @@ function resultInput(campaign) {
     closure_namespace: campaign.closureNamespace,
     closure_receipt: campaign.closureReceipt,
     run_records: campaign.runs,
+    campaign_decisions: [],
+    qualification_evidence_artifacts: campaign.setup.qualificationEvidenceArtifacts,
     historical_campaigns: [],
     additional_unresolved_closure: [],
     producer_identity: "actor:bounded-result-producer",

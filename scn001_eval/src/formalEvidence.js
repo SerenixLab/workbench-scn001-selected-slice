@@ -296,7 +296,7 @@ export async function verifyDurableEvidence(store, artifact) {
 export function createAuthorityNamespaceIndex(input) {
   assertExactKeys(input, [
     "artifact_id", "namespace_id", "revision", "authority_identity",
-    "prior_index", "qualification_plan_refs", "qualification_result_refs",
+    "prior_index", "prior_index_receipt_ref", "qualification_plan_refs", "qualification_result_refs",
     "campaign_authorization_refs", "campaign_index_refs", "bounded_result_refs",
     "decision_refs", "anchor_receipt_refs", "manifest_bindings",
     "anchor_declarations", "cutoff_label", "producer_identity",
@@ -306,12 +306,21 @@ export function createAuthorityNamespaceIndex(input) {
     throw new Error("Authority namespace revision is invalid.");
   }
   if (input.revision === 1) {
-    if (input.prior_index !== null) throw new Error("First namespace revision has no predecessor.");
+    if (input.prior_index !== null || input.prior_index_receipt_ref !== null) {
+      throw new Error("First namespace revision has no predecessor or predecessor receipt.");
+    }
   } else {
     validateAuthorityNamespaceIndex(input.prior_index);
     if (input.revision !== input.prior_index.identity_payload.revision + 1
       || input.namespace_id !== input.prior_index.identity_payload.namespace_id) {
       throw new Error("Namespace revision/predecessor continuity is invalid.");
+    }
+    validateExactArtifactReference(input.prior_index_receipt_ref, {
+      allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT"]
+    });
+    if (!input.anchor_receipt_refs.some((reference) => canonicalizeJson(reference)
+      === canonicalizeJson(input.prior_index_receipt_ref))) {
+      throw new Error("Namespace successor omits its predecessor's exact external receipt.");
     }
   }
   const lists = namespaceReferenceLists(input);
@@ -346,6 +355,8 @@ export function createAuthorityNamespaceIndex(input) {
     prior_index_ref: input.prior_index === null
       ? null
       : createExactArtifactReference(input.prior_index),
+    prior_index_receipt_ref: input.prior_index_receipt_ref === null
+      ? null : structuredClone(input.prior_index_receipt_ref),
     qualification_plan_refs: structuredClone(input.qualification_plan_refs),
     qualification_result_refs: structuredClone(input.qualification_result_refs),
     campaign_authorization_refs: structuredClone(input.campaign_authorization_refs),
@@ -375,6 +386,7 @@ export function validateAuthorityNamespaceIndex(index) {
   assertExactKeys(payload, [
     "artifact_kind", "schema_id", "schema_revision", "namespace_id", "revision",
     "authority_identity", "prior_index_ref", "qualification_plan_refs",
+    "prior_index_receipt_ref",
     "qualification_result_refs", "campaign_authorization_refs", "campaign_index_refs",
     "bounded_result_refs", "decision_refs", "anchor_receipt_refs", "manifest_bindings",
     "anchor_declarations", "included_entry_count", "cutoff_label", "namespace_status",
@@ -392,7 +404,14 @@ export function validateAuthorityNamespaceIndex(index) {
     if (payload.prior_index_ref.artifact_id === index.artifact_id) {
       throw new Error("Authority namespace revision cannot cite itself as predecessor.");
     }
-  } else if (payload.revision !== 1) {
+    validateExactArtifactReference(payload.prior_index_receipt_ref, {
+      allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT"]
+    });
+    if (!payload.anchor_receipt_refs.some((reference) => canonicalizeJson(reference)
+      === canonicalizeJson(payload.prior_index_receipt_ref))) {
+      throw new Error("Namespace successor omits its predecessor's exact external receipt.");
+    }
+  } else if (payload.revision !== 1 || payload.prior_index_receipt_ref !== null) {
     throw new Error("Non-initial namespace revision requires one predecessor.");
   }
   const lists = namespaceReferenceLists(payload);
@@ -457,6 +476,32 @@ export async function verifySingleEffectiveNamespaceHead(store, namespaceId) {
     canonicalizeJson(createExactArtifactReference(index))
   ));
   if (heads.length !== 1) throw new Error("Authority namespace does not have one effective head.");
+  for (const index of indexes) {
+    if (index.identity_payload.prior_index_ref === null) continue;
+    const prior = byReference.get(canonicalizeJson(index.identity_payload.prior_index_ref));
+    const receipt = await store.readArtifact(
+      index.identity_payload.prior_index_receipt_ref, validateFormalEvidenceArtifact
+    );
+    await verifyDurableEvidence(store, receipt);
+    const semantics = receipt.identity_payload.semantic_envelope;
+    const subjectIdentity = canonicalizeJson(semantics.authority_subject_ref);
+    const indexedSubjects = [
+      ...prior.identity_payload.qualification_plan_refs,
+      ...prior.identity_payload.campaign_authorization_refs
+    ].map(canonicalizeJson);
+    const declaration = prior.identity_payload.anchor_declarations.find(
+      (entry) => canonicalizeJson(entry.subject_ref) === subjectIdentity
+    );
+    if (receipt.identity_payload.evidence_kind !== "ANCHOR_RECEIPT"
+      || canonicalizeJson(semantics.namespace_index_ref)
+        !== canonicalizeJson(index.identity_payload.prior_index_ref)
+      || !indexedSubjects.includes(subjectIdentity) || !declaration
+      || semantics.profile !== declaration.profile
+      || semantics.authority_ref !== declaration.authority_ref
+      || receipt.identity_payload.producer_identity === prior.identity_payload.producer_identity) {
+      throw new Error("Namespace predecessor receipt does not attest the exact prior revision.");
+    }
+  }
   return heads[0];
 }
 
@@ -465,7 +510,7 @@ export function createCampaignEvidenceIndex(input) {
     "artifact_id", "campaign_authorization", "authorizing_namespace",
     "attempt_inventory", "evidence_refs", "run_record_refs", "decision_refs",
     "anchor_receipt_refs", "qualification_plan_ref", "qualification_result_ref",
-    "prior_index", "campaign_lifecycle", "cutoff_label", "producer_identity",
+    "prior_index", "campaign_lifecycle", "lifecycle_reason", "cutoff_label", "producer_identity",
     "validator_identity", "validation_result", "frozen_at", "frozen_by"
   ], [], "campaign evidence index input");
   validateCanonicalArtifact(input.campaign_authorization, {
@@ -506,9 +551,7 @@ export function createCampaignEvidenceIndex(input) {
     }
     assertCampaignIndexCumulative(input, input.prior_index.identity_payload);
   }
-  if (!["suspended", "closed", "superseded"].includes(input.campaign_lifecycle)) {
-    throw new Error("Campaign index can freeze only a closed reviewable lifecycle.");
-  }
+  validateCampaignLifecycle(input.campaign_lifecycle, input.lifecycle_reason);
   validateDistinctActors(input.producer_identity, input.validator_identity);
   if (input.validation_result !== "VALIDATED" || input.frozen_by !== input.validator_identity) {
     throw new Error("Campaign index requires independent validation and validator sealing.");
@@ -539,6 +582,7 @@ export function createCampaignEvidenceIndex(input) {
     prior_index_ref: input.prior_index === null
       ? null : createExactArtifactReference(input.prior_index),
     campaign_lifecycle: input.campaign_lifecycle,
+    lifecycle_reason: input.lifecycle_reason,
     member_count: memberCount,
     cutoff_label: input.cutoff_label,
     frozen: true,
@@ -561,7 +605,7 @@ export function validateCampaignEvidenceIndex(index, { authorization } = {}) {
     "authorizing_namespace_ref", "behavior_manifest_ref", "evaluation_manifest_ref",
     "attempt_inventory", "evidence_refs", "run_record_refs", "decision_refs",
     "anchor_receipt_refs", "qualification_plan_ref", "qualification_result_ref",
-    "prior_index_ref", "campaign_lifecycle", "member_count", "cutoff_label",
+    "prior_index_ref", "campaign_lifecycle", "lifecycle_reason", "member_count", "cutoff_label",
     "frozen", "producer_identity", "validator_identity", "validation_result",
     "frozen_at", "frozen_by"
   ], [], "campaign evidence index payload");
@@ -584,7 +628,6 @@ export function validateCampaignEvidenceIndex(index, { authorization } = {}) {
     throw new Error("Campaign evidence index cannot cite itself as predecessor.");
   }
   if (!Array.isArray(payload.attempt_inventory)
-    || !["suspended", "closed", "superseded"].includes(payload.campaign_lifecycle)
     || payload.frozen !== true || payload.validation_result !== "VALIDATED"
     || payload.frozen_by !== payload.validator_identity) {
     throw new Error("Campaign evidence index lifecycle/freeze state is invalid.");
@@ -599,6 +642,7 @@ export function validateCampaignEvidenceIndex(index, { authorization } = {}) {
     + (payload.qualification_result_ref === null ? 0 : 1);
   if (payload.member_count !== memberCount) throw new Error("Campaign evidence member count is invalid.");
   validateAttemptInventoryShape(payload.attempt_inventory);
+  validateCampaignLifecycle(payload.campaign_lifecycle, payload.lifecycle_reason);
   validateAttemptInventoryMembership(payload);
   validateConfigurationManifestReference(payload.behavior_manifest_ref, {
     allowedKind: "BEHAVIOR_CONFIGURATION_MANIFEST"
@@ -624,6 +668,34 @@ export function validateCampaignEvidenceIndex(index, { authorization } = {}) {
   return index;
 }
 
+export async function verifyDurableCampaignIndexHistory(store, index, authorization) {
+  const visited = new Set();
+  let current = index;
+  while (true) {
+    validateCampaignEvidenceIndex(current, { authorization });
+    const identity = canonicalizeJson(createExactArtifactReference(current));
+    if (visited.has(identity)) throw new Error("Campaign index history has a cycle.");
+    visited.add(identity);
+    const payload = current.identity_payload;
+    if (payload.prior_index_ref === null) return current;
+    const prior = await store.readArtifact(
+      payload.prior_index_ref,
+      (artifact) => validateCampaignEvidenceIndex(artifact, { authorization })
+    );
+    assertCampaignIndexCumulative({
+      campaign_authorization: authorization,
+      attempt_inventory: payload.attempt_inventory,
+      qualification_plan_ref: payload.qualification_plan_ref,
+      qualification_result_ref: payload.qualification_result_ref,
+      evidence_refs: payload.evidence_refs,
+      run_record_refs: payload.run_record_refs,
+      decision_refs: payload.decision_refs,
+      anchor_receipt_refs: payload.anchor_receipt_refs
+    }, prior.identity_payload);
+    current = prior;
+  }
+}
+
 export async function resolveDurableExecutionAuthority(input) {
   return resolveDurableExecutionAuthorityInternal(input, true);
 }
@@ -635,7 +707,7 @@ export async function replayDurableExecutionAuthority(input) {
 async function resolveDurableExecutionAuthorityInternal(input, requireCurrentHead) {
   assertExactKeys(input, [
     "store", "authorization", "authority_context", "preflight", "namespace_index",
-    "anchor_receipt", "fresh_start_capture"
+    "anchor_receipt", "fresh_start_capture", "qualification_evidence_artifacts"
   ], [], "durable execution authority input");
   validateCampaignAuthorization(input.authorization, input.authority_context);
   validateAuthorityNamespaceIndex(input.namespace_index);
@@ -678,13 +750,18 @@ async function resolveDurableExecutionAuthorityInternal(input, requireCurrentHea
     );
   }
   if (input.authorization.identity_payload.qualification_result_ref !== null) {
-    await input.store.readArtifact(
+    const qualificationResult = await input.store.readArtifact(
       input.authorization.identity_payload.qualification_result_ref,
       (artifact) => validateQualificationResult(artifact, {
         plan: input.authority_context.qualification_plan,
         behaviorManifest: input.authority_context.behavior_manifest,
         evaluationManifest: input.authority_context.evaluation_manifest
       })
+    );
+    await verifyDurableQualificationEvidence(
+      input.store, input.authority_context.qualification_plan,
+      qualificationResult, input.qualification_evidence_artifacts,
+      input.namespace_index
     );
   }
   if (!input.namespace_index.identity_payload.campaign_authorization_refs.some(
@@ -726,7 +803,7 @@ async function resolveDurableExecutionAuthorityInternal(input, requireCurrentHea
   const receiptSemantics = input.anchor_receipt.identity_payload.semantic_envelope;
   const startSemantics = input.fresh_start_capture.identity_payload.semantic_envelope;
   if (input.anchor_receipt.identity_payload.evidence_kind !== "ANCHOR_RECEIPT"
-    || canonicalizeJson(receiptSemantics.authorization_ref) !== canonicalizeJson(authorizationRef)
+    || canonicalizeJson(receiptSemantics.authority_subject_ref) !== canonicalizeJson(authorizationRef)
     || canonicalizeJson(receiptSemantics.namespace_index_ref) !== canonicalizeJson(namespaceRef)
     || receiptSemantics.profile !== input.preflight.anchor_verification.profile
     || receiptSemantics.external_commit_sha
@@ -739,6 +816,8 @@ async function resolveDurableExecutionAuthorityInternal(input, requireCurrentHea
       !== input.preflight.anchor_verification.receipt_bytes_digest
     || input.anchor_receipt.identity_payload.producer_identity
       !== input.preflight.anchor_verification.producer_identity
+    || input.anchor_receipt.identity_payload.producer_identity
+      === input.authorization.identity_payload.producer_identity
     || input.anchor_receipt.identity_payload.validator_identity
       !== input.preflight.anchor_verification.validator_identity
     || input.fresh_start_capture.identity_payload.evidence_kind !== "EVALUATOR_PRIVATE_CAPTURE"
@@ -802,6 +881,99 @@ async function namespaceIsInEffectiveHistory(store, head, target) {
     current = await store.readArtifact(
       current.identity_payload.prior_index_ref, validateAuthorityNamespaceIndex
     );
+  }
+}
+
+export async function verifyDurableQualificationEvidence(
+  store, plan, result, artifacts, authorizingNamespace
+) {
+  if (!Array.isArray(artifacts)) {
+    throw new Error("Qualification evidence context must be an array.");
+  }
+  const payload = result.identity_payload;
+  const expectedRefs = [
+    payload.validation_attestation_ref,
+    payload.anchor_receipt_ref,
+    ...payload.fresh_start_proof_refs,
+    ...payload.executions.flatMap((execution) => execution.capture_refs)
+  ];
+  const expected = new Set(expectedRefs.map(canonicalizeJson));
+  const supplied = new Map(artifacts.map((artifact) => [
+    canonicalizeJson(createExactArtifactReference(artifact)), artifact
+  ]));
+  if (expected.size !== expectedRefs.length || supplied.size !== artifacts.length
+    || supplied.size !== expected.size
+    || [...expected].some((identity) => !supplied.has(identity))) {
+    throw new Error("Qualification evidence does not close every exact planned artifact.");
+  }
+  for (const artifact of artifacts) await verifyDurableEvidence(store, artifact);
+  const planRef = createExactArtifactReference(plan);
+  const receipt = supplied.get(canonicalizeJson(payload.anchor_receipt_ref));
+  if (receipt.identity_payload.evidence_kind !== "ANCHOR_RECEIPT"
+    || canonicalizeJson(receipt.identity_payload.authority_subject_ref)
+      !== canonicalizeJson(planRef)
+    || receipt.identity_payload.semantic_envelope.profile
+      !== plan.identity_payload.anchor_requirement.profile
+    || receipt.identity_payload.semantic_envelope.authority_ref
+      !== plan.identity_payload.anchor_requirement.authority_ref
+    || receipt.identity_payload.producer_identity === plan.identity_payload.producer_identity) {
+    throw new Error("Qualification plan lacks its exact durable external anchor.");
+  }
+  const receiptNamespace = await store.readArtifact(
+    receipt.identity_payload.semantic_envelope.namespace_index_ref,
+    validateAuthorityNamespaceIndex
+  );
+  if (!await namespaceIsInEffectiveHistory(
+    store, authorizingNamespace, receiptNamespace
+  ) || !receiptNamespace.identity_payload.qualification_plan_refs.some(
+    (reference) => canonicalizeJson(reference) === canonicalizeJson(planRef)
+  )) throw new Error("Qualification plan anchor is outside effective namespace history.");
+  const executionIds = new Set(plan.identity_payload.execution_slots.map(
+    (slot) => slot.execution_id
+  ));
+  const fresh = payload.fresh_start_proof_refs.map(
+    (reference) => supplied.get(canonicalizeJson(reference))
+  );
+  if (fresh.some((artifact) => (
+    artifact.identity_payload.semantic_envelope.capture_role
+      !== "QUALIFICATION_FRESH_START_PROOF"
+    || !executionIds.has(artifact.identity_payload.semantic_envelope.execution_id)
+    || artifact.identity_payload.semantic_envelope.profile
+      !== plan.identity_payload.anchor_requirement.fresh_start_profile
+    || canonicalizeJson(artifact.identity_payload.semantic_envelope.plan_ref)
+      !== canonicalizeJson(planRef)
+    || canonicalizeJson(artifact.identity_payload.semantic_envelope.anchor_receipt_ref)
+      !== canonicalizeJson(payload.anchor_receipt_ref)
+    || artifact.identity_payload.producer_identity === plan.identity_payload.producer_identity
+    || artifact.identity_payload.semantic_envelope.anchor_event_id
+      !== receipt.identity_payload.semantic_envelope.external_event_id
+  )) || new Set(fresh.map(
+    (artifact) => artifact.identity_payload.semantic_envelope.execution_id
+  )).size !== executionIds.size || new Set(fresh.map(
+    (artifact) => artifact.identity_payload.semantic_envelope.start_event_id
+  )).size !== executionIds.size) {
+    throw new Error("Qualification fresh-start evidence does not close every planned execution.");
+  }
+  const validation = supplied.get(canonicalizeJson(payload.validation_attestation_ref));
+  if (validation.identity_payload.semantic_envelope.capture_role !== "VALIDATION_ATTESTATION"
+    || validation.identity_payload.producer_identity !== payload.validator_identity) {
+    throw new Error("Qualification result lacks its exact validation attestation.");
+  }
+  for (const execution of payload.executions) {
+    for (const reference of execution.capture_refs) {
+      const capture = supplied.get(canonicalizeJson(reference));
+      if (capture.identity_payload.semantic_envelope.capture_role !== "ORACLE_CLASSIFICATION"
+        || capture.identity_payload.semantic_envelope.execution_id !== execution.execution_id
+        || capture.identity_payload.semantic_envelope.path_id !== execution.path_id
+        || capture.identity_payload.semantic_envelope.oracle_projection_digest
+          !== execution.oracle_projection_digest
+        || capture.identity_payload.semantic_envelope.comparator_input_digest
+          !== execution.comparator_input_digest
+        || canonicalizeJson(capture.identity_payload.authority_subject_ref)
+          !== canonicalizeJson(planRef)) {
+        throw new Error("Qualification execution capture has the wrong role or plan subject.");
+      }
+    }
   }
 }
 
@@ -908,25 +1080,27 @@ function validateEvidenceSemantics(payload) {
     }
   }
   if (payload.evidence_kind === "ANCHOR_RECEIPT") {
-    if (payload.visibility !== "AUTHORITY_EXTERNAL" || payload.attempt_id !== null
-      || payload.campaign_authorization_ref === null) {
+    if (payload.visibility !== "AUTHORITY_EXTERNAL" || payload.attempt_id !== null) {
       throw new Error("Anchor receipt visibility/context is invalid.");
     }
     assertExactKeys(payload.semantic_envelope, [
-      "profile", "authorization_ref", "namespace_index_ref", "external_commit_sha",
+      "profile", "authority_subject_ref", "namespace_index_ref", "external_commit_sha",
       "authority_ref", "external_event_id", "observed_predecessor", "raw_receipt_digest"
     ], [], "anchor receipt semantics");
-    validateExactArtifactReference(payload.semantic_envelope.authorization_ref, {
-      allowedKinds: ["CAMPAIGN_AUTHORIZATION"]
+    validateExactArtifactReference(payload.semantic_envelope.authority_subject_ref, {
+      allowedKinds: ["DETERMINISTIC_QUALIFICATION_PLAN", "CAMPAIGN_AUTHORIZATION"]
     });
     validateExactArtifactReference(payload.semantic_envelope.namespace_index_ref, {
       allowedKinds: ["AUTHORITY_NAMESPACE_INDEX"]
     });
     if (canonicalizeJson(payload.authority_subject_ref)
-        !== canonicalizeJson(payload.semantic_envelope.authorization_ref)
-      || canonicalizeJson(payload.campaign_authorization_ref)
-        !== canonicalizeJson(payload.semantic_envelope.authorization_ref)) {
-      throw new Error("Anchor receipt does not bind its exact campaign authorization.");
+        !== canonicalizeJson(payload.semantic_envelope.authority_subject_ref)
+      || (payload.authority_subject_ref.artifact_kind === "CAMPAIGN_AUTHORIZATION"
+        && canonicalizeJson(payload.campaign_authorization_ref)
+          !== canonicalizeJson(payload.semantic_envelope.authority_subject_ref))
+      || (payload.authority_subject_ref.artifact_kind === "DETERMINISTIC_QUALIFICATION_PLAN"
+        && payload.campaign_authorization_ref !== null)) {
+      throw new Error("Anchor receipt does not bind its exact authority subject.");
     }
     if (!/^[0-9a-f]{40}$/.test(payload.semantic_envelope.external_commit_sha)
       || !/^[0-9a-f]{40}$/.test(payload.semantic_envelope.observed_predecessor)
@@ -964,6 +1138,57 @@ function validateEvidenceSemantics(payload) {
     }
     if (payload.semantic_envelope.anchor_event_id === payload.semantic_envelope.start_event_id) {
       throw new Error("Fresh-start capture cannot reuse the anchor event as its start event.");
+    }
+  } else if (payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE"
+    && payload.semantic_envelope.capture_role === "QUALIFICATION_FRESH_START_PROOF") {
+    assertExactKeys(payload.semantic_envelope, [
+      "capture_role", "profile", "execution_id", "plan_ref", "anchor_receipt_ref",
+      "anchor_event_id", "start_event_id", "content_digest"
+    ], [], "qualification fresh-start capture semantics");
+    if (payload.visibility !== "EVALUATOR_PRIVATE" || payload.attempt_id !== null
+      || payload.campaign_authorization_ref !== null) {
+      throw new Error("Qualification fresh-start capture has invalid visibility/context.");
+    }
+    for (const field of ["profile", "execution_id", "anchor_event_id", "start_event_id"]) {
+      assertOpaqueId(payload.semantic_envelope[field], `qualification fresh-start ${field}`);
+    }
+    validateExactArtifactReference(payload.semantic_envelope.plan_ref, {
+      allowedKinds: ["DETERMINISTIC_QUALIFICATION_PLAN"]
+    });
+    validateExactArtifactReference(payload.semantic_envelope.anchor_receipt_ref, {
+      allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT"]
+    });
+    assertSha256(payload.semantic_envelope.content_digest, "qualification fresh-start digest");
+    if (payload.semantic_envelope.content_digest !== payload.raw_byte_digest
+      || payload.semantic_envelope.anchor_event_id === payload.semantic_envelope.start_event_id
+      || canonicalizeJson(payload.authority_subject_ref)
+        !== canonicalizeJson(payload.semantic_envelope.plan_ref)) {
+      throw new Error("Qualification fresh-start causal/digest closure is invalid.");
+    }
+  } else if (payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE"
+    && payload.semantic_envelope.capture_role === "ORACLE_CLASSIFICATION"
+    && payload.authority_subject_ref.artifact_kind === "DETERMINISTIC_QUALIFICATION_PLAN") {
+    assertExactKeys(payload.semantic_envelope, [
+      "capture_role", "execution_id", "path_id", "plan_ref",
+      "oracle_projection_digest", "comparator_input_digest", "content_digest", "event_id"
+    ], [], "qualification oracle capture semantics");
+    if (payload.visibility !== "EVALUATOR_PRIVATE" || payload.attempt_id !== null
+      || payload.campaign_authorization_ref !== null || payload.path_id !== null) {
+      throw new Error("Qualification oracle capture has invalid visibility/context.");
+    }
+    for (const field of ["execution_id", "path_id", "event_id"]) {
+      assertOpaqueId(payload.semantic_envelope[field], `qualification oracle ${field}`);
+    }
+    validateExactArtifactReference(payload.semantic_envelope.plan_ref, {
+      allowedKinds: ["DETERMINISTIC_QUALIFICATION_PLAN"]
+    });
+    for (const field of [
+      "oracle_projection_digest", "comparator_input_digest", "content_digest"
+    ]) assertSha256(payload.semantic_envelope[field], `qualification oracle ${field}`);
+    if (payload.semantic_envelope.content_digest !== payload.raw_byte_digest
+      || canonicalizeJson(payload.authority_subject_ref)
+        !== canonicalizeJson(payload.semantic_envelope.plan_ref)) {
+      throw new Error("Qualification oracle capture identity/digest closure is invalid.");
     }
   } else if (payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE") {
     assertExactKeys(payload.semantic_envelope, [
@@ -1132,6 +1357,20 @@ function validateUnusedSlotDisposition(entry) {
   }
 }
 
+function validateCampaignLifecycle(lifecycle, reason) {
+  const reasons = {
+    closed: ["planned_attempt_set_closed", "authoritative_global_hard_failure"],
+    suspended: [
+      "deterministic_qualification_invalidated", "invalid_attempt_limit_reached",
+      "repeated_invalidity_root_cause", "authority_review_required"
+    ],
+    superseded: ["campaign_superseded"]
+  };
+  if (!Object.hasOwn(reasons, lifecycle) || !reasons[lifecycle].includes(reason)) {
+    throw new Error("Campaign index lifecycle/reason is outside the closed authority catalogue.");
+  }
+}
+
 function validateAttemptInventoryMembership(payload) {
   const evidence = new Set(payload.evidence_refs.map(canonicalizeJson));
   const runs = new Set(payload.run_record_refs.map(canonicalizeJson));
@@ -1149,6 +1388,12 @@ function validateAttemptInventoryMembership(payload) {
     }
     if (entry.invalidity_decision_ref !== null) {
       mappedInvalidityDecisions.push(canonicalizeJson(entry.invalidity_decision_ref));
+    }
+    if (entry.replacement_allocation !== null) {
+      if (!decisions.has(canonicalizeJson(entry.replacement_allocation.invalidity_decision_ref))
+        || !runs.has(canonicalizeJson(entry.replacement_allocation.predecessor_run_ref))) {
+        throw new Error("Replacement allocation basis is omitted from campaign members.");
+      }
     }
     if (entry.unused_slot_disposition !== null
       && entry.unused_slot_disposition.decisive_run_ref !== null

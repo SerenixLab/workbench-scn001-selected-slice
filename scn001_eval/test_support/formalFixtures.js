@@ -95,6 +95,66 @@ export function createFormalAuthorityFixture({ qualification = "QUALIFIED" } = {
   };
 }
 
+export function rebuildFormalAuthorityFixture(fixture, evidence, qualification = "QUALIFIED") {
+  const { behaviorManifest, evaluationManifest, qualificationPlan } = fixture;
+  const comparisons = qualificationComparisons(qualificationPlan);
+  if (qualification === "NOT_QUALIFIED") {
+    comparisons[0].equivalent = false;
+    comparisons[0].mismatch_class = "VALUE_MISMATCH";
+    comparisons[0].details_digest = digest("f");
+  }
+  const qualificationResult = createQualificationResult({
+    artifact_id: `artifact:qualification-result:fixture:${qualification.toLowerCase()}`,
+    plan: qualificationPlan,
+    behavior_manifest: behaviorManifest,
+    evaluation_manifest: evaluationManifest,
+    executions: qualificationExecutions(qualificationPlan, evidence.execution_capture_refs),
+    comparisons,
+    result: qualification,
+    producer_identity: "actor:qualification-result-producer",
+    validator_identity: "actor:qualification-result-validator",
+    validation_result: "VALIDATED",
+    validation_attestation_ref: evidence.validation_attestation_ref,
+    anchor_receipt_ref: evidence.anchor_receipt_ref,
+    fresh_start_proof_refs: evidence.fresh_start_proof_refs,
+    supersedes_result_ref: null,
+    correction_decision_ref: null,
+    sealed_at: "2026-07-21T12:30:00Z",
+    sealed_by: "actor:qualification-result-validator"
+  });
+  const campaignAuthorization = createCampaignAuthorization({
+    artifact_id: "artifact:campaign-authorization:fixture",
+    campaign_id: "campaign:scn001:first-milestone:fixture",
+    authority_namespace_id: "namespace:scn001:first-milestone",
+    behavior_manifest: behaviorManifest,
+    evaluation_manifest: evaluationManifest,
+    qualification_plan: qualificationPlan,
+    qualification_result: qualificationResult,
+    attempt_slots: attemptSlots(qualification === "QUALIFIED" ? 1 : 3, "PRIMARY", 0),
+    contingency_mode: qualification === "QUALIFIED" ? "PREALLOCATED_TO_THREE" : "NOT_APPLICABLE",
+    contingency_slots: qualification === "QUALIFIED" ? attemptSlots(2, "CONTINGENCY", 1) : [],
+    campaign_authority_identity: "actor:zoey-project-owner",
+    producer_identity: "actor:campaign-producer",
+    custody_plan: custodyPlan(),
+    anchor_requirement: anchorRequirement(),
+    authorized_at: "2026-07-21T13:00:00Z",
+    authorized_by: "actor:zoey-project-owner"
+  });
+  return {
+    behaviorManifest,
+    evaluationManifest,
+    qualificationPlan,
+    qualificationResult,
+    campaignAuthorization,
+    authorityContext: {
+      behavior_manifest: behaviorManifest,
+      evaluation_manifest: evaluationManifest,
+      qualification_plan: qualificationPlan,
+      qualification_result: qualificationResult
+    }
+  };
+}
+
 export function evidenceReference(artifactId, character = "7") {
   return {
     artifact_id: artifactId,
@@ -134,12 +194,14 @@ function qualificationSlots() {
   })));
 }
 
-function qualificationExecutions(plan) {
+function qualificationExecutions(plan, captureRefs = null) {
   return plan.identity_payload.execution_slots.map((slot, index) => ({
     execution_id: slot.execution_id,
     path_id: slot.path_id,
     status: "COMPLETED",
-    capture_refs: [evidenceReference(`artifact:qualification-capture:fixture:${index + 1}`)],
+    capture_refs: captureRefs === null
+      ? [evidenceReference(`artifact:qualification-capture:fixture:${index + 1}`)]
+      : [captureRefs[index]],
     oracle_projection_digest: digest("b"),
     comparator_input_digest: digest("c")
   }));

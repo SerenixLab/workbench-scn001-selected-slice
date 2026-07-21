@@ -132,6 +132,8 @@ export async function createFormalRunRecord(input) {
     "store", "artifact_id", "record_id", "authorization", "authority_context",
     "authorizing_namespace", "anchor_receipt", "start_grant", "attempt_allocation",
     "evidence_artifacts", "initial_state_evidence_ref", "isolation_evidence_ref",
+    "selection_independence_evidence_ref",
+    "qualification_evidence_artifacts",
     "delivered_bundle_ids", "ordered_delivery_refs", "provider_handles",
     "actual_seed_commitment", "run_validity", "invariant_result",
     "obligation_results", "failure_findings", "predecessor_run_ref",
@@ -162,10 +164,14 @@ export async function createFormalRunRecord(input) {
     provider_handles: structuredClone(input.provider_handles),
     initial_state_evidence_ref: structuredClone(input.initial_state_evidence_ref),
     isolation_evidence_ref: structuredClone(input.isolation_evidence_ref),
+    selection_independence_evidence_ref: structuredClone(
+      input.selection_independence_evidence_ref
+    ),
     delivered_bundle_ids: structuredClone(input.delivered_bundle_ids),
     ordered_delivery_refs: structuredClone(input.ordered_delivery_refs),
     evidence_refs: context.evidenceRefs,
     raw_capture_refs_by_kind: context.refsByKind,
+    raw_capture_digests_by_kind: context.digestsByKind,
     lifecycle_facts: {
       authorized: true,
       started: true,
@@ -212,7 +218,9 @@ export function validateFormalRunRecord(record, context) {
     "fresh_start_proof", "attempt_allocation", "attempt_id", "slot_id", "path_id",
     "claim_classes_pressured", "actual_seed_commitment", "provider_handles",
     "initial_state_evidence_ref", "isolation_evidence_ref", "delivered_bundle_ids",
+    "selection_independence_evidence_ref",
     "ordered_delivery_refs", "evidence_refs", "raw_capture_refs_by_kind",
+    "raw_capture_digests_by_kind",
     "lifecycle_facts", "run_validity", "invariant_result", "obligation_results",
     "failure_findings", "initial_invalidity_decision_ref", "predecessor_run_ref",
     "producer_identity", "validator_identity", "seal_result", "sealed_at", "sealed_by",
@@ -309,6 +317,7 @@ export async function verifyDurableFormalRunRecord(store, record, context) {
     start_grant: context.start_grant,
     attempt_allocation: record.identity_payload.attempt_allocation,
     evidence_artifacts: evidenceArtifacts,
+    qualification_evidence_artifacts: context.qualification_evidence_artifacts,
     replay_authority: true
   });
   return record;
@@ -359,7 +368,8 @@ async function validateRunInputs(input) {
     preflight: reconstructedPreflight,
     namespace_index: input.authorizing_namespace,
     anchor_receipt: input.anchor_receipt,
-    fresh_start_capture: freshStart
+    fresh_start_capture: freshStart,
+    qualification_evidence_artifacts: input.qualification_evidence_artifacts
   });
   if (canonicalizeJson(reconstructedGrant) !== canonicalizeJson(input.start_grant)) {
     throw new Error("Formal run execution-start grant cannot be independently reconstructed.");
@@ -373,15 +383,21 @@ async function validateRunInputs(input) {
     throw new Error("Formal run evidence must have one strict creation order.");
   }
   const refsByKind = {};
+  const digestsByKind = {};
   for (const kind of REQUIRED_EVIDENCE_KINDS) {
-    refsByKind[kind] = artifacts
-      .filter((artifact) => artifact.identity_payload.evidence_kind === kind)
-      .map(createExactArtifactReference);
+    const matching = artifacts.filter(
+      (artifact) => artifact.identity_payload.evidence_kind === kind
+    );
+    refsByKind[kind] = matching.map(createExactArtifactReference);
+    digestsByKind[kind] = matching.map((artifact) => ({
+      evidence_ref: createExactArtifactReference(artifact),
+      raw_byte_digest: artifact.identity_payload.raw_byte_digest
+    }));
     if (refsByKind[kind].length === 0) {
       throw new Error(`Formal run is missing required ${kind} evidence.`);
     }
   }
-  return { slot, evidenceRefs: refs, refsByKind };
+  return { slot, evidenceRefs: refs, refsByKind, digestsByKind };
 }
 
 function validateRunEvidencePayload(payload, artifacts) {
@@ -398,6 +414,19 @@ function validateRunEvidencePayload(payload, artifacts) {
   }
   if (canonicalizeJson(payload.raw_capture_refs_by_kind) !== canonicalizeJson(byKind)) {
     throw new Error("Formal run evidence kind partition is incomplete.");
+  }
+  const digestsByKind = Object.fromEntries(Object.entries(byKind).map(([kind, references]) => [
+    kind,
+    references.map((reference) => {
+      const artifact = artifacts.find((candidate) => canonicalizeJson(
+        createExactArtifactReference(candidate)
+      ) === canonicalizeJson(reference));
+      return { evidence_ref: reference, raw_byte_digest: artifact.identity_payload.raw_byte_digest };
+    })
+  ]));
+  if (canonicalizeJson(payload.raw_capture_digests_by_kind)
+    !== canonicalizeJson(digestsByKind)) {
+    throw new Error("Formal run raw-capture digest closure is incomplete.");
   }
   const authorizationRef = payload.campaign_authorization_ref;
   for (const artifact of artifacts) {
@@ -425,7 +454,7 @@ function validateRunEvidencePayload(payload, artifacts) {
   const evidenceIdentities = new Set(refs.map(canonicalizeJson));
   for (const reference of [
     payload.initial_state_evidence_ref, payload.isolation_evidence_ref,
-    payload.fresh_start_capture_ref
+    payload.selection_independence_evidence_ref, payload.fresh_start_capture_ref
   ]) {
     validateExactArtifactReference(reference, { allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT"] });
     if (!evidenceIdentities.has(canonicalizeJson(reference))) {
@@ -442,8 +471,12 @@ function validateRunEvidencePayload(payload, artifacts) {
   const isolation = artifacts.find((artifact) => canonicalizeJson(
     createExactArtifactReference(artifact)
   ) === canonicalizeJson(payload.isolation_evidence_ref));
+  const selection = artifacts.find((artifact) => canonicalizeJson(
+    createExactArtifactReference(artifact)
+  ) === canonicalizeJson(payload.selection_independence_evidence_ref));
   if (initialState?.identity_payload.semantic_envelope.capture_role !== "INITIAL_STATE_PROOF"
-    || isolation?.identity_payload.semantic_envelope.capture_role !== "RUN_ISOLATION_PROOF") {
+    || isolation?.identity_payload.semantic_envelope.capture_role !== "RUN_ISOLATION_PROOF"
+    || selection?.identity_payload.semantic_envelope.capture_role !== "SELECTION_INDEPENDENCE") {
     throw new Error("Formal run control evidence has the wrong semantic role.");
   }
   const evidenceRefs = new Set(refs.map(canonicalizeJson));

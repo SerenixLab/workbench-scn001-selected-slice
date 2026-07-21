@@ -40,6 +40,7 @@ import {
   evidenceReference,
   runRecordReference
 } from "../test_support/formalFixtures.js";
+import { createFormalCampaignFixture } from "../test_support/formalCampaignFixtures.js";
 
 const sha256 = (bytes) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 
@@ -183,7 +184,8 @@ test("durable resolution is the sole transition from preflight to execution auth
     preflight: setup.preflight,
     namespace_index: setup.namespace,
     anchor_receipt: setup.receipt,
-    fresh_start_capture: setup.freshStart
+    fresh_start_capture: setup.freshStart,
+    qualification_evidence_artifacts: setup.qualificationEvidenceArtifacts
   });
   assert.equal(grant.execution_start_authorized, true);
   assert.equal(grant.lifecycle, "started");
@@ -200,9 +202,24 @@ test("durable resolution is the sole transition from preflight to execution auth
       preflight: forged,
       namespace_index: setup.namespace,
       anchor_receipt: setup.receipt,
-      fresh_start_capture: setup.freshStart
+      fresh_start_capture: setup.freshStart,
+      qualification_evidence_artifacts: setup.qualificationEvidenceArtifacts
     }),
     /exact preflight|receipt\/fresh-start evidence/
+  );
+
+  await assert.rejects(
+    () => resolveDurableExecutionAuthority({
+      store: setup.store,
+      authorization: setup.fixture.campaignAuthorization,
+      authority_context: setup.fixture.authorityContext,
+      preflight: setup.preflight,
+      namespace_index: setup.namespace,
+      anchor_receipt: setup.receipt,
+      fresh_start_capture: setup.freshStart,
+      qualification_evidence_artifacts: setup.qualificationEvidenceArtifacts.slice(1)
+    }),
+    /Qualification evidence does not close every exact planned artifact/
   );
 });
 
@@ -217,15 +234,21 @@ test("durable authority fails closed on missing custody and a non-head namespace
       preflight: setup.preflight,
       namespace_index: setup.namespace,
       anchor_receipt: setup.receipt,
-      fresh_start_capture: setup.freshStart
+      fresh_start_capture: setup.freshStart,
+      qualification_evidence_artifacts: setup.qualificationEvidenceArtifacts
     }),
     /ENOENT/
   );
 
   const successor = namespaceIndex(setup.fixture, {
     artifact_id: "artifact:namespace-index:002",
-    revision: 2,
+    revision: 3,
     prior_index: setup.namespace,
+    prior_index_receipt_ref: createExactArtifactReference(setup.receipt),
+    anchor_receipt_refs: [
+      ...setup.namespace.identity_payload.anchor_receipt_refs,
+      createExactArtifactReference(setup.receipt)
+    ].sort((left, right) => left.artifact_id.localeCompare(right.artifact_id)),
     cutoff_label: "namespace:revision:002"
   });
   await setup.store.writeArtifact(successor, validateAuthorityNamespaceIndex);
@@ -240,7 +263,8 @@ test("durable authority fails closed on missing custody and a non-head namespace
       preflight: setup.preflight,
       namespace_index: setup.namespace,
       anchor_receipt: setup.receipt,
-      fresh_start_capture: setup.freshStart
+      fresh_start_capture: setup.freshStart,
+      qualification_evidence_artifacts: setup.qualificationEvidenceArtifacts
     }),
     /non-head authority namespace revision/
   );
@@ -251,10 +275,13 @@ test("namespace history is cumulative and competing revisions are quarantined", 
   const store = await temporaryStore();
   const first = namespaceIndex(fixture);
   await store.writeArtifact(first, validateAuthorityNamespaceIndex);
+  const priorReceiptRef = evidenceReference("artifact:namespace-receipt:prior");
   const dropped = namespaceInput(fixture, {
     artifact_id: "artifact:namespace-index:dropped",
     revision: 2,
     prior_index: first,
+    prior_index_receipt_ref: priorReceiptRef,
+    anchor_receipt_refs: [priorReceiptRef],
     campaign_authorization_refs: [],
     manifest_bindings: [],
     anchor_declarations: [anchorDeclaration(fixture.qualificationPlan)],
@@ -266,12 +293,16 @@ test("namespace history is cumulative and competing revisions are quarantined", 
     artifact_id: "artifact:namespace-index:left",
     revision: 2,
     prior_index: first,
+    prior_index_receipt_ref: priorReceiptRef,
+    anchor_receipt_refs: [priorReceiptRef],
     cutoff_label: "namespace:left"
   });
   const right = namespaceIndex(fixture, {
     artifact_id: "artifact:namespace-index:right",
     revision: 2,
     prior_index: first,
+    prior_index_receipt_ref: priorReceiptRef,
+    anchor_receipt_refs: [priorReceiptRef],
     cutoff_label: "namespace:right"
   });
   await store.writeArtifact(left, validateAuthorityNamespaceIndex);
@@ -309,6 +340,7 @@ test("campaign index retains every authorized slot and closes local members glob
     qualification_result_ref: createExactArtifactReference(fixture.qualificationResult),
     prior_index: null,
     campaign_lifecycle: "suspended",
+    lifecycle_reason: "authority_review_required",
     cutoff_label: "campaign:suspended:001",
     producer_identity: "actor:campaign-index-producer",
     validator_identity: "actor:campaign-index-validator",
@@ -336,6 +368,7 @@ test("campaign index retains every authorized slot and closes local members glob
       qualification_result_ref: createExactArtifactReference(fixture.qualificationResult),
       prior_index: null,
       campaign_lifecycle: "closed",
+      lifecycle_reason: "planned_attempt_set_closed",
       cutoff_label: "campaign:omission",
       producer_identity: "actor:campaign-index-producer",
       validator_identity: "actor:campaign-index-validator",
@@ -408,6 +441,7 @@ test("campaign index retains every authorized slot and closes local members glob
       qualification_result_ref: createExactArtifactReference(fixture.qualificationResult),
       prior_index: index,
       campaign_lifecycle: "closed",
+      lifecycle_reason: "planned_attempt_set_closed",
       cutoff_label: "campaign:dropped-history",
       producer_identity: "actor:campaign-index-producer",
       validator_identity: "actor:campaign-index-validator",
@@ -420,52 +454,13 @@ test("campaign index retains every authorized slot and closes local members glob
 });
 
 async function durableStartSetup() {
-  const fixture = createFormalAuthorityFixture();
-  const store = await temporaryStore();
-  await store.writeConfigurationManifest(fixture.behaviorManifest, validateBehaviorConfigurationManifest);
-  await store.writeConfigurationManifest(fixture.evaluationManifest, validateEvaluationConfigurationManifest);
-  await store.writeArtifact(fixture.qualificationPlan, (artifact) => validateQualificationPlan(
-    artifact, {
-      behaviorManifest: fixture.behaviorManifest,
-      evaluationManifest: fixture.evaluationManifest
-    }
-  ));
-  await store.writeArtifact(fixture.qualificationResult, (artifact) => validateQualificationResult(
-    artifact, {
-      plan: fixture.qualificationPlan,
-      behaviorManifest: fixture.behaviorManifest,
-      evaluationManifest: fixture.evaluationManifest
-    }
-  ));
-  await store.writeArtifact(fixture.campaignAuthorization, (artifact) => validateCampaignAuthorization(
-    artifact, fixture.authorityContext
-  ));
-  const namespace = namespaceIndex(fixture);
-  await store.writeArtifact(namespace, validateAuthorityNamespaceIndex);
+  const campaign = await createFormalCampaignFixture();
+  const fixture = campaign;
+  const { store, namespace } = campaign;
   const namespaceRef = createExactArtifactReference(namespace);
   const authorizationRef = createExactArtifactReference(fixture.campaignAuthorization);
-  const receiptBytes = Buffer.from("{\"gate\":\"accepted\",\"event\":\"001\"}\n");
-  const receipt = await captureFormalEvidence(store, evidenceInput({
-    artifactId: "artifact:anchor-receipt:campaign:001",
-    evidenceKind: "ANCHOR_RECEIPT",
-    authorityRef: authorizationRef,
-    authorizationRef,
-    slot: null,
-    visibility: "AUTHORITY_EXTERNAL",
-    bytes: receiptBytes,
-    semantics: {
-      profile: "PROTECTED_REMOTE_GATE",
-      authorization_ref: authorizationRef,
-      namespace_index_ref: namespaceRef,
-      external_commit_sha: "a".repeat(40),
-      authority_ref: "refs/heads/formal-authority",
-      external_event_id: "event:protected-gate:001",
-      observed_predecessor: "b".repeat(40),
-      raw_receipt_digest: sha256(receiptBytes)
-    },
-    producer: "actor:campaign-producer",
-    validator: "actor:external-gate-validator"
-  }));
+  const receiptBytes = campaign.receiptBytes;
+  const receipt = campaign.anchorReceipt;
   const slot = fixture.campaignAuthorization.identity_payload.attempt_slots[0];
   const freshBytes = Buffer.from("fresh-start:challenge:001\n");
   const startInput = {
@@ -480,11 +475,11 @@ async function durableStartSetup() {
       profile: "PROTECTED_REMOTE_GATE",
       external_commit_sha: "a".repeat(40),
       authority_ref: "refs/heads/formal-authority",
-      external_event_id: "event:protected-gate:001",
+      external_event_id: "event:protected-gate:formal-campaign-fixture",
       observed_predecessor: "b".repeat(40),
       receipt_bytes_digest: sha256(receiptBytes),
       validator_identity: "actor:external-gate-validator",
-      producer_identity: "actor:campaign-producer",
+      producer_identity: "actor:external-anchor-platform",
       source: "EXTERNAL_PLATFORM",
       verification_result: "VERIFIED"
     },
@@ -494,7 +489,7 @@ async function durableStartSetup() {
       challenge: "challenge:post-anchor:001",
       issued_by: "actor:external-gate",
       observed_by: "actor:external-gate",
-      anchor_event_id: "event:protected-gate:001",
+      anchor_event_id: "event:protected-gate:formal-campaign-fixture",
       start_event_id: "event:attempt-start:001",
       capture_binding_digest: sha256(freshBytes),
       verification_result: "VERIFIED"
@@ -516,14 +511,17 @@ async function durableStartSetup() {
       challenge: "challenge:post-anchor:001",
       issued_by: "actor:external-gate",
       observed_by: "actor:external-gate",
-      anchor_event_id: "event:protected-gate:001",
+      anchor_event_id: "event:protected-gate:formal-campaign-fixture",
       start_event_id: "event:attempt-start:001",
       capture_binding_digest: sha256(freshBytes)
     },
     producer: "actor:external-gate",
     validator: "actor:fresh-start-validator"
   }));
-  return { fixture, store, namespace, receipt, freshStart, preflight };
+  return {
+    fixture, store, namespace, receipt, freshStart, preflight,
+    qualificationEvidenceArtifacts: campaign.qualificationEvidenceArtifacts
+  };
 }
 
 function namespaceIndex(fixture, overrides = {}) {
@@ -539,6 +537,7 @@ function namespaceInput(fixture, overrides = {}) {
     revision: 1,
     authority_identity: "actor:zoey-project-owner",
     prior_index: null,
+    prior_index_receipt_ref: null,
     qualification_plan_refs: [planRef],
     qualification_result_refs: [createExactArtifactReference(fixture.qualificationResult)],
     campaign_authorization_refs: [authorizationRef],

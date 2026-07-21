@@ -27,22 +27,60 @@ import {
   CLAIM_OBLIGATION_MAP,
   createFormalRunRecord
 } from "../src/formalRunRecord.js";
-import { createFormalAuthorityFixture, digest } from "./formalFixtures.js";
+import {
+  createFormalAuthorityFixture,
+  digest,
+  rebuildFormalAuthorityFixture
+} from "./formalFixtures.js";
 
 export const sha256 = (bytes) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 
 export async function createFormalCampaignFixture(options = {}) {
-  const fixture = createFormalAuthorityFixture(options);
+  const baseFixture = createFormalAuthorityFixture(options);
   const root = await mkdtemp(join(tmpdir(), "zoey-formal-campaign-"));
   const store = createContentAddressedArtifactStore(root);
-  await store.writeConfigurationManifest(fixture.behaviorManifest, validateBehaviorConfigurationManifest);
-  await store.writeConfigurationManifest(fixture.evaluationManifest, validateEvaluationConfigurationManifest);
-  await store.writeArtifact(fixture.qualificationPlan, (artifact) => validateQualificationPlan(
+  await store.writeConfigurationManifest(baseFixture.behaviorManifest, validateBehaviorConfigurationManifest);
+  await store.writeConfigurationManifest(baseFixture.evaluationManifest, validateEvaluationConfigurationManifest);
+  await store.writeArtifact(baseFixture.qualificationPlan, (artifact) => validateQualificationPlan(
     artifact, {
-      behaviorManifest: fixture.behaviorManifest,
-      evaluationManifest: fixture.evaluationManifest
+      behaviorManifest: baseFixture.behaviorManifest,
+      evaluationManifest: baseFixture.evaluationManifest
     }
   ));
+  const qualificationNamespace = createAuthorityNamespaceIndex(
+    qualificationNamespaceInput(baseFixture)
+  );
+  await store.writeArtifact(qualificationNamespace, validateAuthorityNamespaceIndex);
+  const qualificationReceipt = await qualificationAnchorReceipt(
+    store, baseFixture.qualificationPlan, qualificationNamespace
+  );
+  const qualificationCaptures = [];
+  const qualificationFreshStarts = [];
+  for (const [index, slot] of baseFixture.qualificationPlan.identity_payload.execution_slots.entries()) {
+    qualificationFreshStarts.push(await qualificationPrivateEvidence(
+      store, baseFixture.qualificationPlan, slot.execution_id,
+      "QUALIFICATION_FRESH_START_PROOF", `qualification-fresh:${index + 1}`,
+      qualificationReceipt
+    ));
+    qualificationCaptures.push(await qualificationPrivateEvidence(
+      store, baseFixture.qualificationPlan, slot.execution_id,
+      "ORACLE_CLASSIFICATION", `qualification-capture:${index + 1}`, null, slot
+    ));
+  }
+  const qualificationValidation = await qualificationPrivateEvidence(
+    store, baseFixture.qualificationPlan, "qualification:validation:fixture",
+    "VALIDATION_ATTESTATION", "qualification-validation"
+  );
+  const qualificationEvidenceArtifacts = [
+    qualificationReceipt, qualificationValidation,
+    ...qualificationFreshStarts, ...qualificationCaptures
+  ];
+  const fixture = rebuildFormalAuthorityFixture(baseFixture, {
+    execution_capture_refs: qualificationCaptures.map(createExactArtifactReference),
+    validation_attestation_ref: createExactArtifactReference(qualificationValidation),
+    anchor_receipt_ref: createExactArtifactReference(qualificationReceipt),
+    fresh_start_proof_refs: qualificationFreshStarts.map(createExactArtifactReference)
+  }, options.qualification ?? "QUALIFIED");
   await store.writeArtifact(fixture.qualificationResult, (artifact) => validateQualificationResult(
     artifact, {
       plan: fixture.qualificationPlan,
@@ -53,7 +91,9 @@ export async function createFormalCampaignFixture(options = {}) {
   await store.writeArtifact(fixture.campaignAuthorization, (artifact) => validateCampaignAuthorization(
     artifact, fixture.authorityContext
   ));
-  const namespace = createAuthorityNamespaceIndex(namespaceInput(fixture));
+  const namespace = createAuthorityNamespaceIndex(campaignNamespaceInput(
+    fixture, qualificationNamespace, qualificationReceipt
+  ));
   await store.writeArtifact(namespace, validateAuthorityNamespaceIndex);
   const authorizationRef = createExactArtifactReference(fixture.campaignAuthorization);
   const namespaceRef = createExactArtifactReference(namespace);
@@ -71,7 +111,7 @@ export async function createFormalCampaignFixture(options = {}) {
     raw_bytes: receiptBytes,
     semantic_envelope: {
       profile: "PROTECTED_REMOTE_GATE",
-      authorization_ref: authorizationRef,
+      authority_subject_ref: authorizationRef,
       namespace_index_ref: namespaceRef,
       external_commit_sha: "a".repeat(40),
       authority_ref: "refs/heads/formal-authority",
@@ -81,11 +121,14 @@ export async function createFormalCampaignFixture(options = {}) {
     },
     created_order: null,
     delivered_order: null,
-    producer_identity: "actor:campaign-producer",
+    producer_identity: "actor:external-anchor-platform",
     validator_identity: "actor:external-gate-validator",
     sealed_at: "2026-07-21T13:20:00Z"
   });
-  return { ...fixture, store, namespace, anchorReceipt, receiptBytes };
+  return {
+    ...fixture, store, namespace, anchorReceipt, receiptBytes,
+    qualificationNamespace, qualificationReceipt, qualificationEvidenceArtifacts
+  };
 }
 
 export async function createAuthorizedAttempt(setup, slot) {
@@ -110,7 +153,7 @@ export async function createAuthorizedAttempt(setup, slot) {
       observed_predecessor: "b".repeat(40),
       receipt_bytes_digest: sha256(setup.receiptBytes),
       validator_identity: "actor:external-gate-validator",
-      producer_identity: "actor:campaign-producer",
+      producer_identity: "actor:external-anchor-platform",
       source: "EXTERNAL_PLATFORM",
       verification_result: "VERIFIED"
     },
@@ -155,7 +198,8 @@ export async function createAuthorizedAttempt(setup, slot) {
     preflight,
     namespace_index: setup.namespace,
     anchor_receipt: setup.anchorReceipt,
-    fresh_start_capture: freshStart
+    fresh_start_capture: freshStart,
+    qualification_evidence_artifacts: setup.qualificationEvidenceArtifacts
   });
   const initialBytes = Buffer.from(`initial-state:${slot.attempt_id}\n`);
   const initialState = await privateControlEvidence(
@@ -164,6 +208,10 @@ export async function createAuthorizedAttempt(setup, slot) {
   const isolationBytes = Buffer.from(`run-isolation:${slot.attempt_id}\n`);
   const isolation = await privateControlEvidence(
     setup, slot, "RUN_ISOLATION_PROOF", 3, isolationBytes
+  );
+  const selectionBytes = Buffer.from(`selection-independence:${slot.attempt_id}\n`);
+  const selectionIndependence = await privateControlEvidence(
+    setup, slot, "SELECTION_INDEPENDENCE", 4, selectionBytes
   );
   const inputBytes = Buffer.from(`{\"input\":\"${slot.attempt_id}\"}\n`);
   const sutInput = await captureAttemptEvidence(setup, slot, {
@@ -178,8 +226,8 @@ export async function createAuthorizedAttempt(setup, slot) {
       contract_digest: digest("2")
     },
     visibility: "SUT_VISIBLE",
-    createdOrder: 4,
-    deliveredOrder: 4
+    createdOrder: 5,
+    deliveredOrder: 5
   });
   const outputBytes = Buffer.from(`{\"output\":\"${slot.attempt_id}\"}\n`);
   const sutOutput = await captureAttemptEvidence(setup, slot, {
@@ -194,7 +242,7 @@ export async function createAuthorizedAttempt(setup, slot) {
       contract_digest: digest("3")
     },
     visibility: "SUT_VISIBLE",
-    createdOrder: 5,
+    createdOrder: 6,
     deliveredOrder: null
   });
   const inspectionBytes = Buffer.from(`{\"inspection\":\"${slot.attempt_id}\"}\n`);
@@ -210,7 +258,7 @@ export async function createAuthorizedAttempt(setup, slot) {
       contract_digest: digest("5")
     },
     visibility: "SUT_VISIBLE",
-    createdOrder: 6,
+    createdOrder: 7,
     deliveredOrder: null
   });
   const requestBytes = Buffer.from(`{\"request\":\"${slot.attempt_id}\"}\n`);
@@ -226,7 +274,7 @@ export async function createAuthorizedAttempt(setup, slot) {
       request_digest: sha256(requestBytes)
     },
     visibility: "EVALUATOR_PRIVATE",
-    createdOrder: 7,
+    createdOrder: 8,
     deliveredOrder: null
   });
   const realizationBytes = Buffer.from(`{\"realization\":\"${slot.attempt_id}\"}\n`);
@@ -246,11 +294,11 @@ export async function createAuthorizedAttempt(setup, slot) {
       event_id: `event:simulator-realization:${slot.attempt_id}`
     },
     visibility: "EVALUATOR_PRIVATE",
-    createdOrder: 8,
-    deliveredOrder: 8
+    createdOrder: 9,
+    deliveredOrder: 9
   });
   const evidenceArtifacts = [
-    freshStart, initialState, isolation, sutInput, sutOutput, inspection,
+    freshStart, initialState, isolation, selectionIndependence, sutInput, sutOutput, inspection,
     simulatorRequest, simulatorRealization
   ];
   return {
@@ -259,6 +307,7 @@ export async function createAuthorizedAttempt(setup, slot) {
     evidenceArtifacts,
     initialState,
     isolation,
+    selectionIndependence,
     orderedDeliveryRefs: [
       createExactArtifactReference(sutInput),
       createExactArtifactReference(simulatorRealization)
@@ -290,8 +339,12 @@ export async function createSealedRun(setup, slot, outcomeFactory = () => ({})) 
     start_grant: attempt.startGrant,
     attempt_allocation: attempt.attemptAllocation,
     evidence_artifacts: attempt.evidenceArtifacts,
+    qualification_evidence_artifacts: setup.qualificationEvidenceArtifacts,
     initial_state_evidence_ref: createExactArtifactReference(attempt.initialState),
     isolation_evidence_ref: createExactArtifactReference(attempt.isolation),
+    selection_independence_evidence_ref: createExactArtifactReference(
+      attempt.selectionIndependence
+    ),
     delivered_bundle_ids: [`bundle:${attempt.slot.attempt_id}`],
     ordered_delivery_refs: attempt.orderedDeliveryRefs,
     provider_handles: {
@@ -338,21 +391,48 @@ export function passObligations(pathId) {
   });
 }
 
-function namespaceInput(fixture) {
-  const authorizationRef = createExactArtifactReference(fixture.campaignAuthorization);
+function qualificationNamespaceInput(fixture) {
   return {
-    artifact_id: "artifact:namespace-index:formal-campaign-fixture:001",
-    namespace_id: fixture.campaignAuthorization.identity_payload.authority_namespace_id,
+    artifact_id: "artifact:namespace-index:qualification-fixture:001",
+    namespace_id: fixture.qualificationPlan.identity_payload.authority_namespace_id,
     revision: 1,
     authority_identity: "actor:zoey-project-owner",
     prior_index: null,
+    prior_index_receipt_ref: null,
+    qualification_plan_refs: [createExactArtifactReference(fixture.qualificationPlan)],
+    qualification_result_refs: [],
+    campaign_authorization_refs: [],
+    campaign_index_refs: [],
+    bounded_result_refs: [],
+    decision_refs: [],
+    anchor_receipt_refs: [],
+    manifest_bindings: [],
+    anchor_declarations: [anchorDeclaration(fixture.qualificationPlan)],
+    cutoff_label: "namespace:qualification-fixture:001",
+    producer_identity: "actor:zoey-project-owner",
+    validator_identity: "actor:namespace-index-validator",
+    validation_result: "VALIDATED",
+    created_at: "2026-07-21T11:50:00Z",
+    created_by: "actor:zoey-project-owner"
+  };
+}
+
+function campaignNamespaceInput(fixture, qualificationNamespace, qualificationReceipt) {
+  const authorizationRef = createExactArtifactReference(fixture.campaignAuthorization);
+  return {
+    artifact_id: "artifact:namespace-index:formal-campaign-fixture:002",
+    namespace_id: fixture.campaignAuthorization.identity_payload.authority_namespace_id,
+    revision: 2,
+    authority_identity: "actor:zoey-project-owner",
+    prior_index: qualificationNamespace,
+    prior_index_receipt_ref: createExactArtifactReference(qualificationReceipt),
     qualification_plan_refs: [createExactArtifactReference(fixture.qualificationPlan)],
     qualification_result_refs: [createExactArtifactReference(fixture.qualificationResult)],
     campaign_authorization_refs: [authorizationRef],
     campaign_index_refs: [],
     bounded_result_refs: [],
     decision_refs: [],
-    anchor_receipt_refs: [],
+    anchor_receipt_refs: [createExactArtifactReference(qualificationReceipt)],
     manifest_bindings: [{
       campaign_authorization_ref: authorizationRef,
       behavior_manifest_ref: createConfigurationManifestReference(fixture.behaviorManifest),
@@ -362,13 +442,98 @@ function namespaceInput(fixture) {
       anchorDeclaration(fixture.campaignAuthorization),
       anchorDeclaration(fixture.qualificationPlan)
     ],
-    cutoff_label: "namespace:formal-campaign-fixture:001",
+    cutoff_label: "namespace:formal-campaign-fixture:002",
     producer_identity: "actor:zoey-project-owner",
     validator_identity: "actor:namespace-index-validator",
     validation_result: "VALIDATED",
     created_at: "2026-07-21T13:15:00Z",
     created_by: "actor:zoey-project-owner"
   };
+}
+
+async function qualificationAnchorReceipt(store, plan, namespace) {
+  const planRef = createExactArtifactReference(plan);
+  const namespaceRef = createExactArtifactReference(namespace);
+  const bytes = Buffer.from("{\"gate\":\"accepted\",\"event\":\"qualification-plan\"}\n");
+  return captureFormalEvidence(store, {
+    artifact_id: "artifact:anchor-receipt:qualification-fixture",
+    evidence_kind: "ANCHOR_RECEIPT",
+    authority_subject_ref: planRef,
+    campaign_authorization_ref: null,
+    attempt_id: null,
+    path_id: null,
+    visibility: "AUTHORITY_EXTERNAL",
+    media_type: "application/json",
+    encoding: "utf-8",
+    raw_bytes: bytes,
+    semantic_envelope: {
+      profile: "PROTECTED_REMOTE_GATE",
+      authority_subject_ref: planRef,
+      namespace_index_ref: namespaceRef,
+      external_commit_sha: "8".repeat(40),
+      authority_ref: "refs/heads/formal-authority",
+      external_event_id: "event:protected-gate:qualification-fixture",
+      observed_predecessor: "9".repeat(40),
+      raw_receipt_digest: sha256(bytes)
+    },
+    created_order: null,
+    delivered_order: null,
+    producer_identity: "actor:external-anchor-platform",
+    validator_identity: "actor:external-gate-validator",
+    sealed_at: "2026-07-21T11:55:00Z"
+  });
+}
+
+async function qualificationPrivateEvidence(
+  store, plan, subjectId, role, content, anchorReceipt = null, slot = null
+) {
+  const planRef = createExactArtifactReference(plan);
+  const bytes = Buffer.from(`${content}\n`);
+  return captureFormalEvidence(store, {
+    artifact_id: `artifact:${role.toLowerCase()}:${subjectId.replaceAll(":", "-")}`,
+    evidence_kind: "EVALUATOR_PRIVATE_CAPTURE",
+    authority_subject_ref: planRef,
+    campaign_authorization_ref: null,
+    attempt_id: null,
+    path_id: null,
+    visibility: "EVALUATOR_PRIVATE",
+    media_type: "application/octet-stream",
+    encoding: "binary",
+    raw_bytes: bytes,
+    semantic_envelope: role === "QUALIFICATION_FRESH_START_PROOF" ? {
+      capture_role: role,
+      profile: "GATE_LAUNCHED_ATTEMPT",
+      execution_id: subjectId,
+      plan_ref: planRef,
+      anchor_receipt_ref: createExactArtifactReference(anchorReceipt),
+      anchor_event_id: anchorReceipt.identity_payload.semantic_envelope.external_event_id,
+      start_event_id: `event:start:${subjectId}`,
+      content_digest: sha256(bytes)
+    } : role === "ORACLE_CLASSIFICATION" ? {
+      capture_role: role,
+      execution_id: subjectId,
+      path_id: slot.path_id,
+      plan_ref: planRef,
+      oracle_projection_digest: digest("b"),
+      comparator_input_digest: digest("c"),
+      content_digest: sha256(bytes),
+      event_id: `event:${subjectId}`
+    } : {
+      capture_role: role,
+      subject_ref: planRef,
+      content_digest: sha256(bytes),
+      event_id: `event:${subjectId}`
+    },
+    created_order: null,
+    delivered_order: null,
+    producer_identity: role === "QUALIFICATION_FRESH_START_PROOF"
+      ? "actor:external-start-observer"
+      : role === "VALIDATION_ATTESTATION"
+        ? "actor:qualification-result-validator"
+        : "actor:qualification-producer",
+    validator_identity: "actor:qualification-evidence-validator",
+    sealed_at: "2026-07-21T12:20:00Z"
+  });
 }
 
 function anchorDeclaration(artifact) {
