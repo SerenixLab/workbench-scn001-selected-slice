@@ -59,6 +59,14 @@ The dated closure and exact status transitions are recorded in
 `governance/CONFORMANCE.md`. The closure commit must pass the complete local
 gate before this status is used as an implementation-start decision.
 
+## Implementation Start
+
+Phase 7 implementation started from approved clean baseline `e6e1dc1` on
+2026-07-21. Section 7A activates only `ENG-CONF-CONFIG-001 R1` and implements
+configuration schemas, canonical identities, exact references, and comparison
+controls. Qualification/campaign authority, durable formal evidence, and
+scoreability remain separately untriggered until their own sections begin.
+
 ## First Phase 7 Change Requirements
 
 Before or in the same change that first implements a governed Phase 7 artifact:

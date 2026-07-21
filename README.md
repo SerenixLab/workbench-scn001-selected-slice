@@ -94,11 +94,11 @@ the complete initialization-hardening range `6e57840..6d8b41d` passed with no
 blocking finding, so the current implementation may serve as a prospective
 Phase 7 code baseline. That review cannot promote any existing run, capture,
 trace, checkpoint, or artifact into formal evidence. `ADR-010 R3`, `ADR-011
-R3`, and `ADR-012 R3` are accepted; Phase 7 remains blocked until their
-projected engineering rules, local conformance mapping, governance gates, and
-required reviews close. No formal campaign authorization, formal evaluation
-evidence, compatibility result, bounded campaign result, completion artifact,
-or extraction work has started.
+R3`, and `ADR-012 R3` are accepted; their projection and start-readiness
+reviews closed at `e6e1dc1`. Phase 7 implementation may now proceed in the
+accepted prospective authority order. No formal campaign authorization, formal
+evaluation evidence, compatibility result, bounded campaign result, completion
+artifact, or extraction work has started.
 
 ## Local Commands
 
@@ -145,15 +145,15 @@ R3`, and `ADR-012 R3` now govern the next phase's behavior/evaluation manifests,
 prospective campaign authority, durable formal records/evidence, campaign and
 namespace indexes, bounded aggregation, result standing, and claim ceiling.
 
-Phase 7 may begin only after the current governance projection, local
-conformance remapping, instruction refresh, complete local gates, and required
-review closures pass. It must create every formal artifact prospectively under
-the accepted anchor/fresh-start chain; no current or historical development
-artifact is eligible for promotion. No current artifact establishes behavioral
-compatibility, formal evidence, scoreability, bounded pass/fail, milestone
-acceptance, broader `SCN-001` acceptance, or production readiness. Durable
-repository extraction remains blocked by `REPO-001`.
+Phase 7 start review is complete. Section 7A implements configuration identity,
+canonical fingerprints, exact references, and fail-closed comparisons; it does
+not authorize or execute a campaign. Every eventual formal artifact must still
+be created prospectively under the accepted anchor/fresh-start chain; no current
+or historical development artifact is eligible for promotion. No current
+artifact establishes behavioral compatibility, formal evidence, scoreability,
+bounded pass/fail, milestone acceptance, broader `SCN-001` acceptance, or
+production readiness. Durable repository extraction remains blocked by
+`REPO-001`.
 
-`PHASE7_READINESS.md` is the current review-routing checklist. Its status remains
-`BLOCKED_PENDING_REVIEW` until the required human source-bound review and
-independent generated-projection review are committed.
+`PHASE7_READINESS.md` records the completed start approval and the strict
+boundary between implementation readiness and formal campaign authority.
