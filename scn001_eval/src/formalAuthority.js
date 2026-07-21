@@ -1101,7 +1101,7 @@ function validateCrossSlotUniqueness(primarySlots, contingencySlots) {
   }
 }
 
-function validateAttemptAllocation(allocation, authorization) {
+export function validateAttemptAllocation(allocation, authorization) {
   assertPlainObject(allocation, "attempt allocation");
   if (allocation.allocation_kind === "PROSPECTIVE_SLOT") {
     assertExactKeys(allocation, [

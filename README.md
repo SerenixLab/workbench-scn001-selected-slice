@@ -149,10 +149,15 @@ Phase 7 start review is complete. Section 7A implements configuration identity,
 canonical fingerprints, exact references, and fail-closed comparisons. Section
 7B implements prospective qualification/campaign authority, allocation,
 anchor/fresh-start prerequisites, invalidity/replacement limits, and owner-only
-material decisions. It intentionally returns no execution-start grant until 7C
-can resolve durable namespace and receipt artifacts. Every eventual formal
-artifact must still be created prospectively; no current or historical
-development artifact is eligible for promotion. No current artifact establishes
+material decisions. Section 7C implements closed typed evidence envelopes,
+byte-exact content-addressed custody/replay, independently validated cumulative
+namespace and frozen campaign indexes, fork quarantine, and durable resolution
+of the otherwise-ungranted 7B execution preflight. These are implementation
+mechanisms exercised only with synthetic test objects; no project-owner
+namespace designation, external anchor event, or formal execution has occurred.
+Every eventual formal artifact must still be created prospectively; no current
+or historical development artifact is eligible for promotion. No current
+artifact establishes
 behavioral compatibility, formal evidence, scoreability, bounded pass/fail,
 milestone acceptance, broader `SCN-001` acceptance, or production readiness.
 Durable repository extraction remains blocked by `REPO-001`.

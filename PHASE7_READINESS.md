@@ -67,9 +67,13 @@ Phase 7 implementation started from approved clean baseline `e6e1dc1` on
 identities, exact references, and comparison controls. Section 7B activates
 `ENG-CONF-AUTHORITY-001 R1` for prospective qualification, authorization,
 allocation, anchor/start prerequisites, invalidity/replacement, and material
-authority decisions. Durable formal evidence and scoreability remain separately
-untriggered until their own sections begin; 7B cannot grant execution start
-without 7C artifact resolution.
+authority decisions. Section 7C activates `ENG-CONF-EVIDENCE-002 R1` and adds
+typed immutable evidence, byte-exact custody/replay, cumulative authority-
+namespace and frozen campaign indexes, fork quarantine, and the durable
+resolution required to convert a valid 7B preflight into a start grant.
+Scoreability remains separately untriggered until 7D begins. All 7C objects in
+tests are synthetic; no effective real campaign namespace, external anchor, or
+formal execution has been created.
 
 ## First Phase 7 Change Requirements
 
