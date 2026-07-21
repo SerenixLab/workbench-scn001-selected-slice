@@ -5,13 +5,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { createConfigurationManifestReference } from "../src/configurationIdentity.js";
+import {
+  createConfigurationManifestReference,
+  validateBehaviorConfigurationManifest,
+  validateEvaluationConfigurationManifest
+} from "../src/configurationIdentity.js";
 import {
   ARTIFACT_HASH_DOMAIN,
   createExactArtifactReference,
   fingerprintCanonicalJson
 } from "../src/formalArtifactIdentity.js";
-import { validateProspectiveExecutionStartPrerequisites } from "../src/formalAuthority.js";
+import {
+  validateCampaignAuthorization,
+  validateProspectiveExecutionStartPrerequisites,
+  validateQualificationPlan,
+  validateQualificationResult
+} from "../src/formalAuthority.js";
 import {
   captureFormalEvidence,
   createAuthorityNamespaceIndex,
@@ -359,6 +368,31 @@ test("campaign index retains every authorized slot and closes local members glob
     /map to exactly one attempt/
   );
 
+  const wrongUnusedAuthority = structuredClone(index);
+  const wrongAuthorizationRef = structuredClone(
+    createExactArtifactReference(fixture.campaignAuthorization)
+  );
+  wrongAuthorizationRef.artifact_id = "artifact:campaign-authorization:different";
+  wrongUnusedAuthority.identity_payload.attempt_inventory[1].disposition =
+    "NOT_STARTED_CAMPAIGN_SUPERSEDED";
+  wrongUnusedAuthority.identity_payload.attempt_inventory[1].unused_slot_disposition = {
+    disposition_kind: "NOT_STARTED_CAMPAIGN_SUPERSEDED",
+    campaign_authorization_ref: wrongAuthorizationRef,
+    decisive_run_ref: null,
+    basis_decision_ref: decisionRef,
+    decisive_failure_digest: null,
+    actor_identity: "actor:campaign-evaluator",
+    recorded_at: "2026-07-21T16:01:00Z",
+    material_output_observed: false
+  };
+  resign(wrongUnusedAuthority);
+  assert.throws(
+    () => validateCampaignEvidenceIndex(wrongUnusedAuthority, {
+      authorization: fixture.campaignAuthorization
+    }),
+    /different campaign authorization/
+  );
+
   const replacementAnchor = evidenceReference("artifact:anchor-receipt:replacement", "8");
   assert.throws(
     () => createCampaignEvidenceIndex({
@@ -388,6 +422,24 @@ test("campaign index retains every authorized slot and closes local members glob
 async function durableStartSetup() {
   const fixture = createFormalAuthorityFixture();
   const store = await temporaryStore();
+  await store.writeConfigurationManifest(fixture.behaviorManifest, validateBehaviorConfigurationManifest);
+  await store.writeConfigurationManifest(fixture.evaluationManifest, validateEvaluationConfigurationManifest);
+  await store.writeArtifact(fixture.qualificationPlan, (artifact) => validateQualificationPlan(
+    artifact, {
+      behaviorManifest: fixture.behaviorManifest,
+      evaluationManifest: fixture.evaluationManifest
+    }
+  ));
+  await store.writeArtifact(fixture.qualificationResult, (artifact) => validateQualificationResult(
+    artifact, {
+      plan: fixture.qualificationPlan,
+      behaviorManifest: fixture.behaviorManifest,
+      evaluationManifest: fixture.evaluationManifest
+    }
+  ));
+  await store.writeArtifact(fixture.campaignAuthorization, (artifact) => validateCampaignAuthorization(
+    artifact, fixture.authorityContext
+  ));
   const namespace = namespaceIndex(fixture);
   await store.writeArtifact(namespace, validateAuthorityNamespaceIndex);
   const namespaceRef = createExactArtifactReference(namespace);
@@ -566,7 +618,8 @@ function completeAttemptInventory(authorization) {
     run_record_ref: null,
     evidence_refs: [],
     invalidity_decision_ref: null,
-    replacement_allocation: null
+    replacement_allocation: null,
+    unused_slot_disposition: null
   }));
 }
 

@@ -21,13 +21,19 @@ import {
   validateExactArtifactReference
 } from "./formalArtifactIdentity.js";
 import {
+  createConfigurationManifestReference,
+  resolveConfigurationManifestReference,
+  validateBehaviorConfigurationManifest,
+  validateEvaluationConfigurationManifest,
   validateConfigurationManifestReference
 } from "./configurationIdentity.js";
 import {
   REQUIRED_PATHS,
   validateAttemptAllocation,
   validateCampaignAuthorization,
-  validateProspectiveExecutionStartPrerequisites
+  validateProspectiveExecutionStartPrerequisites,
+  validateQualificationPlan,
+  validateQualificationResult
 } from "./formalAuthority.js";
 
 const EVIDENCE_VISIBILITY = Object.freeze([
@@ -42,7 +48,10 @@ const ATTEMPT_DISPOSITIONS = Object.freeze([
   "INVALID_RETAINED",
   "ABANDONED_RETAINED",
   "AUTHORITY_INVALIDATED_RETAINED",
-  "SUPERSEDED_RETAINED"
+  "SUPERSEDED_RETAINED",
+  "CANCELLED_NOT_STARTED_GLOBAL_HARD_FAILURE",
+  "NOT_STARTED_CAMPAIGN_SUPERSEDED",
+  "ALLOCATION_AUTHORITY_INVALIDATED_BEFORE_START"
 ]);
 
 export function createContentAddressedArtifactStore(rootDirectory) {
@@ -75,11 +84,19 @@ export function createContentAddressedArtifactStore(rootDirectory) {
     },
 
     async writeArtifact(artifact, typedValidator) {
-      typedValidator(artifact);
+      await typedValidator(artifact);
       const reference = createExactArtifactReference(artifact);
       const relativePath = artifactRelativePath(reference);
       const bytes = Buffer.from(`${canonicalizeJson(artifact)}\n`, "utf8");
       await writeImmutable(join(root, relativePath), bytes);
+      return reference;
+    },
+
+    async writeConfigurationManifest(manifest, typedValidator) {
+      await typedValidator(manifest);
+      const reference = createConfigurationManifestReference(manifest);
+      const bytes = Buffer.from(`${canonicalizeJson(manifest)}\n`, "utf8");
+      await writeImmutable(join(root, artifactRelativePath(reference)), bytes);
       return reference;
     },
 
@@ -90,9 +107,21 @@ export function createContentAddressedArtifactStore(rootDirectory) {
       if (!bytes.equals(Buffer.from(`${canonicalizeJson(artifact)}\n`, "utf8"))) {
         throw new Error("Stored artifact bytes are not the exact canonical representation.");
       }
-      typedValidator(artifact);
+      await typedValidator(artifact);
       resolveExactArtifactReference(reference, artifact);
       return deepFreeze(artifact);
+    },
+
+    async readConfigurationManifest(reference, typedValidator) {
+      validateConfigurationManifestReference(reference);
+      const bytes = await readFile(safeStorePath(root, artifactRelativePath(reference)));
+      const manifest = JSON.parse(bytes.toString("utf8"));
+      if (!bytes.equals(Buffer.from(`${canonicalizeJson(manifest)}\n`, "utf8"))) {
+        throw new Error("Stored configuration manifest is not the exact canonical representation.");
+      }
+      await typedValidator(manifest);
+      resolveConfigurationManifestReference(reference, manifest);
+      return deepFreeze(manifest);
     },
 
     async listArtifactReferences(artifactKind) {
@@ -396,8 +425,10 @@ export async function verifySingleEffectiveNamespaceHead(store, namespaceId) {
     if (index.identity_payload.namespace_id === namespaceId) indexes.push(index);
   }
   if (indexes.length === 0) throw new Error("Effective authority namespace has no durable revisions.");
-  const byFingerprint = new Map(indexes.map((index) => [index.content_fingerprint, index]));
-  const predecessorFingerprints = new Set();
+  const byReference = new Map(indexes.map((index) => [
+    canonicalizeJson(createExactArtifactReference(index)), index
+  ]));
+  const predecessorReferences = new Set();
   const revisions = new Set();
   for (const index of indexes) {
     if (revisions.has(index.identity_payload.revision)) {
@@ -406,7 +437,8 @@ export async function verifySingleEffectiveNamespaceHead(store, namespaceId) {
     revisions.add(index.identity_payload.revision);
     const prior = index.identity_payload.prior_index_ref;
     if (prior !== null) {
-      const predecessor = byFingerprint.get(prior.content_fingerprint);
+      const priorIdentity = canonicalizeJson(prior);
+      const predecessor = byReference.get(priorIdentity);
       if (!predecessor) throw new Error("Authority namespace predecessor is not durably resolvable.");
       resolveExactArtifactReference(prior, predecessor, {
         allowedKinds: ["AUTHORITY_NAMESPACE_INDEX"]
@@ -418,10 +450,12 @@ export async function verifySingleEffectiveNamespaceHead(store, namespaceId) {
         throw new Error("Authority namespace predecessor continuity is invalid.");
       }
       assertNamespaceCumulative(index.identity_payload, predecessor.identity_payload);
-      predecessorFingerprints.add(prior.content_fingerprint);
+      predecessorReferences.add(priorIdentity);
     }
   }
-  const heads = indexes.filter((index) => !predecessorFingerprints.has(index.content_fingerprint));
+  const heads = indexes.filter((index) => !predecessorReferences.has(
+    canonicalizeJson(createExactArtifactReference(index))
+  ));
   if (heads.length !== 1) throw new Error("Authority namespace does not have one effective head.");
   return heads[0];
 }
@@ -591,6 +625,14 @@ export function validateCampaignEvidenceIndex(index, { authorization } = {}) {
 }
 
 export async function resolveDurableExecutionAuthority(input) {
+  return resolveDurableExecutionAuthorityInternal(input, true);
+}
+
+export async function replayDurableExecutionAuthority(input) {
+  return resolveDurableExecutionAuthorityInternal(input, false);
+}
+
+async function resolveDurableExecutionAuthorityInternal(input, requireCurrentHead) {
   assertExactKeys(input, [
     "store", "authorization", "authority_context", "preflight", "namespace_index",
     "anchor_receipt", "fresh_start_capture"
@@ -615,6 +657,36 @@ export async function resolveDurableExecutionAuthority(input) {
   const authorizationRef = createExactArtifactReference(input.authorization);
   const namespaceRef = createExactArtifactReference(input.namespace_index);
   const receiptRef = createExactArtifactReference(input.anchor_receipt);
+  await input.store.readConfigurationManifest(
+    input.authorization.identity_payload.behavior_manifest_ref,
+    validateBehaviorConfigurationManifest
+  );
+  await input.store.readConfigurationManifest(
+    input.authorization.identity_payload.evaluation_manifest_ref,
+    validateEvaluationConfigurationManifest
+  );
+  await input.store.readArtifact(authorizationRef, (artifact) => validateCampaignAuthorization(
+    artifact, input.authority_context
+  ));
+  if (input.authorization.identity_payload.qualification_plan_ref !== null) {
+    await input.store.readArtifact(
+      input.authorization.identity_payload.qualification_plan_ref,
+      (artifact) => validateQualificationPlan(artifact, {
+        behaviorManifest: input.authority_context.behavior_manifest,
+        evaluationManifest: input.authority_context.evaluation_manifest
+      })
+    );
+  }
+  if (input.authorization.identity_payload.qualification_result_ref !== null) {
+    await input.store.readArtifact(
+      input.authorization.identity_payload.qualification_result_ref,
+      (artifact) => validateQualificationResult(artifact, {
+        plan: input.authority_context.qualification_plan,
+        behaviorManifest: input.authority_context.behavior_manifest,
+        evaluationManifest: input.authority_context.evaluation_manifest
+      })
+    );
+  }
   if (!input.namespace_index.identity_payload.campaign_authorization_refs.some(
     (reference) => canonicalizeJson(reference) === canonicalizeJson(authorizationRef)
   ) || canonicalizeJson(input.preflight.authorizing_namespace_ref) !== canonicalizeJson(namespaceRef)
@@ -698,9 +770,13 @@ export async function resolveDurableExecutionAuthority(input) {
   const head = await verifySingleEffectiveNamespaceHead(
     input.store, input.namespace_index.identity_payload.namespace_id
   );
-  if (head.content_fingerprint !== input.namespace_index.content_fingerprint) {
+  if (requireCurrentHead
+    && canonicalizeJson(createExactArtifactReference(head)) !== canonicalizeJson(namespaceRef)) {
     throw new Error("Execution cannot start from a non-head authority namespace revision.");
   }
+  if (!requireCurrentHead && !await namespaceIsInEffectiveHistory(
+    input.store, head, input.namespace_index
+  )) throw new Error("Execution authority namespace is absent from effective durable history.");
   return deepFreeze({
     ...structuredClone(input.preflight),
     namespace_index_ref: namespaceRef,
@@ -710,6 +786,23 @@ export async function resolveDurableExecutionAuthority(input) {
     authority_status: "AUTHORITY_PENDING_CAMPAIGN_INDEX_CLOSURE",
     execution_start_authorized: true
   });
+}
+
+async function namespaceIsInEffectiveHistory(store, head, target) {
+  const targetIdentity = canonicalizeJson(createExactArtifactReference(target));
+  let current = head;
+  const visited = new Set();
+  while (true) {
+    const currentIdentity = canonicalizeJson(createExactArtifactReference(current));
+    if (currentIdentity === targetIdentity) return true;
+    if (visited.has(currentIdentity) || current.identity_payload.prior_index_ref === null) {
+      return false;
+    }
+    visited.add(currentIdentity);
+    current = await store.readArtifact(
+      current.identity_payload.prior_index_ref, validateAuthorityNamespaceIndex
+    );
+  }
 }
 
 function buildTypedArtifact(artifactId, artifactKind, payload) {
@@ -877,7 +970,8 @@ function validateEvidenceSemantics(payload) {
       "capture_role", "subject_ref", "content_digest", "event_id"
     ], [], "evaluator-private capture semantics");
     if (!["ORACLE_PREMISE", "ORACLE_CLASSIFICATION", "VALIDATION_ATTESTATION",
-      "SELECTION_INDEPENDENCE"].includes(payload.semantic_envelope.capture_role)
+      "SELECTION_INDEPENDENCE", "INITIAL_STATE_PROOF",
+      "RUN_ISOLATION_PROOF"].includes(payload.semantic_envelope.capture_role)
       || payload.visibility !== "EVALUATOR_PRIVATE") {
       throw new Error("Evaluator-private capture role or visibility is invalid.");
     }
@@ -923,6 +1017,7 @@ function validateAttemptInventory(inventory, authorization) {
     ...authorization.identity_payload.contingency_slots
   ];
   const ids = [];
+  const authorizationRef = createExactArtifactReference(authorization);
   for (const entry of inventory) {
     const slot = authorized.find((candidate) => candidate.slot_id === entry.slot_id);
     const replacement = entry.replacement_allocation;
@@ -934,6 +1029,11 @@ function validateAttemptInventory(inventory, authorization) {
       throw new Error("Unplanned attempt lacks exact replacement allocation.");
     }
     if (replacement !== null) validateAttemptAllocation(replacement, authorization);
+    if (entry.unused_slot_disposition !== null
+      && canonicalizeJson(entry.unused_slot_disposition.campaign_authorization_ref)
+        !== canonicalizeJson(authorizationRef)) {
+      throw new Error("Unused-slot disposition cites a different campaign authorization.");
+    }
     ids.push(entry.attempt_id, entry.slot_id);
   }
   if (new Set(ids).size !== ids.length) throw new Error("Attempt inventory identities are duplicated.");
@@ -949,7 +1049,8 @@ function validateAttemptInventoryShape(inventory) {
   for (const entry of inventory) {
     assertExactKeys(entry, [
       "slot_id", "attempt_id", "path_id", "disposition", "run_record_ref",
-      "evidence_refs", "invalidity_decision_ref", "replacement_allocation"
+      "evidence_refs", "invalidity_decision_ref", "replacement_allocation",
+      "unused_slot_disposition"
     ], [], "attempt inventory entry");
     assertOpaqueId(entry.slot_id, "attempt inventory slot_id");
     assertOpaqueId(entry.attempt_id, "attempt inventory attempt_id");
@@ -970,6 +1071,7 @@ function validateAttemptInventoryShape(inventory) {
       assertPlainObject(entry.replacement_allocation, "attempt replacement allocation");
       canonicalizeJson(entry.replacement_allocation);
     }
+    validateUnusedSlotDisposition(entry);
     if (entry.disposition === "SEALED_RECORD" && entry.run_record_ref === null) {
       throw new Error("A sealed attempt disposition requires its run record.");
     }
@@ -977,6 +1079,56 @@ function validateAttemptInventoryShape(inventory) {
       && entry.invalidity_decision_ref === null) {
       throw new Error("An invalid attempt disposition requires its decision.");
     }
+  }
+}
+
+function validateUnusedSlotDisposition(entry) {
+  const unusedKinds = [
+    "CANCELLED_NOT_STARTED_GLOBAL_HARD_FAILURE",
+    "NOT_STARTED_CAMPAIGN_SUPERSEDED",
+    "ALLOCATION_AUTHORITY_INVALIDATED_BEFORE_START"
+  ];
+  if (!unusedKinds.includes(entry.disposition)) {
+    if (entry.unused_slot_disposition !== null) {
+      throw new Error("A started/ordinary attempt cannot carry an unused-slot disposition.");
+    }
+    return;
+  }
+  const detail = entry.unused_slot_disposition;
+  assertExactKeys(detail, [
+    "disposition_kind", "campaign_authorization_ref", "decisive_run_ref",
+    "basis_decision_ref", "decisive_failure_digest", "actor_identity",
+    "recorded_at", "material_output_observed"
+  ], [], "unused-slot disposition");
+  if (detail.disposition_kind !== entry.disposition || detail.material_output_observed !== false) {
+    throw new Error("Unused-slot disposition kind/output closure is invalid.");
+  }
+  validateExactArtifactReference(detail.campaign_authorization_ref, {
+    allowedKinds: ["CAMPAIGN_AUTHORIZATION"]
+  });
+  if (detail.decisive_run_ref !== null) {
+    validateExactArtifactReference(detail.decisive_run_ref, {
+      allowedKinds: ["FORMAL_RUN_RECORD"]
+    });
+  }
+  if (detail.basis_decision_ref !== null) {
+    validateExactArtifactReference(detail.basis_decision_ref, {
+      allowedKinds: ["EVALUATION_DECISION"]
+    });
+  }
+  if (entry.disposition === "CANCELLED_NOT_STARTED_GLOBAL_HARD_FAILURE") {
+    if (detail.decisive_run_ref === null || detail.decisive_failure_digest === null) {
+      throw new Error("Global hard-failure cancellation requires its decisive run and finding.");
+    }
+    assertSha256(detail.decisive_failure_digest, "unused-slot decisive_failure_digest");
+  } else if (detail.decisive_run_ref !== null || detail.decisive_failure_digest !== null
+    || detail.basis_decision_ref === null) {
+    throw new Error("Non-hard unused-slot disposition requires only its basis decision.");
+  }
+  validateCreated(detail.recorded_at, detail.actor_identity);
+  if (entry.run_record_ref !== null || entry.evidence_refs.length !== 0
+    || entry.invalidity_decision_ref !== null) {
+    throw new Error("Unused slot cannot hide a started attempt or material evidence.");
   }
 }
 
@@ -997,6 +1149,16 @@ function validateAttemptInventoryMembership(payload) {
     }
     if (entry.invalidity_decision_ref !== null) {
       mappedInvalidityDecisions.push(canonicalizeJson(entry.invalidity_decision_ref));
+    }
+    if (entry.unused_slot_disposition !== null
+      && entry.unused_slot_disposition.decisive_run_ref !== null
+      && !runs.has(canonicalizeJson(entry.unused_slot_disposition.decisive_run_ref))) {
+      throw new Error("Unused-slot decisive run is omitted from the campaign member list.");
+    }
+    if (entry.unused_slot_disposition !== null
+      && entry.unused_slot_disposition.basis_decision_ref !== null
+      && !decisions.has(canonicalizeJson(entry.unused_slot_disposition.basis_decision_ref))) {
+      throw new Error("Unused-slot basis decision is omitted from the campaign member list.");
     }
     if (entry.evidence_refs.some((reference) => !evidence.has(canonicalizeJson(reference)))) {
       throw new Error("Attempt evidence is omitted from the campaign member list.");

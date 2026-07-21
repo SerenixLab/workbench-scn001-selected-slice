@@ -152,13 +152,19 @@ anchor/fresh-start prerequisites, invalidity/replacement limits, and owner-only
 material decisions. Section 7C implements closed typed evidence envelopes,
 byte-exact content-addressed custody/replay, independently validated cumulative
 namespace and frozen campaign indexes, fork quarantine, and durable resolution
-of the otherwise-ungranted 7B execution preflight. These are implementation
-mechanisms exercised only with synthetic test objects; no project-owner
-namespace designation, external anchor event, or formal execution has occurred.
+of the otherwise-ungranted 7B execution preflight. Section 7D implements sealed
+formal run records, independent durable authority replay, exact orthogonal run
+outcomes/findings, one/three-run conjunctive path/class aggregation, fail-closed
+historical closure, bounded claim ceilings, immutable result standing, and
+non-circular later-index result authority. These are implementation mechanisms
+exercised only with synthetic test objects; no project-owner namespace
+designation, external anchor event, formal execution, real bounded result, or
+standing decision has occurred.
 Every eventual formal artifact must still be created prospectively; no current
 or historical development artifact is eligible for promotion. No current
 artifact establishes
-behavioral compatibility, formal evidence, scoreability, bounded pass/fail,
+behavioral compatibility, authoritative formal evidence, a real scoreable
+campaign, bounded pass/fail,
 milestone acceptance, broader `SCN-001` acceptance, or production readiness.
 Durable repository extraction remains blocked by `REPO-001`.
 

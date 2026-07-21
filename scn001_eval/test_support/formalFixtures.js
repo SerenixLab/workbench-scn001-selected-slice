@@ -12,7 +12,7 @@ import {
 
 export const digest = (character) => `sha256:${character.repeat(64)}`;
 
-export function createFormalAuthorityFixture() {
+export function createFormalAuthorityFixture({ qualification = "QUALIFIED" } = {}) {
   const behaviorManifest = createBehaviorConfigurationManifest(behaviorManifestInput());
   const evaluationManifest = createEvaluationConfigurationManifest(evaluationManifestInput());
   const configuration = { behaviorManifest, evaluationManifest };
@@ -36,14 +36,20 @@ export function createFormalAuthorityFixture() {
     created_at: "2026-07-21T12:00:00Z",
     created_by: "actor:qualification-producer"
   });
+  const comparisons = qualificationComparisons(qualificationPlan);
+  if (qualification === "NOT_QUALIFIED") {
+    comparisons[0].equivalent = false;
+    comparisons[0].mismatch_class = "VALUE_MISMATCH";
+    comparisons[0].details_digest = digest("f");
+  }
   const qualificationResult = createQualificationResult({
-    artifact_id: "artifact:qualification-result:fixture",
+    artifact_id: `artifact:qualification-result:fixture:${qualification.toLowerCase()}`,
     plan: qualificationPlan,
     behavior_manifest: behaviorManifest,
     evaluation_manifest: evaluationManifest,
     executions: qualificationExecutions(qualificationPlan),
-    comparisons: qualificationComparisons(qualificationPlan),
-    result: "QUALIFIED",
+    comparisons,
+    result: qualification,
     producer_identity: "actor:qualification-result-producer",
     validator_identity: "actor:qualification-result-validator",
     validation_result: "VALIDATED",
@@ -65,9 +71,9 @@ export function createFormalAuthorityFixture() {
     evaluation_manifest: evaluationManifest,
     qualification_plan: qualificationPlan,
     qualification_result: qualificationResult,
-    attempt_slots: attemptSlots(1, "PRIMARY", 0),
-    contingency_mode: "PREALLOCATED_TO_THREE",
-    contingency_slots: attemptSlots(2, "CONTINGENCY", 1),
+    attempt_slots: attemptSlots(qualification === "QUALIFIED" ? 1 : 3, "PRIMARY", 0),
+    contingency_mode: qualification === "QUALIFIED" ? "PREALLOCATED_TO_THREE" : "NOT_APPLICABLE",
+    contingency_slots: qualification === "QUALIFIED" ? attemptSlots(2, "CONTINGENCY", 1) : [],
     campaign_authority_identity: "actor:zoey-project-owner",
     producer_identity: "actor:campaign-producer",
     custody_plan: custodyPlan(),

@@ -329,6 +329,8 @@ test("run invalidity remains immutable and replacement allocation enforces stop 
   assert.equal(allocation.outcome_independent, true);
   assert.equal(allocation.lifecycle, "authorized");
   assert.match(allocation.selection_basis_digest, /^sha256:[0-9a-f]{64}$/);
+  assert.match(allocation.seed_commitment, /^sha256:[0-9a-f]{64}$/);
+  assert.notEqual(allocation.seed_commitment, allocation.selection_basis_digest);
 
   const second = createInitialRunInvalidityDecision(invalidityInput(
     authorization,

@@ -71,9 +71,14 @@ authority decisions. Section 7C activates `ENG-CONF-EVIDENCE-002 R1` and adds
 typed immutable evidence, byte-exact custody/replay, cumulative authority-
 namespace and frozen campaign indexes, fork quarantine, and the durable
 resolution required to convert a valid 7B preflight into a start grant.
-Scoreability remains separately untriggered until 7D begins. All 7C objects in
-tests are synthetic; no effective real campaign namespace, external anchor, or
-formal execution has been created.
+Section 7D activates `ENG-CONF-SCORE-001 R1` and implements sealed formal run
+records, independent durable authority replay, orthogonal validity/invariant/
+obligation outcomes, exact one/three-run conjunctive aggregation, conservative
+historical-failure preservation, bounded result and claim-ceiling artifacts,
+immutable owner-reviewed standing, and non-circular later-index authority.
+All Phase 7 objects in tests are synthetic; no effective real campaign
+namespace, external anchor, formal execution, bounded result, or standing
+decision has been created.
 
 ## First Phase 7 Change Requirements
 

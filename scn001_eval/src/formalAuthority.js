@@ -734,6 +734,9 @@ export function allocateReplacementAttempt(input) {
     selection_basis_digest: fingerprintCanonicalJson(
       "zoey:replacement-allocation-basis:v1", basis
     ),
+    seed_commitment: fingerprintCanonicalJson(
+      "zoey:replacement-seed-commitment:v1", basis
+    ),
     lifecycle: "authorized",
     outcome_independent: true
   });
@@ -1123,7 +1126,7 @@ export function validateAttemptAllocation(allocation, authorization) {
     assertExactKeys(allocation, [
       "campaign_authorization_ref", "invalidity_decision_ref", "predecessor_run_ref",
       "path_id", "replacement_ordinal", "allocation_kind", "slot_id", "attempt_id",
-      "selection_basis_digest", "lifecycle", "outcome_independent"
+      "selection_basis_digest", "seed_commitment", "lifecycle", "outcome_independent"
     ], [], "replacement attempt allocation");
     resolveExactArtifactReference(allocation.campaign_authorization_ref, authorization, {
       allowedKinds: ["CAMPAIGN_AUTHORIZATION"]
@@ -1151,6 +1154,8 @@ export function validateAttemptAllocation(allocation, authorization) {
       || allocation.attempt_id !== `${campaignId}:replacement-attempt:${allocation.path_id}:${allocation.replacement_ordinal}`
       || allocation.selection_basis_digest !== fingerprintCanonicalJson(
         "zoey:replacement-allocation-basis:v1", basis
+      ) || allocation.seed_commitment !== fingerprintCanonicalJson(
+        "zoey:replacement-seed-commitment:v1", basis
       )) {
       throw new Error("Replacement allocation does not match its deterministic basis.");
     }
@@ -1160,6 +1165,9 @@ export function validateAttemptAllocation(allocation, authorization) {
   assertOpaqueId(allocation.slot_id, "attempt allocation.slot_id");
   assertOpaqueId(allocation.attempt_id, "attempt allocation.attempt_id");
   assertSha256(allocation.selection_basis_digest, "attempt allocation.selection_basis_digest");
+  if (allocation.allocation_kind === "INVALIDITY_DERIVED_REPLACEMENT") {
+    assertSha256(allocation.seed_commitment, "attempt allocation.seed_commitment");
+  }
   if (allocation.lifecycle !== "authorized" || allocation.outcome_independent !== true) {
     throw new Error("Attempt allocation must remain prospectively authorized and outcome-independent.");
   }
