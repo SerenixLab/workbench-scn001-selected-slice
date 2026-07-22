@@ -120,11 +120,10 @@ invented manifest is rejected. In-memory exact-reference lists also reject a
 repeated artifact kind/ID before durable resolution.
 
 The generic constructors and all current tests remain development mechanisms.
-No package-root formal runner exists, and the second increment does not close
-oracle derivation, invalidity-predicate replay, typed proposition proofs,
-recorder-owned chronology, authenticated external anchoring, or semantic replay
-from raw captures. It must pass the complete gate and fresh independent review
-before its mechanisms receive formal reliance.
+No package-root formal runner exists. Later corrective increments now cover the
+internal oracle, typed proposition capture, recorder chronology, signed-receipt
+authentication, and strict proof replay described below, but they must pass the
+complete gate and fresh independent review before receiving formal reliance.
 
 The next corrective increment adds a non-public formal-execution/oracle core.
 It creates the SUT public boundary internally, executes all four accepted paths
@@ -141,10 +140,41 @@ so a mixed initial ingestion may carry its exact fixture-initialized assertion
 results without being falsely rejected or accepting extra initialized results.
 
 This execution/oracle core is still `REVIEW_PENDING` and is deliberately absent
-from the package root. Its transcript is not yet converted into typed durable
-evidence or a sealed formal run, and it does not authenticate an external start,
-derive proposition-specific control proofs, or retain an interrupted attempt.
+from the package root. The evidence-trust increment below supplies durable proof
+and anchor primitives, but the runner transcript is not yet integrated with
+them into a sealed formal run and interrupted-attempt retention remains open.
 The authoritative Phase 7 status therefore remains unchanged.
+
+## Phase 7 Evidence-Trust Corrective Addendum
+
+Corrective date: 2026-07-22.
+
+The anchor requirement now closes an Ed25519 key ID and public-key fingerprint.
+Canonical signed receipt bytes contain the exact subject, namespace, commit,
+predecessor, authority ref, external event, producer, and issue provenance;
+capture derives the evidence semantics from those authenticated bytes. Durable
+start, qualification, namespace-chain, bounded-result, result-standing, and
+claim-invalidation paths re-authenticate applicable receipts with the pinned
+key. A caller-selected public key, modified signed payload, noncanonical receipt,
+or label-only receipt cannot satisfy that boundary.
+
+Attempt evidence now passes through a fail-closed recorder that owns one
+monotonic creation/delivery sequence. The recorder derives capture roles,
+digests, and event identities. Initial-state, run-isolation, selection-
+independence, fresh-start, qualification-fresh-start, qualification-oracle, and
+validation propositions are retained as closed canonical proof documents.
+Replay reconstructs their semantic envelopes from raw custody; formal-run
+validation also checks shared run scope and the exact prospective selection and
+seed commitments. Qualification validation binds the exact plan, execution,
+comparison, result, anchor, and fresh-start basis.
+
+All keys and receipts used by tests are generated synthetic fixtures. This
+increment does not designate the project-owner key or effective namespace, does
+not make qualification comparisons execution-derived, and does not connect the
+four-path oracle transcript to durable formal-run sealing or interruption
+retention. The prior `BLOCKED` disposition and all four `applicable / uncovered`
+Phase 7 controls remain unchanged pending the remaining integration and fresh
+independent review.
 
 ## First Phase 7 Change Requirements
 

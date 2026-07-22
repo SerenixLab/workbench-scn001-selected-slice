@@ -308,7 +308,12 @@ function measuredAuthorizationInput(behaviorManifest, evaluationManifest) {
       receipt_digest_algorithm: "sha-256",
       receipt_custody_target: "custody:formal-evaluation:anchor-receipts",
       resolvability_policy: "REQUIRED_AT_USE",
-      fresh_start_profile: "GATE_LAUNCHED_ATTEMPT"
+      fresh_start_profile: "GATE_LAUNCHED_ATTEMPT",
+      receipt_authentication: {
+        algorithm: "Ed25519",
+        key_id: "key:configuration-measurement-test",
+        public_key_fingerprint: digest("9")
+      }
     },
     authorized_at: "2026-07-22T13:00:00Z",
     authorized_by: "actor:zoey-project-owner"

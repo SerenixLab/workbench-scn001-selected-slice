@@ -36,6 +36,8 @@ import {
   verifyDurableCampaignIndexHistory,
   verifyDurableQualificationEvidence,
   verifyDurableEvidence,
+  verifyAuthenticatedAnchorReceipt,
+  verifyAuthenticatedNamespaceHead,
   verifySingleEffectiveNamespaceHead
 } from "./formalEvidence.js";
 import {
@@ -84,7 +86,7 @@ const UNRESOLVED_KINDS = Object.freeze([
 export async function createBoundedCampaignResult(input) {
   assertExactKeys(input, [
     "store", "artifact_id", "result_id", "authorization", "authority_context",
-    "campaign_index", "closure_namespace", "closure_receipt", "run_records",
+    "campaign_index", "closure_namespace", "closure_receipt", "anchor_public_key", "run_records",
     "campaign_decisions", "qualification_evidence_artifacts",
     "historical_campaigns", "additional_unresolved_closure", "producer_identity", "validator_identity",
     "validation_result", "created_at", "created_by", "supersedes_result",
@@ -577,7 +579,7 @@ export function resolveClaimInvalidationHistory(decisions) {
 export async function resolveClaimInvalidationAuthority(input) {
   assertExactKeys(input, [
     "store", "result", "campaign_authorization", "decisions",
-    "indexing_namespace", "indexing_receipt"
+    "indexing_namespace", "indexing_receipt", "anchor_public_key"
   ], [], "claim invalidation authority input");
   validateCanonicalArtifact(input.result, { allowedKinds: ["BOUNDED_CAMPAIGN_RESULT"] });
   validateCanonicalArtifact(input.campaign_authorization, {
@@ -652,6 +654,11 @@ export async function resolveClaimInvalidationAuthority(input) {
     await verifyDurableEvidence(input.store, offending);
   }
   await verifyDurableEvidence(input.store, input.indexing_receipt);
+  await verifyAuthenticatedAnchorReceipt(
+    input.store, input.indexing_receipt,
+    input.campaign_authorization.identity_payload.anchor_requirement,
+    input.anchor_public_key
+  );
   const receipt = input.indexing_receipt.identity_payload.semantic_envelope;
   if (input.indexing_receipt.identity_payload.evidence_kind !== "ANCHOR_RECEIPT"
     || canonicalizeJson(receipt.namespace_index_ref) !== canonicalizeJson(
@@ -718,6 +725,39 @@ function validateStandingTransition(prior, current) {
   }
 }
 
+function boundedAnchorVerifiers(input) {
+  const candidates = [];
+  const add = (authorization, authorityContext, publicKey) => {
+    candidates.push({
+      authority_subject_ref: createExactArtifactReference(authorization),
+      anchor_requirement: authorization.identity_payload.anchor_requirement,
+      public_key: publicKey
+    });
+    if (authorityContext.qualification_plan !== null) {
+      candidates.push({
+        authority_subject_ref: createExactArtifactReference(authorityContext.qualification_plan),
+        anchor_requirement: authorityContext.qualification_plan.identity_payload.anchor_requirement,
+        public_key: publicKey
+      });
+    }
+  };
+  add(input.authorization, input.authority_context, input.anchor_public_key);
+  for (const campaign of input.historical_campaigns) {
+    add(campaign.authorization, campaign.authority_context, campaign.anchor_public_key);
+  }
+  const unique = new Map();
+  for (const candidate of candidates) {
+    const identity = canonicalizeJson(candidate.authority_subject_ref);
+    const prior = unique.get(identity);
+    if (prior && canonicalizeJson(prior.anchor_requirement)
+        !== canonicalizeJson(candidate.anchor_requirement)) {
+      throw new Error("Bounded campaign contexts conflict on one anchor verifier subject.");
+    }
+    unique.set(identity, candidate);
+  }
+  return [...unique.values()];
+}
+
 export async function resolveBoundedResultAuthority(input) {
   assertExactKeys(input, [
     "store", "result", "result_context", "indexing_namespace", "indexing_receipt",
@@ -726,6 +766,11 @@ export async function resolveBoundedResultAuthority(input) {
   await validateBoundedCampaignResult(input.result, input.result_context);
   validateAuthorityNamespaceIndex(input.indexing_namespace);
   await verifyDurableEvidence(input.store, input.indexing_receipt);
+  await verifyAuthenticatedAnchorReceipt(
+    input.store, input.indexing_receipt,
+    input.result_context.authorization.identity_payload.anchor_requirement,
+    input.result_context.anchor_public_key
+  );
   await input.store.readArtifact(
     createExactArtifactReference(input.result),
     (artifact) => validateBoundedCampaignResult(artifact, input.result_context)
@@ -869,6 +914,19 @@ async function computeBoundedResult(input) {
   validateCampaignEvidenceIndex(input.campaign_index, { authorization: input.authorization });
   validateAuthorityNamespaceIndex(input.closure_namespace);
   await verifyDurableEvidence(input.store, input.closure_receipt);
+  await verifyAuthenticatedAnchorReceipt(
+    input.store, input.closure_receipt,
+    input.authorization.identity_payload.anchor_requirement,
+    input.anchor_public_key
+  );
+  const authenticatedHead = await verifyAuthenticatedNamespaceHead(
+    input.store,
+    input.closure_namespace.identity_payload.namespace_id,
+    boundedAnchorVerifiers(input)
+  );
+  if (!await namespaceDescendsFrom(
+    input.store, authenticatedHead, input.closure_namespace
+  )) throw new Error("Bounded aggregation closure is outside authenticated namespace history.");
   await input.store.readConfigurationManifest(
     input.authorization.identity_payload.behavior_manifest_ref,
     validateBehaviorConfigurationManifest
@@ -902,7 +960,7 @@ async function computeBoundedResult(input) {
     await verifyDurableQualificationEvidence(
       input.store, input.authority_context.qualification_plan,
       qualificationResult, input.qualification_evidence_artifacts,
-      input.closure_namespace
+      input.closure_namespace, input.anchor_public_key
     );
   }
   const campaignIndexRef = createExactArtifactReference(input.campaign_index);
@@ -1019,7 +1077,7 @@ async function computeBoundedResult(input) {
   for (const campaign of input.historical_campaigns) {
     assertExactKeys(campaign, [
       "authorization", "authority_context", "campaign_index", "run_records",
-      "campaign_decisions", "qualification_evidence_artifacts"
+      "campaign_decisions", "qualification_evidence_artifacts", "anchor_public_key"
     ], [], "historical campaign context");
     if (!Array.isArray(campaign.run_records)) {
       throw new Error("Historical campaign run context must be an array.");
@@ -1069,7 +1127,7 @@ async function computeBoundedResult(input) {
       await verifyDurableQualificationEvidence(
         input.store, campaign.authority_context.qualification_plan,
         qualificationResult, campaign.qualification_evidence_artifacts,
-        input.closure_namespace
+        input.closure_namespace, campaign.anchor_public_key
       );
     }
     await input.store.readArtifact(

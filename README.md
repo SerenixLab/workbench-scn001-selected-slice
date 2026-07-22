@@ -184,8 +184,7 @@ manifests and forces three runs per path. It also rejects unknown runtime-source
 members, import/environment escapes, non-regular source members, private-layout
 test assumptions, and conflicting in-memory artifact identities. This measured-
 configuration component alone is not a formal runner or permission to execute
-a campaign; proposition proofs, durable recorder chronology, authenticated
-external anchoring, and sealing remain open.
+a campaign.
 
 An internal corrective runner now executes the exact four-path fixture flow and
 derives path/claim outcomes from evaluator-private checkpoint reconstruction;
@@ -193,5 +192,15 @@ callers cannot supply validity, invariant, or obligation classifications. It
 also owns a monotonic event transcript containing delivered fixture material
 and post-event inspections. This is an unsealed execution/oracle core only. It
 is not exported by the package root, is not durable formal evidence, and cannot
-start or authorize a real campaign without the still-open anchor, proof,
-custody, and sealing layers.
+start or authorize a real campaign by itself.
+
+The evidence-trust corrective layer now pins an Ed25519 verifier in the
+owner-approved anchor policy, derives receipt semantics from canonical signed
+bytes, re-authenticates namespace predecessor receipts, assigns attempt
+chronology inside one fail-closed recorder, and stores role-specific control
+propositions as canonical replayable bytes. Formal run replay rejects
+label-only proofs and checks initial-state/isolation and prospective-selection
+relations. These are still internal synthetic mechanisms: the four-path runner
+has not yet been connected to durable capture and formal sealing, qualification
+comparisons are not yet execution-derived, and no project anchor key, external
+event, campaign, or result has been designated.

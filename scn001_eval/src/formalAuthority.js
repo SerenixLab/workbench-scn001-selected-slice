@@ -384,6 +384,11 @@ export function createCampaignAuthorization(input) {
   validateDistinctActors(input.producer_identity, input.campaign_authority_identity);
   validateCustodyPlan(input.custody_plan);
   validateAnchorRequirement(input.anchor_requirement);
+  if (input.qualification_plan !== null
+    && canonicalizeJson(input.anchor_requirement)
+      !== canonicalizeJson(input.qualification_plan.identity_payload.anchor_requirement)) {
+    throw new Error("Campaign and qualification plan must share one prospective anchor policy.");
+  }
   validateCreated(input.authorized_at, input.authorized_by);
   if (input.authorized_by !== input.campaign_authority_identity) {
     throw new Error("Campaign authorization must be made by the declared project owner.");
@@ -517,6 +522,11 @@ export function validateCampaignAuthorization(authorization, context) {
     throw new Error("Campaign authorization actor/result/lifecycle is invalid.");
   }
   validateAnchorRequirement(payload.anchor_requirement);
+  if (context.qualification_plan !== null
+    && canonicalizeJson(payload.anchor_requirement)
+      !== canonicalizeJson(context.qualification_plan.identity_payload.anchor_requirement)) {
+    throw new Error("Campaign and qualification plan do not share one prospective anchor policy.");
+  }
   validateCreated(payload.authorized_at, payload.authorized_by);
   return authorization;
 }
@@ -1182,7 +1192,7 @@ function validateAnchorRequirement(value) {
   assertExactKeys(value, [
     "profile", "authority_ref", "receipt_media_type", "receipt_encoding",
     "receipt_digest_algorithm", "receipt_custody_target", "resolvability_policy",
-    "fresh_start_profile"
+    "fresh_start_profile", "receipt_authentication"
   ], [], "anchor requirement");
   if (!Object.hasOwn(ANCHOR_START_PROFILE, value.profile)
     || value.fresh_start_profile !== ANCHOR_START_PROFILE[value.profile]
@@ -1193,6 +1203,17 @@ function validateAnchorRequirement(value) {
   for (const field of [
     "authority_ref", "receipt_media_type", "receipt_encoding", "receipt_custody_target"
   ]) assertNonemptyString(value[field], `anchor requirement.${field}`);
+  assertExactKeys(value.receipt_authentication, [
+    "algorithm", "key_id", "public_key_fingerprint"
+  ], [], "anchor receipt authentication");
+  if (value.receipt_authentication.algorithm !== "Ed25519") {
+    throw new Error("Anchor receipt authentication algorithm is unsupported.");
+  }
+  assertOpaqueId(value.receipt_authentication.key_id, "anchor receipt authentication.key_id");
+  assertSha256(
+    value.receipt_authentication.public_key_fingerprint,
+    "anchor receipt authentication.public_key_fingerprint"
+  );
 }
 
 function validateAnchorVerification(value, authorization, namespaceRef, receiptRef) {

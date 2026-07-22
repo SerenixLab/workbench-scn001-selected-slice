@@ -14,6 +14,7 @@ import {
 import {
   createAuthorityNamespaceIndex,
   createCampaignEvidenceIndex,
+  captureAuthenticatedAnchorReceipt,
   captureFormalEvidence,
   validateAuthorityNamespaceIndex,
   validateCampaignEvidenceIndex,
@@ -40,6 +41,7 @@ import {
   sha256
 } from "../test_support/formalCampaignFixtures.js";
 import { digest } from "../test_support/formalFixtures.js";
+import { createFixtureAnchorReceiptBytes } from "../test_support/anchorFixture.js";
 
 test("complete conjunctive closure produces a pending bounded pass", async () => {
   const campaign = await completeCampaign("PASS");
@@ -181,7 +183,8 @@ test("closed historical non-pressure results cannot manufacture a later failure"
       campaign_index: historicalIndex,
       run_records: campaign.runs,
       campaign_decisions: [],
-      qualification_evidence_artifacts: campaign.setup.qualificationEvidenceArtifacts
+      qualification_evidence_artifacts: campaign.setup.qualificationEvidenceArtifacts,
+      anchor_public_key: campaign.setup.anchorPublicKey
     }]
   };
   const result = await createBoundedCampaignResult(input);
@@ -579,7 +582,8 @@ test("claim invalidation binds the exact overclaim, ceiling, owner review, and h
     campaign_authorization: campaign.setup.campaignAuthorization,
     decisions: [initial, successor],
     indexing_namespace: claimNamespace,
-    indexing_receipt: claimReceipt
+    indexing_receipt: claimReceipt,
+    anchor_public_key: campaign.setup.anchorPublicKey
   });
   assert.equal(authority.authority_status, "AUTHORITATIVE_CLAIM_INVALIDATION");
   assert.throws(() => createClaimInvalidationDecision({
@@ -696,7 +700,8 @@ test("post-qualification divergence suspends one-run scoring through one exact d
       campaign_index: campaign.campaignIndex,
       run_records: campaign.runs,
       campaign_decisions: [],
-      qualification_evidence_artifacts: campaign.setup.qualificationEvidenceArtifacts
+      qualification_evidence_artifacts: campaign.setup.qualificationEvidenceArtifacts,
+      anchor_public_key: campaign.setup.anchorPublicKey
     }]
   };
   const result = await createBoundedCampaignResult(input);
@@ -863,31 +868,25 @@ function campaignClosureNamespace(setup, campaignIndex) {
 async function namespaceReceipt(setup, namespace, suffix, sealedAt) {
   const authorizationRef = createExactArtifactReference(setup.campaignAuthorization);
   const namespaceRef = createExactArtifactReference(namespace);
-  const bytes = Buffer.from(`{\"namespace_receipt\":\"${suffix}\"}\n`);
-  return captureFormalEvidence(setup.store, {
-    artifact_id: `artifact:namespace-receipt:${suffix}`,
-    evidence_kind: "ANCHOR_RECEIPT",
+  const bytes = createFixtureAnchorReceiptBytes({
+    profile: "PROTECTED_REMOTE_GATE",
     authority_subject_ref: authorizationRef,
-    campaign_authorization_ref: authorizationRef,
-    attempt_id: null,
-    path_id: null,
-    visibility: "AUTHORITY_EXTERNAL",
-    media_type: "application/json",
-    encoding: "utf-8",
-    raw_bytes: bytes,
-    semantic_envelope: {
-      profile: "PROTECTED_REMOTE_GATE",
-      authority_subject_ref: authorizationRef,
-      namespace_index_ref: namespaceRef,
-      external_commit_sha: suffix === "result-indexing" ? "c".repeat(40) : "d".repeat(40),
-      authority_ref: "refs/heads/formal-authority",
-      external_event_id: `event:namespace-receipt:${suffix}`,
-      observed_predecessor: "b".repeat(40),
-      raw_receipt_digest: sha256(bytes)
-    },
-    created_order: null,
-    delivered_order: null,
+    namespace_index_ref: namespaceRef,
+    external_commit_sha: suffix === "result-indexing" ? "c".repeat(40) : "d".repeat(40),
+    authority_ref: "refs/heads/formal-authority",
+    external_event_id: `event:namespace-receipt:${suffix}`,
+    observed_predecessor: "b".repeat(40),
     producer_identity: "actor:external-anchor-platform",
+    issued_at: sealedAt
+  });
+  return captureAuthenticatedAnchorReceipt(setup.store, {
+    artifact_id: `artifact:namespace-receipt:${suffix}`,
+    raw_receipt_bytes: bytes,
+    anchor_requirement: setup.campaignAuthorization.identity_payload.anchor_requirement,
+    public_key: setup.anchorPublicKey,
+    expected_authority_subject_ref: authorizationRef,
+    expected_namespace_index_ref: namespaceRef,
+    campaign_authorization_ref: authorizationRef,
     validator_identity: "actor:external-gate-validator",
     sealed_at: sealedAt
   });
@@ -903,6 +902,7 @@ function resultInput(campaign) {
     campaign_index: campaign.campaignIndex,
     closure_namespace: campaign.closureNamespace,
     closure_receipt: campaign.closureReceipt,
+    anchor_public_key: campaign.setup.anchorPublicKey,
     run_records: campaign.runs,
     campaign_decisions: [],
     qualification_evidence_artifacts: campaign.setup.qualificationEvidenceArtifacts,

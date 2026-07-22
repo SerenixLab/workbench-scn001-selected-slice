@@ -24,6 +24,7 @@ import {
 import {
   validateAuthorityNamespaceIndex,
   validateFormalEvidenceArtifact,
+  replayTypedControlProof,
   resolveDurableExecutionAuthority,
   replayDurableExecutionAuthority,
   verifyDurableEvidence
@@ -130,7 +131,7 @@ export function createFailureFinding(input) {
 export async function createFormalRunRecord(input) {
   assertExactKeys(input, [
     "store", "artifact_id", "record_id", "authorization", "authority_context",
-    "authorizing_namespace", "anchor_receipt", "start_grant", "attempt_allocation",
+    "authorizing_namespace", "anchor_receipt", "anchor_public_key", "start_grant", "attempt_allocation",
     "evidence_artifacts", "initial_state_evidence_ref", "isolation_evidence_ref",
     "selection_independence_evidence_ref",
     "qualification_evidence_artifacts",
@@ -314,6 +315,7 @@ export async function verifyDurableFormalRunRecord(store, record, context) {
     authority_context: context.authority_context,
     authorizing_namespace: context.authorizing_namespace,
     anchor_receipt: context.anchor_receipt,
+    anchor_public_key: context.anchor_public_key,
     start_grant: context.start_grant,
     attempt_allocation: record.identity_payload.attempt_allocation,
     evidence_artifacts: evidenceArtifacts,
@@ -339,7 +341,33 @@ async function validateRunInputs(input) {
   const artifacts = input.evidence_artifacts;
   if (!Array.isArray(artifacts)) throw new Error("Formal run evidence must be an array.");
   await verifyDurableEvidence(input.store, input.anchor_receipt);
-  for (const artifact of artifacts) await verifyDurableEvidence(input.store, artifact);
+  const controlProofs = new Map();
+  for (const artifact of artifacts) {
+    await verifyDurableEvidence(input.store, artifact);
+    if (artifact.identity_payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE") {
+      const replay = await replayTypedControlProof(input.store, artifact);
+      if (controlProofs.has(replay.proof.proof_role)) {
+        throw new Error("Formal run repeats one typed control-proof role.");
+      }
+      controlProofs.set(replay.proof.proof_role, replay.proof);
+    }
+  }
+  const requiredProofRoles = [
+    "FRESH_START_PROOF", "INITIAL_STATE_PROOF", "RUN_ISOLATION_PROOF",
+    "SELECTION_INDEPENDENCE"
+  ];
+  if (requiredProofRoles.some((role) => !controlProofs.has(role))
+    || controlProofs.size !== requiredProofRoles.length) {
+    throw new Error("Formal run does not close the exact typed control-proof set.");
+  }
+  const initialProof = controlProofs.get("INITIAL_STATE_PROOF");
+  const isolationProof = controlProofs.get("RUN_ISOLATION_PROOF");
+  const selectionProof = controlProofs.get("SELECTION_INDEPENDENCE");
+  if (initialProof.proposition.run_scope_id !== isolationProof.proposition.run_scope_id
+    || selectionProof.proposition.selection_basis_digest !== slot.selection_basis_digest
+    || selectionProof.proposition.seed_commitment !== slot.seed_commitment) {
+    throw new Error("Formal run typed proofs conflict with run isolation or prospective selection.");
+  }
   const refs = artifacts.map(createExactArtifactReference);
   if (new Set(refs.map(canonicalizeJson)).size !== refs.length) {
     throw new Error("Formal run evidence references must be unique.");
@@ -368,6 +396,7 @@ async function validateRunInputs(input) {
     preflight: reconstructedPreflight,
     namespace_index: input.authorizing_namespace,
     anchor_receipt: input.anchor_receipt,
+    anchor_public_key: input.anchor_public_key,
     fresh_start_capture: freshStart,
     qualification_evidence_artifacts: input.qualification_evidence_artifacts
   });

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey, verify as verifySignature } from "node:crypto";
 import { constants, realpathSync } from "node:fs";
 import { lstat, mkdir, open, readFile, readdir, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -228,6 +228,251 @@ export async function captureFormalEvidence(store, input) {
   }
   await store.writeArtifact(artifact, validateFormalEvidenceArtifact);
   return artifact;
+}
+
+export function anchorPublicKeyFingerprint(publicKey) {
+  const key = publicKey?.type === "public" ? publicKey : createPublicKey(publicKey);
+  const der = key.export({ type: "spki", format: "der" });
+  return sha256Bytes(der);
+}
+
+export function anchorReceiptSigningBytes(receiptHeader) {
+  assertExactKeys(receiptHeader, [
+    "schema_id", "schema_revision", "algorithm", "key_id", "signed_payload"
+  ], [], "anchor receipt signed header");
+  if (receiptHeader.schema_id !== "zoey.external-anchor-receipt"
+    || receiptHeader.schema_revision !== 1 || receiptHeader.algorithm !== "Ed25519") {
+    throw new Error("Anchor receipt signed header uses an unsupported schema or algorithm.");
+  }
+  assertOpaqueId(receiptHeader.key_id, "anchor receipt key_id");
+  validateAnchorReceiptSignedPayload(receiptHeader.signed_payload);
+  return Buffer.from(
+    `zoey:external-anchor-receipt:v1\n${canonicalizeJson(receiptHeader)}`,
+    "utf8"
+  );
+}
+
+export async function captureAuthenticatedAnchorReceipt(store, input) {
+  assertExactKeys(input, [
+    "artifact_id", "raw_receipt_bytes", "anchor_requirement", "public_key",
+    "expected_authority_subject_ref", "expected_namespace_index_ref",
+    "campaign_authorization_ref", "validator_identity", "sealed_at"
+  ], [], "authenticated anchor receipt input");
+  const parsed = parseAndAuthenticateAnchorReceipt(
+    input.raw_receipt_bytes, input.anchor_requirement, input.public_key
+  );
+  const payload = parsed.signed_payload;
+  if (canonicalizeJson(payload.authority_subject_ref)
+      !== canonicalizeJson(input.expected_authority_subject_ref)
+    || canonicalizeJson(payload.namespace_index_ref)
+      !== canonicalizeJson(input.expected_namespace_index_ref)) {
+    throw new Error("Authenticated anchor receipt names a different authority subject or namespace.");
+  }
+  return captureFormalEvidence(store, {
+    artifact_id: input.artifact_id,
+    evidence_kind: "ANCHOR_RECEIPT",
+    authority_subject_ref: input.expected_authority_subject_ref,
+    campaign_authorization_ref: input.campaign_authorization_ref,
+    attempt_id: null,
+    path_id: null,
+    visibility: "AUTHORITY_EXTERNAL",
+    media_type: input.anchor_requirement.receipt_media_type,
+    encoding: input.anchor_requirement.receipt_encoding,
+    raw_bytes: input.raw_receipt_bytes,
+    semantic_envelope: anchorSemanticsFrom(payload, input.raw_receipt_bytes),
+    created_order: null,
+    delivered_order: null,
+    producer_identity: payload.producer_identity,
+    validator_identity: input.validator_identity,
+    sealed_at: input.sealed_at
+  });
+}
+
+export async function verifyAuthenticatedAnchorReceipt(
+  store, artifact, anchorRequirement, publicKey
+) {
+  const stored = await verifyDurableEvidence(store, artifact);
+  if (stored.identity_payload.evidence_kind !== "ANCHOR_RECEIPT") {
+    throw new Error("Authenticated anchor replay requires anchor receipt evidence.");
+  }
+  const raw = await store.readRawBytes(stored.identity_payload.raw_custody);
+  const parsed = parseAndAuthenticateAnchorReceipt(raw, anchorRequirement, publicKey);
+  const expected = anchorSemanticsFrom(parsed.signed_payload, raw);
+  if (canonicalizeJson(expected)
+      !== canonicalizeJson(stored.identity_payload.semantic_envelope)
+    || parsed.signed_payload.producer_identity !== stored.identity_payload.producer_identity) {
+    throw new Error("Anchor receipt semantic envelope was not derived from its authenticated bytes.");
+  }
+  return stored;
+}
+
+export function createFormalEvidenceRecorder(input) {
+  assertExactKeys(input, [
+    "store", "authority_subject_ref", "campaign_authorization_ref", "attempt_id",
+    "path_id", "producer_identity", "validator_identity", "event_namespace"
+  ], [], "formal evidence recorder input");
+  validateExactArtifactReference(input.authority_subject_ref);
+  if (input.campaign_authorization_ref !== null) {
+    validateExactArtifactReference(input.campaign_authorization_ref, {
+      allowedKinds: ["CAMPAIGN_AUTHORIZATION"]
+    });
+  }
+  if ((input.attempt_id === null) !== (input.path_id === null)) {
+    throw new Error("Recorder attempt/path identity must be populated together.");
+  }
+  if (input.attempt_id !== null) {
+    assertOpaqueId(input.attempt_id, "formal recorder attempt_id");
+    if (!REQUIRED_PATHS.includes(input.path_id)) throw new Error("Formal recorder path is unknown.");
+  }
+  validateDistinctActors(input.producer_identity, input.validator_identity);
+  assertOpaqueId(input.event_namespace, "formal recorder event_namespace");
+  let eventOrder = 0;
+  let poisoned = false;
+  let busy = false;
+  let runtimeCaptureObserved = false;
+  let materialOutputObserved = false;
+  const proofRoles = [];
+
+  return Object.freeze({
+    async captureControlProof(proofInput) {
+      if (poisoned) throw new Error("Formal evidence recorder is terminal after a failed capture.");
+      if (busy) {
+        poisoned = true;
+        throw new Error("Formal evidence recorder rejects concurrent chronology mutation.");
+      }
+      busy = true;
+      try {
+        assertExactKeys(proofInput, [
+          "artifact_id", "proof_role", "proposition", "sealed_at"
+        ], [], "typed control proof input");
+        assertRecorderProofTransition(
+          input.attempt_id, proofRoles, proofInput.proof_role,
+          runtimeCaptureObserved, materialOutputObserved
+        );
+        const createdOrder = eventOrder + 1;
+        const eventId = `${input.event_namespace}:event:${String(createdOrder).padStart(6, "0")}`;
+        const proof = buildControlProofDocument(input, proofInput, eventId);
+        const raw = Buffer.from(`${canonicalizeJson(proof)}\n`, "utf8");
+        const semantics = controlProofSemantics(proof, raw);
+        const artifact = await captureFormalEvidence(input.store, {
+          artifact_id: proofInput.artifact_id,
+          evidence_kind: "EVALUATOR_PRIVATE_CAPTURE",
+          authority_subject_ref: input.authority_subject_ref,
+          campaign_authorization_ref: input.campaign_authorization_ref,
+          attempt_id: input.attempt_id,
+          path_id: input.path_id,
+          visibility: "EVALUATOR_PRIVATE",
+          media_type: "application/json",
+          encoding: "utf-8",
+          raw_bytes: raw,
+          semantic_envelope: semantics,
+          created_order: input.attempt_id === null ? null : createdOrder,
+          delivered_order: null,
+          producer_identity: input.producer_identity,
+          validator_identity: input.validator_identity,
+          sealed_at: proofInput.sealed_at
+        });
+        eventOrder = createdOrder;
+        proofRoles.push(proofInput.proof_role);
+        return artifact;
+      } catch (error) {
+        poisoned = true;
+        throw error;
+      } finally {
+        busy = false;
+      }
+    },
+
+    async captureRuntimeEvidence(evidenceInput) {
+      if (poisoned) throw new Error("Formal evidence recorder is terminal after a failed capture.");
+      if (busy) {
+        poisoned = true;
+        throw new Error("Formal evidence recorder rejects concurrent chronology mutation.");
+      }
+      busy = true;
+      try {
+        assertExactKeys(evidenceInput, [
+          "artifact_id", "evidence_kind", "raw_bytes", "semantic_data",
+          "deliver_to_sut", "sealed_at"
+        ], [], "recorded runtime evidence input");
+        if (input.attempt_id === null) {
+          throw new Error("Runtime evidence recording requires an attempt-bound recorder.");
+        }
+        if (canonicalizeJson(proofRoles) !== canonicalizeJson([
+          "FRESH_START_PROOF", "INITIAL_STATE_PROOF", "RUN_ISOLATION_PROOF",
+          "SELECTION_INDEPENDENCE"
+        ])) {
+          throw new Error("Runtime capture cannot start before the exact control-proof sequence.");
+        }
+        const createdOrder = eventOrder + 1;
+        const deliveredOrder = evidenceInput.deliver_to_sut === true
+          ? createdOrder + 1
+          : null;
+        if (evidenceInput.deliver_to_sut !== true && evidenceInput.deliver_to_sut !== false) {
+          throw new Error("Runtime evidence delivery decision must be an exact boolean.");
+        }
+        const eventId = `${input.event_namespace}:event:${String(createdOrder).padStart(6, "0")}`;
+        const raw = toBuffer(evidenceInput.raw_bytes);
+        const semantics = runtimeEvidenceSemantics(
+          evidenceInput.evidence_kind, evidenceInput.semantic_data, raw, eventId
+        );
+        const artifact = await captureFormalEvidence(input.store, {
+          artifact_id: evidenceInput.artifact_id,
+          evidence_kind: evidenceInput.evidence_kind,
+          authority_subject_ref: input.authority_subject_ref,
+          campaign_authorization_ref: input.campaign_authorization_ref,
+          attempt_id: input.attempt_id,
+          path_id: input.path_id,
+          visibility: runtimeEvidenceVisibility(evidenceInput.evidence_kind),
+          media_type: "application/octet-stream",
+          encoding: "binary",
+          raw_bytes: raw,
+          semantic_envelope: semantics,
+          created_order: createdOrder,
+          delivered_order: deliveredOrder,
+          producer_identity: input.producer_identity,
+          validator_identity: input.validator_identity,
+          sealed_at: evidenceInput.sealed_at
+        });
+        eventOrder = deliveredOrder ?? createdOrder;
+        runtimeCaptureObserved = true;
+        if (evidenceInput.evidence_kind === "SUT_OUTPUT_CAPTURE") {
+          materialOutputObserved = true;
+        }
+        return artifact;
+      } catch (error) {
+        poisoned = true;
+        throw error;
+      } finally {
+        busy = false;
+      }
+    }
+  });
+}
+
+export async function verifyTypedControlProof(store, artifact) {
+  return (await replayTypedControlProof(store, artifact)).artifact;
+}
+
+export async function replayTypedControlProof(store, artifact) {
+  const stored = await verifyDurableEvidence(store, artifact);
+  if (stored.identity_payload.evidence_kind !== "EVALUATOR_PRIVATE_CAPTURE") {
+    throw new Error("Typed control-proof replay requires evaluator-private evidence.");
+  }
+  const raw = await store.readRawBytes(stored.identity_payload.raw_custody);
+  const proof = parseCanonicalJsonBytes(raw, "typed control proof");
+  validateControlProofDocument(proof);
+  const payload = stored.identity_payload;
+  if (canonicalizeJson(proof.authority_subject_ref)
+      !== canonicalizeJson(payload.authority_subject_ref)
+    || canonicalizeJson(proof.campaign_authorization_ref)
+      !== canonicalizeJson(payload.campaign_authorization_ref)
+    || proof.attempt_id !== payload.attempt_id || proof.path_id !== payload.path_id
+    || canonicalizeJson(controlProofSemantics(proof, raw))
+      !== canonicalizeJson(payload.semantic_envelope)) {
+    throw new Error("Control-proof semantic envelope was not derived from its canonical raw bytes.");
+  }
+  return deepFreeze({ artifact: stored, proof });
 }
 
 export function validateFormalEvidenceArtifact(artifact) {
@@ -519,6 +764,48 @@ export async function verifySingleEffectiveNamespaceHead(store, namespaceId) {
   return heads[0];
 }
 
+export async function verifyAuthenticatedNamespaceHead(store, namespaceId, anchorVerifiers) {
+  if (!Array.isArray(anchorVerifiers) || anchorVerifiers.length === 0) {
+    throw new Error("Authenticated namespace replay requires owner-pinned anchor verifiers.");
+  }
+  const verifiers = new Map();
+  for (const entry of anchorVerifiers) {
+    assertExactKeys(entry, [
+      "authority_subject_ref", "anchor_requirement", "public_key"
+    ], [], "namespace anchor verifier");
+    validateExactArtifactReference(entry.authority_subject_ref, {
+      allowedKinds: ["DETERMINISTIC_QUALIFICATION_PLAN", "CAMPAIGN_AUTHORIZATION"]
+    });
+    const identity = canonicalizeJson(entry.authority_subject_ref);
+    if (verifiers.has(identity)) throw new Error("Namespace anchor verifier subject is duplicated.");
+    verifiers.set(identity, entry);
+  }
+  const head = await verifySingleEffectiveNamespaceHead(store, namespaceId);
+  let current = head;
+  const visited = new Set();
+  while (current.identity_payload.prior_index_ref !== null) {
+    const identity = canonicalizeJson(createExactArtifactReference(current));
+    if (visited.has(identity)) throw new Error("Authenticated namespace history has a cycle.");
+    visited.add(identity);
+    const receipt = await store.readArtifact(
+      current.identity_payload.prior_index_receipt_ref, validateFormalEvidenceArtifact
+    );
+    const verifier = verifiers.get(canonicalizeJson(
+      receipt.identity_payload.semantic_envelope.authority_subject_ref
+    ));
+    if (!verifier) {
+      throw new Error("Namespace predecessor receipt lacks its owner-pinned verifier.");
+    }
+    await verifyAuthenticatedAnchorReceipt(
+      store, receipt, verifier.anchor_requirement, verifier.public_key
+    );
+    current = await store.readArtifact(
+      current.identity_payload.prior_index_ref, validateAuthorityNamespaceIndex
+    );
+  }
+  return head;
+}
+
 export function createCampaignEvidenceIndex(input) {
   assertExactKeys(input, [
     "artifact_id", "campaign_authorization", "authorizing_namespace",
@@ -721,7 +1008,8 @@ export async function replayDurableExecutionAuthority(input) {
 async function resolveDurableExecutionAuthorityInternal(input, requireCurrentHead) {
   assertExactKeys(input, [
     "store", "authorization", "authority_context", "preflight", "namespace_index",
-    "anchor_receipt", "fresh_start_capture", "qualification_evidence_artifacts"
+    "anchor_receipt", "anchor_public_key", "fresh_start_capture",
+    "qualification_evidence_artifacts"
   ], [], "durable execution authority input");
   validateCampaignAuthorization(input.authorization, input.authority_context);
   validateAuthorityNamespaceIndex(input.namespace_index);
@@ -775,7 +1063,7 @@ async function resolveDurableExecutionAuthorityInternal(input, requireCurrentHea
     await verifyDurableQualificationEvidence(
       input.store, input.authority_context.qualification_plan,
       qualificationResult, input.qualification_evidence_artifacts,
-      input.namespace_index
+      input.namespace_index, input.anchor_public_key
     );
   }
   if (!input.namespace_index.identity_payload.campaign_authorization_refs.some(
@@ -814,6 +1102,11 @@ async function resolveDurableExecutionAuthorityInternal(input, requireCurrentHea
       ))) {
     throw new Error("Authorizing namespace does not close campaign configuration/qualification/anchor authority.");
   }
+  await verifyAuthenticatedAnchorReceipt(
+    input.store, input.anchor_receipt, authorization.anchor_requirement,
+    input.anchor_public_key
+  );
+  await verifyTypedControlProof(input.store, input.fresh_start_capture);
   const receiptSemantics = input.anchor_receipt.identity_payload.semantic_envelope;
   const startSemantics = input.fresh_start_capture.identity_payload.semantic_envelope;
   if (input.anchor_receipt.identity_payload.evidence_kind !== "ANCHOR_RECEIPT"
@@ -860,8 +1153,23 @@ async function resolveDurableExecutionAuthorityInternal(input, requireCurrentHea
   );
   await input.store.readRawBytes(input.anchor_receipt.identity_payload.raw_custody);
   await input.store.readRawBytes(input.fresh_start_capture.identity_payload.raw_custody);
-  const head = await verifySingleEffectiveNamespaceHead(
-    input.store, input.namespace_index.identity_payload.namespace_id
+  const anchorVerifiers = [{
+    authority_subject_ref: authorizationRef,
+    anchor_requirement: authorization.anchor_requirement,
+    public_key: input.anchor_public_key
+  }];
+  if (input.authority_context.qualification_plan !== null) {
+    anchorVerifiers.push({
+      authority_subject_ref: createExactArtifactReference(
+        input.authority_context.qualification_plan
+      ),
+      anchor_requirement: input.authority_context.qualification_plan.identity_payload
+        .anchor_requirement,
+      public_key: input.anchor_public_key
+    });
+  }
+  const head = await verifyAuthenticatedNamespaceHead(
+    input.store, input.namespace_index.identity_payload.namespace_id, anchorVerifiers
   );
   if (requireCurrentHead
     && canonicalizeJson(createExactArtifactReference(head)) !== canonicalizeJson(namespaceRef)) {
@@ -899,7 +1207,7 @@ async function namespaceIsInEffectiveHistory(store, head, target) {
 }
 
 export async function verifyDurableQualificationEvidence(
-  store, plan, result, artifacts, authorizingNamespace
+  store, plan, result, artifacts, authorizingNamespace, anchorPublicKey
 ) {
   if (!Array.isArray(artifacts)) {
     throw new Error("Qualification evidence context must be an array.");
@@ -923,6 +1231,9 @@ export async function verifyDurableQualificationEvidence(
   for (const artifact of artifacts) await verifyDurableEvidence(store, artifact);
   const planRef = createExactArtifactReference(plan);
   const receipt = supplied.get(canonicalizeJson(payload.anchor_receipt_ref));
+  await verifyAuthenticatedAnchorReceipt(
+    store, receipt, plan.identity_payload.anchor_requirement, anchorPublicKey
+  );
   if (receipt.identity_payload.evidence_kind !== "ANCHOR_RECEIPT"
     || canonicalizeJson(receipt.identity_payload.authority_subject_ref)
       !== canonicalizeJson(planRef)
@@ -948,6 +1259,12 @@ export async function verifyDurableQualificationEvidence(
   const fresh = payload.fresh_start_proof_refs.map(
     (reference) => supplied.get(canonicalizeJson(reference))
   );
+  const freshProofs = await Promise.all(fresh.map(
+    (artifact) => replayTypedControlProof(store, artifact)
+  ));
+  if (freshProofs.some(
+    (replay) => replay.proof.proof_role !== "QUALIFICATION_FRESH_START_PROOF"
+  )) throw new Error("Qualification fresh-start artifacts are not typed proposition proofs.");
   if (fresh.some((artifact) => (
     artifact.identity_payload.semantic_envelope.capture_role
       !== "QUALIFICATION_FRESH_START_PROOF"
@@ -969,14 +1286,23 @@ export async function verifyDurableQualificationEvidence(
     throw new Error("Qualification fresh-start evidence does not close every planned execution.");
   }
   const validation = supplied.get(canonicalizeJson(payload.validation_attestation_ref));
+  const validationProof = await replayTypedControlProof(store, validation);
+  const validationBasis = qualificationValidationBasisFingerprint(plan, result);
   if (validation.identity_payload.semantic_envelope.capture_role !== "VALIDATION_ATTESTATION"
-    || validation.identity_payload.producer_identity !== payload.validator_identity) {
+    || validation.identity_payload.producer_identity !== payload.validator_identity
+    || validationProof.proof.proof_role !== "VALIDATION_ATTESTATION"
+    || canonicalizeJson(validationProof.proof.proposition.validated_subject_ref)
+      !== canonicalizeJson(planRef)
+    || validationProof.proof.proposition.recomputed_result !== payload.result
+    || validationProof.proof.proposition.evidence_basis_digest !== validationBasis) {
     throw new Error("Qualification result lacks its exact validation attestation.");
   }
   for (const execution of payload.executions) {
     for (const reference of execution.capture_refs) {
       const capture = supplied.get(canonicalizeJson(reference));
+      const captureProof = await replayTypedControlProof(store, capture);
       if (capture.identity_payload.semantic_envelope.capture_role !== "ORACLE_CLASSIFICATION"
+        || captureProof.proof.proof_role !== "QUALIFICATION_ORACLE_CLASSIFICATION"
         || capture.identity_payload.semantic_envelope.execution_id !== execution.execution_id
         || capture.identity_payload.semantic_envelope.path_id !== execution.path_id
         || capture.identity_payload.semantic_envelope.oracle_projection_digest
@@ -989,6 +1315,24 @@ export async function verifyDurableQualificationEvidence(
       }
     }
   }
+}
+
+export function qualificationValidationBasisFingerprint(plan, result) {
+  validateCanonicalArtifact(plan, { allowedKinds: ["DETERMINISTIC_QUALIFICATION_PLAN"] });
+  validateCanonicalArtifact(result, { allowedKinds: ["DETERMINISTIC_QUALIFICATION_RESULT"] });
+  const payload = result.identity_payload;
+  if (canonicalizeJson(payload.qualification_plan_ref)
+      !== canonicalizeJson(createExactArtifactReference(plan))) {
+    throw new Error("Qualification validation basis names a different plan.");
+  }
+  return fingerprintCanonicalJson("zoey:qualification-validation-basis:v1", {
+    qualification_plan_ref: payload.qualification_plan_ref,
+    executions: payload.executions,
+    comparisons: payload.comparisons,
+    result: payload.result,
+    anchor_receipt_ref: payload.anchor_receipt_ref,
+    fresh_start_proof_refs: payload.fresh_start_proof_refs
+  });
 }
 
 function buildTypedArtifact(artifactId, artifactKind, payload) {
@@ -1232,6 +1576,390 @@ function validateEvidenceSemantics(payload) {
       throw new Error("Raw attachment privacy/digest closure is invalid.");
     }
   }
+}
+
+function parseAndAuthenticateAnchorReceipt(rawBytes, anchorRequirement, publicKey) {
+  const raw = toBuffer(rawBytes);
+  assertExactKeys(anchorRequirement, [
+    "profile", "authority_ref", "receipt_media_type", "receipt_encoding",
+    "receipt_digest_algorithm", "receipt_custody_target", "resolvability_policy",
+    "fresh_start_profile", "receipt_authentication"
+  ], [], "authenticated anchor requirement");
+  assertExactKeys(anchorRequirement.receipt_authentication, [
+    "algorithm", "key_id", "public_key_fingerprint"
+  ], [], "authenticated anchor policy");
+  const document = parseCanonicalJsonBytes(raw, "authenticated anchor receipt");
+  assertExactKeys(document, [
+    "schema_id", "schema_revision", "algorithm", "key_id", "signed_payload", "signature"
+  ], [], "authenticated anchor receipt");
+  const header = {
+    schema_id: document.schema_id,
+    schema_revision: document.schema_revision,
+    algorithm: document.algorithm,
+    key_id: document.key_id,
+    signed_payload: structuredClone(document.signed_payload)
+  };
+  const policy = anchorRequirement.receipt_authentication;
+  if (document.algorithm !== policy.algorithm || document.key_id !== policy.key_id
+    || anchorPublicKeyFingerprint(publicKey) !== policy.public_key_fingerprint) {
+    throw new Error("Anchor receipt verifier does not match the owner-pinned authentication policy.");
+  }
+  if (typeof document.signature !== "string"
+    || !/^[A-Za-z0-9+/]+={0,2}$/.test(document.signature)) {
+    throw new Error("Anchor receipt signature encoding is invalid.");
+  }
+  const signature = Buffer.from(document.signature, "base64");
+  if (signature.toString("base64") !== document.signature
+    || !verifySignature(null, anchorReceiptSigningBytes(header), publicKey, signature)) {
+    throw new Error("Anchor receipt signature authentication failed.");
+  }
+  const payload = document.signed_payload;
+  if (payload.profile !== anchorRequirement.profile
+    || payload.authority_ref !== anchorRequirement.authority_ref) {
+    throw new Error("Authenticated anchor receipt conflicts with its declared authority profile.");
+  }
+  return document;
+}
+
+function validateAnchorReceiptSignedPayload(payload) {
+  assertExactKeys(payload, [
+    "profile", "authority_subject_ref", "namespace_index_ref", "external_commit_sha",
+    "authority_ref", "external_event_id", "observed_predecessor", "producer_identity",
+    "issued_at"
+  ], [], "anchor receipt signed payload");
+  validateExactArtifactReference(payload.authority_subject_ref, {
+    allowedKinds: ["DETERMINISTIC_QUALIFICATION_PLAN", "CAMPAIGN_AUTHORIZATION"]
+  });
+  validateExactArtifactReference(payload.namespace_index_ref, {
+    allowedKinds: ["AUTHORITY_NAMESPACE_INDEX"]
+  });
+  if (!/^[0-9a-f]{40}$/.test(payload.external_commit_sha)
+    || !/^[0-9a-f]{40}$/.test(payload.observed_predecessor)
+    || payload.external_commit_sha === payload.observed_predecessor) {
+    throw new Error("Anchor receipt signed commit/predecessor closure is invalid.");
+  }
+  for (const field of ["profile", "authority_ref", "external_event_id", "producer_identity"]) {
+    assertOpaqueId(payload[field], `anchor receipt signed payload.${field}`);
+  }
+  validateCreated(payload.issued_at, payload.producer_identity);
+}
+
+function anchorSemanticsFrom(payload, rawBytes) {
+  validateAnchorReceiptSignedPayload(payload);
+  return {
+    profile: payload.profile,
+    authority_subject_ref: structuredClone(payload.authority_subject_ref),
+    namespace_index_ref: structuredClone(payload.namespace_index_ref),
+    external_commit_sha: payload.external_commit_sha,
+    authority_ref: payload.authority_ref,
+    external_event_id: payload.external_event_id,
+    observed_predecessor: payload.observed_predecessor,
+    raw_receipt_digest: sha256Bytes(toBuffer(rawBytes))
+  };
+}
+
+function buildControlProofDocument(recorder, input, eventId) {
+  const proof = {
+    schema_id: "zoey.formal-control-proof",
+    schema_revision: 1,
+    proof_role: input.proof_role,
+    authority_subject_ref: structuredClone(recorder.authority_subject_ref),
+    campaign_authorization_ref: recorder.campaign_authorization_ref === null
+      ? null
+      : structuredClone(recorder.campaign_authorization_ref),
+    attempt_id: recorder.attempt_id,
+    path_id: recorder.path_id,
+    event_id: eventId,
+    proposition: structuredClone(input.proposition)
+  };
+  validateControlProofDocument(proof);
+  return proof;
+}
+
+function assertRecorderProofTransition(
+  attemptId, priorRoles, nextRole, runtimeCaptureObserved, materialOutputObserved
+) {
+  if (priorRoles.includes(nextRole)) {
+    throw new Error("Formal evidence recorder cannot repeat a control-proof role.");
+  }
+  if (attemptId !== null) {
+    const sequence = [
+      "FRESH_START_PROOF", "INITIAL_STATE_PROOF", "RUN_ISOLATION_PROOF",
+      "SELECTION_INDEPENDENCE"
+    ];
+    if (runtimeCaptureObserved || nextRole !== sequence[priorRoles.length]) {
+      throw new Error("Attempt control proofs are outside the closed pre-output sequence.");
+    }
+    if (nextRole === "SELECTION_INDEPENDENCE" && materialOutputObserved) {
+      throw new Error("Prospective selection proof cannot follow material output.");
+    }
+    return;
+  }
+  if (!["QUALIFICATION_FRESH_START_PROOF", "QUALIFICATION_ORACLE_CLASSIFICATION",
+    "VALIDATION_ATTESTATION"].includes(nextRole)) {
+    throw new Error("Non-attempt recorder proof role is outside qualification closure.");
+  }
+}
+
+function validateControlProofDocument(proof) {
+  assertExactKeys(proof, [
+    "schema_id", "schema_revision", "proof_role", "authority_subject_ref",
+    "campaign_authorization_ref", "attempt_id", "path_id", "event_id", "proposition"
+  ], [], "typed control proof");
+  if (proof.schema_id !== "zoey.formal-control-proof" || proof.schema_revision !== 1) {
+    throw new Error("Typed control proof schema is invalid.");
+  }
+  validateExactArtifactReference(proof.authority_subject_ref);
+  if (proof.campaign_authorization_ref !== null) {
+    validateExactArtifactReference(proof.campaign_authorization_ref, {
+      allowedKinds: ["CAMPAIGN_AUTHORIZATION"]
+    });
+  }
+  if ((proof.attempt_id === null) !== (proof.path_id === null)) {
+    throw new Error("Typed control proof attempt/path identity is incomplete.");
+  }
+  if (proof.attempt_id !== null) {
+    assertOpaqueId(proof.attempt_id, "typed control proof attempt_id");
+    if (!REQUIRED_PATHS.includes(proof.path_id)) throw new Error("Typed control proof path is unknown.");
+  }
+  assertOpaqueId(proof.event_id, "typed control proof event_id");
+  assertPlainObject(proof.proposition, "typed control proof proposition");
+  const validators = {
+    INITIAL_STATE_PROOF: validateInitialStateProposition,
+    RUN_ISOLATION_PROOF: validateRunIsolationProposition,
+    SELECTION_INDEPENDENCE: validateSelectionIndependenceProposition,
+    VALIDATION_ATTESTATION: validateValidationAttestationProposition,
+    FRESH_START_PROOF: validateFreshStartProposition,
+    QUALIFICATION_FRESH_START_PROOF: validateQualificationFreshStartProposition,
+    QUALIFICATION_ORACLE_CLASSIFICATION: validateQualificationOracleProposition
+  };
+  const validator = validators[proof.proof_role];
+  if (!validator) throw new Error("Typed control proof role is outside the closed catalogue.");
+  validator(proof.proposition, proof);
+}
+
+function validateInitialStateProposition(value) {
+  assertExactKeys(value, [
+    "initial_snapshot_digest", "initial_record_count", "prior_material_output_count",
+    "run_scope_id", "observation_source"
+  ], [], "initial-state proposition");
+  assertSha256(value.initial_snapshot_digest, "initial-state snapshot digest");
+  if (value.initial_record_count !== 0 || value.prior_material_output_count !== 0
+    || value.observation_source !== "FRESH_BOUNDARY_INSPECTION") {
+    throw new Error("Initial-state proof does not establish an empty fresh boundary.");
+  }
+  assertOpaqueId(value.run_scope_id, "initial-state run_scope_id");
+}
+
+function validateRunIsolationProposition(value) {
+  assertExactKeys(value, [
+    "run_scope_id", "foreign_run_ids", "isolated", "inspection_snapshot_digest"
+  ], [], "run-isolation proposition");
+  assertOpaqueId(value.run_scope_id, "run-isolation run_scope_id");
+  assertSortedUniqueStrings(value.foreign_run_ids, "run-isolation foreign_run_ids");
+  assertSha256(value.inspection_snapshot_digest, "run-isolation inspection digest");
+  if (value.isolated !== true || value.foreign_run_ids.length !== 0) {
+    throw new Error("Run-isolation proof reports foreign state or a non-isolated boundary.");
+  }
+}
+
+function validateSelectionIndependenceProposition(value) {
+  assertExactKeys(value, [
+    "selection_basis_digest", "seed_commitment", "material_output_observed",
+    "selection_event_id"
+  ], [], "selection-independence proposition");
+  assertSha256(value.selection_basis_digest, "selection basis digest");
+  assertSha256(value.seed_commitment, "selection seed commitment");
+  assertOpaqueId(value.selection_event_id, "selection event_id");
+  if (value.material_output_observed !== false) {
+    throw new Error("Selection-independence proof was created after material output observation.");
+  }
+}
+
+function validateValidationAttestationProposition(value) {
+  assertExactKeys(value, [
+    "validated_subject_ref", "validation_profile", "evidence_basis_digest",
+    "recomputed_result", "validation_result"
+  ], [], "validation-attestation proposition");
+  validateExactArtifactReference(value.validated_subject_ref);
+  assertOpaqueId(value.validation_profile, "validation-attestation profile");
+  assertSha256(value.evidence_basis_digest, "validation-attestation evidence basis");
+  if (![
+    "QUALIFIED", "NOT_QUALIFIED", "VALID", "INVALID_UNSCORABLE",
+    "BOUNDED_PASS", "BOUNDED_FAIL", "NOT_YET_DETERMINABLE"
+  ].includes(value.recomputed_result) || value.validation_result !== "VALID") {
+    throw new Error("Validation attestation does not bind a successful independent recomputation.");
+  }
+}
+
+function validateFreshStartProposition(value, proof) {
+  assertExactKeys(value, [
+    "profile", "slot_id", "challenge", "issued_by", "observed_by", "anchor_event_id",
+    "start_event_id"
+  ], [], "fresh-start proposition");
+  if (proof.attempt_id === null) throw new Error("Fresh-start proof must be attempt-bound.");
+  assertNonemptyString(value.profile, "fresh-start profile");
+  for (const field of [
+    "slot_id", "challenge", "issued_by", "observed_by", "anchor_event_id", "start_event_id"
+  ]) assertOpaqueId(value[field], `fresh-start proposition.${field}`);
+  if (value.anchor_event_id === value.start_event_id) {
+    throw new Error("Fresh-start proof cannot reuse its anchor event as start.");
+  }
+}
+
+function validateQualificationFreshStartProposition(value, proof) {
+  assertExactKeys(value, [
+    "profile", "execution_id", "plan_ref", "anchor_receipt_ref",
+    "anchor_event_id", "start_event_id"
+  ], [], "qualification fresh-start proposition");
+  if (proof.attempt_id !== null || proof.campaign_authorization_ref !== null) {
+    throw new Error("Qualification fresh-start proof cannot be campaign-attempt bound.");
+  }
+  for (const field of ["profile", "execution_id", "anchor_event_id", "start_event_id"]) {
+    assertOpaqueId(value[field], `qualification fresh-start proposition.${field}`);
+  }
+  validateExactArtifactReference(value.plan_ref, {
+    allowedKinds: ["DETERMINISTIC_QUALIFICATION_PLAN"]
+  });
+  validateExactArtifactReference(value.anchor_receipt_ref, {
+    allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT"]
+  });
+  if (value.anchor_event_id === value.start_event_id
+    || canonicalizeJson(value.plan_ref) !== canonicalizeJson(proof.authority_subject_ref)) {
+    throw new Error("Qualification fresh-start proof has invalid plan or causal closure.");
+  }
+}
+
+function validateQualificationOracleProposition(value, proof) {
+  assertExactKeys(value, [
+    "execution_id", "path_id", "plan_ref", "oracle_projection_digest",
+    "comparator_input_digest"
+  ], [], "qualification oracle proposition");
+  if (proof.attempt_id !== null || proof.campaign_authorization_ref !== null) {
+    throw new Error("Qualification oracle proof cannot be campaign-attempt bound.");
+  }
+  assertOpaqueId(value.execution_id, "qualification oracle execution_id");
+  assertOpaqueId(value.path_id, "qualification oracle path_id");
+  validateExactArtifactReference(value.plan_ref, {
+    allowedKinds: ["DETERMINISTIC_QUALIFICATION_PLAN"]
+  });
+  for (const field of ["oracle_projection_digest", "comparator_input_digest"]) {
+    assertSha256(value[field], `qualification oracle proposition.${field}`);
+  }
+  if (canonicalizeJson(value.plan_ref) !== canonicalizeJson(proof.authority_subject_ref)) {
+    throw new Error("Qualification oracle proof names a different plan.");
+  }
+}
+
+function controlProofSemantics(proof, rawBytes) {
+  validateControlProofDocument(proof);
+  const digest = sha256Bytes(toBuffer(rawBytes));
+  if (proof.proof_role === "FRESH_START_PROOF") {
+    return {
+      capture_role: proof.proof_role,
+      ...structuredClone(proof.proposition),
+      capture_binding_digest: digest
+    };
+  }
+  if (proof.proof_role === "QUALIFICATION_FRESH_START_PROOF") {
+    return {
+      capture_role: proof.proof_role,
+      ...structuredClone(proof.proposition),
+      content_digest: digest
+    };
+  }
+  if (proof.proof_role === "QUALIFICATION_ORACLE_CLASSIFICATION") {
+    return {
+      capture_role: "ORACLE_CLASSIFICATION",
+      ...structuredClone(proof.proposition),
+      content_digest: digest,
+      event_id: proof.event_id
+    };
+  }
+  return {
+    capture_role: proof.proof_role,
+    subject_ref: structuredClone(proof.authority_subject_ref),
+    content_digest: digest,
+    event_id: proof.event_id
+  };
+}
+
+function runtimeEvidenceVisibility(evidenceKind) {
+  if (["SUT_INPUT_CAPTURE", "SUT_OUTPUT_CAPTURE", "SUT_INSPECTION_CAPTURE"].includes(
+    evidenceKind
+  )) return "SUT_VISIBLE";
+  if (["SIMULATOR_REQUEST_CAPTURE", "SIMULATOR_REALIZATION_CAPTURE"].includes(
+    evidenceKind
+  )) return "EVALUATOR_PRIVATE";
+  throw new Error("Recorder runtime evidence kind is outside the closed catalogue.");
+}
+
+function runtimeEvidenceSemantics(evidenceKind, data, rawBytes, eventId) {
+  assertPlainObject(data, "recorded runtime evidence semantic_data");
+  const digest = sha256Bytes(rawBytes);
+  if (["SUT_INPUT_CAPTURE", "SUT_OUTPUT_CAPTURE", "SUT_INSPECTION_CAPTURE"].includes(
+    evidenceKind
+  )) {
+    assertExactKeys(data, ["subject_identity", "contract_digest"], [], "SUT evidence data");
+    const roles = {
+      SUT_INPUT_CAPTURE: "EXACT_DELIVERED_INPUT",
+      SUT_OUTPUT_CAPTURE: "EXACT_MATERIAL_OUTPUT",
+      SUT_INSPECTION_CAPTURE: "EXACT_INSPECTION_PROJECTION"
+    };
+    return {
+      capture_role: roles[evidenceKind],
+      subject_identity: data.subject_identity,
+      event_id: eventId,
+      content_digest: digest,
+      contract_digest: data.contract_digest
+    };
+  }
+  if (evidenceKind === "SIMULATOR_REQUEST_CAPTURE") {
+    assertExactKeys(data, [
+      "requested_sut_output_ref", "simulator_configuration_fingerprint"
+    ], [], "simulator request data");
+    return {
+      capture_role: "SIMULATOR_REQUEST",
+      requested_sut_output_ref: structuredClone(data.requested_sut_output_ref),
+      simulator_configuration_fingerprint: data.simulator_configuration_fingerprint,
+      event_id: eventId,
+      request_digest: digest
+    };
+  }
+  if (evidenceKind === "SIMULATOR_REALIZATION_CAPTURE") {
+    assertExactKeys(data, [
+      "request_capture_ref", "evaluator_private_premise_ref",
+      "simulator_configuration_fingerprint", "fidelity", "mismatch_digest", "origin"
+    ], [], "simulator realization data");
+    return {
+      capture_role: "SIMULATOR_REALIZATION",
+      request_capture_ref: structuredClone(data.request_capture_ref),
+      delivered_projection_digest: digest,
+      evaluator_private_premise_ref: data.evaluator_private_premise_ref === null
+        ? null
+        : structuredClone(data.evaluator_private_premise_ref),
+      simulator_configuration_fingerprint: data.simulator_configuration_fingerprint,
+      fidelity: data.fidelity,
+      mismatch_digest: data.mismatch_digest,
+      origin: data.origin,
+      event_id: eventId
+    };
+  }
+  throw new Error("Recorder runtime evidence kind is outside the closed catalogue.");
+}
+
+function parseCanonicalJsonBytes(rawBytes, label) {
+  const raw = toBuffer(rawBytes);
+  let value;
+  try {
+    value = JSON.parse(raw.toString("utf8"));
+  } catch {
+    throw new Error(`${label} bytes are not valid JSON.`);
+  }
+  if (!raw.equals(Buffer.from(`${canonicalizeJson(value)}\n`, "utf8"))) {
+    throw new Error(`${label} bytes are not the exact canonical representation.`);
+  }
+  return value;
 }
 
 function validateRawCustody(value) {

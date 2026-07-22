@@ -128,7 +128,10 @@ test("run sealing rejects actor collapse, missing control evidence, and cross-at
     (artifact) => createExactArtifactReference(artifact).artifact_id
       !== missingControl.initial_state_evidence_ref.artifact_id
   );
-  await assert.rejects(() => createFormalRunRecord(missingControl), /missing required|absent/);
+  await assert.rejects(
+    () => createFormalRunRecord(missingControl),
+    /missing required|absent|exact typed control-proof set/
+  );
 
   const missingSelection = runInput(setup, first);
   missingSelection.evidence_artifacts = missingSelection.evidence_artifacts.filter(
@@ -136,7 +139,8 @@ test("run sealing rejects actor collapse, missing control evidence, and cross-at
       !== missingSelection.selection_independence_evidence_ref.artifact_id
   );
   await assert.rejects(
-    () => createFormalRunRecord(missingSelection), /missing required|absent/
+    () => createFormalRunRecord(missingSelection),
+    /missing required|absent|exact typed control-proof set/
   );
 
   const crossed = runInput(setup, first);
@@ -153,6 +157,7 @@ function runInput(setup, attempt, overrides = {}) {
     authority_context: setup.authorityContext,
     authorizing_namespace: setup.namespace,
     anchor_receipt: setup.anchorReceipt,
+    anchor_public_key: setup.anchorPublicKey,
     start_grant: attempt.startGrant,
     attempt_allocation: attempt.attemptAllocation,
     evidence_artifacts: attempt.evidenceArtifacts,

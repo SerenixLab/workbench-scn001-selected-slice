@@ -698,7 +698,12 @@ function anchorRequirement() {
     receipt_digest_algorithm: "sha-256",
     receipt_custody_target: "custody:formal-evaluation:anchor-receipts",
     resolvability_policy: "REQUIRED_AT_USE",
-    fresh_start_profile: "GATE_LAUNCHED_ATTEMPT"
+    fresh_start_profile: "GATE_LAUNCHED_ATTEMPT",
+    receipt_authentication: {
+      algorithm: "Ed25519",
+      key_id: "key:formal-authority-test",
+      public_key_fingerprint: digest("9")
+    }
   };
 }
 

@@ -9,6 +9,7 @@ import {
   createQualificationPlan,
   createQualificationResult
 } from "../src/formalAuthority.js";
+import { fixtureAnchorRequirement } from "./anchorFixture.js";
 
 export const digest = (character) => `sha256:${character.repeat(64)}`;
 
@@ -248,16 +249,7 @@ function custodyPlan() {
 }
 
 function anchorRequirement() {
-  return {
-    profile: "PROTECTED_REMOTE_GATE",
-    authority_ref: "refs/heads/formal-authority",
-    receipt_media_type: "application/json",
-    receipt_encoding: "utf-8",
-    receipt_digest_algorithm: "sha-256",
-    receipt_custody_target: "custody:formal-evaluation:anchor-receipts",
-    resolvability_policy: "REQUIRED_AT_USE",
-    fresh_start_profile: "GATE_LAUNCHED_ATTEMPT"
-  };
+  return fixtureAnchorRequirement();
 }
 
 function behaviorManifestInput() {
