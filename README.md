@@ -177,3 +177,12 @@ Durable repository extraction remains blocked by `REPO-001`.
 independent review. Phase 7 currently has a substantial mechanism layer, but its
 trusted derivation/execution/custody pipeline remains open; no formal campaign
 authority or implementation-complete status is claimed.
+
+The current corrective implementation adds clean-commit configuration
+measurement and a non-public trusted authorization path that reconstructs both
+manifests and forces three runs per path. It also rejects unknown runtime-source
+members, import/environment escapes, non-regular source members, private-layout
+test assumptions, and conflicting in-memory artifact identities. This is an
+unreviewed pipeline component, not a formal runner or permission to execute a
+campaign; outcome derivation, proposition proofs, recorder chronology, and
+authenticated external anchoring remain open.

@@ -13,6 +13,7 @@ import {
   assertPlainObject,
   assertSha256,
   assertSortedUniqueStrings,
+  assertUniqueArtifactReferenceIds,
   canonicalizeJson,
   createExactArtifactReference,
   deepFreeze,
@@ -1494,6 +1495,7 @@ function validateReferenceList(references, allowedKinds, label) {
     validateExactArtifactReference(reference, { allowedKinds });
     identities.push(`${reference.artifact_kind}:${reference.artifact_id}:${reference.content_fingerprint}`);
   }
+  assertUniqueArtifactReferenceIds(references, label);
   assertSortedUniqueStrings(identities, label);
 }
 

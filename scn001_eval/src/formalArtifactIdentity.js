@@ -107,6 +107,18 @@ export function validateExactArtifactReference(reference, { allowedKinds } = {})
   return reference;
 }
 
+export function assertUniqueArtifactReferenceIds(references, label) {
+  if (!Array.isArray(references)) throw new Error(`${label} must be an array.`);
+  const identities = new Set();
+  for (const reference of references) {
+    const identity = `${reference.artifact_kind}:${reference.artifact_id}`;
+    if (identities.has(identity)) {
+      throw new Error(`${label} repeats artifact identity ${identity}.`);
+    }
+    identities.add(identity);
+  }
+}
+
 export function createCanonicalArtifact(input) {
   assertExactKeys(input, ["artifact_id", "artifact_kind", "identity_payload"], [
     "annotations"

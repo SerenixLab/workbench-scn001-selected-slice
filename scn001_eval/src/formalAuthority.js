@@ -6,6 +6,7 @@ import {
   assertPlainObject,
   assertSha256,
   assertSortedUniqueStrings,
+  assertUniqueArtifactReferenceIds,
   canonicalizeJson,
   createCanonicalArtifact,
   createExactArtifactReference,
@@ -980,7 +981,7 @@ function validateQualificationExecutions(executions, slots) {
       assertSha256(execution.comparator_input_digest, "qualification comparator_input_digest");
     }
     for (const reference of execution.capture_refs) {
-      evidenceIdentities.push(`${reference.artifact_id}:${reference.content_fingerprint}`);
+      evidenceIdentities.push(reference.artifact_id);
     }
     ids.push(execution.execution_id);
   }
@@ -1260,6 +1261,7 @@ function validateEvidenceReferences(references, label) {
     validateExactArtifactReference(reference, { allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT"] });
     ids.push(`${reference.artifact_id}:${reference.content_fingerprint}`);
   }
+  assertUniqueArtifactReferenceIds(references, label);
   assertSortedUniqueStrings(ids, label);
 }
 

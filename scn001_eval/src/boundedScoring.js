@@ -6,6 +6,7 @@ import {
   assertOpaqueId,
   assertSha256,
   assertSortedUniqueStrings,
+  assertUniqueArtifactReferenceIds,
   canonicalizeJson,
   createExactArtifactReference,
   deepFreeze,
@@ -1626,6 +1627,7 @@ function validateReferenceList(references, allowedKinds) {
     validateExactArtifactReference(reference, allowedKinds ? { allowedKinds } : {});
     identities.push(canonicalizeJson(reference));
   }
+  assertUniqueArtifactReferenceIds(references, "exact reference list");
   assertSortedUniqueStrings(identities, "exact reference list");
 }
 

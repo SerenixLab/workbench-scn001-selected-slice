@@ -105,6 +105,27 @@ catalogue, rejects same-kind/same-ID conflicting fingerprints in durable
 custody, and rejects symlinked custody parents. Those fixes do not by themselves
 close the trusted production pipeline.
 
+The second corrective increment starts at `5f22713` and repairs its initial
+configuration-measurement implementation. The current corrective state is
+`CONFIGURATION_MEASUREMENT_CORRECTED_REVIEW_PENDING`. Measurement now requires
+a clean exact-`HEAD` worktree, inventories recursive runtime source, rejects
+unclassified or non-regular runtime members, verifies relative static imports
+against the measured closure, verifies declared package dependencies, and
+derives the closed environment-input catalogue from source access. Its tests
+construct isolated workbench and canonical-meta repositories and therefore do
+not depend on a private sibling-directory layout. The trusted campaign-
+authorization constructor independently reconstructs both exact manifests and
+permits only the conservative three-run branch; a structurally valid caller-
+invented manifest is rejected. In-memory exact-reference lists also reject a
+repeated artifact kind/ID before durable resolution.
+
+The generic constructors and all current tests remain development mechanisms.
+No package-root formal runner exists, and the second increment does not close
+oracle derivation, invalidity-predicate replay, typed proposition proofs,
+recorder-owned chronology, authenticated external anchoring, or semantic replay
+from raw captures. It must pass the complete gate and fresh independent review
+before its mechanisms receive formal reliance.
+
 ## First Phase 7 Change Requirements
 
 Before or in the same change that first implements a governed Phase 7 artifact:

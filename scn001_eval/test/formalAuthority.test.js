@@ -6,6 +6,7 @@ import {
   createEvaluationConfigurationManifest
 } from "../src/configurationIdentity.js";
 import {
+  assertUniqueArtifactReferenceIds,
   createCanonicalArtifact,
   createExactArtifactReference,
   resolveExactArtifactReference,
@@ -42,6 +43,16 @@ test("generic formal artifacts bind kind, schema, domain, payload, and exact ref
   assert.equal(validateCanonicalArtifact(artifact), artifact);
   const reference = createExactArtifactReference(artifact);
   assert.equal(resolveExactArtifactReference(reference, artifact), artifact);
+  const conflictingReference = {
+    ...reference,
+    content_fingerprint: digest("f")
+  };
+  assert.throws(
+    () => assertUniqueArtifactReferenceIds(
+      [reference, conflictingReference], "hostile reference graph"
+    ),
+    /repeats artifact identity/
+  );
   const tampered = structuredClone(artifact);
   tampered.identity_payload.decision_id = "decision:run-invalidity:favorable-alias";
   assert.throws(() => validateCanonicalArtifact(tampered), /fingerprint mismatch/);

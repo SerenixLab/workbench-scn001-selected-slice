@@ -570,7 +570,9 @@ function validateEnvironmentEntries(value) {
   const names = [];
   for (const entry of value) {
     assertExactKeys(entry, ["name", "value_kind", "canonical_value", "content_digest"], [], "environment entry");
-    assertOpaqueId(entry.name, "environment entry.name");
+    if (typeof entry.name !== "string" || !/^[A-Z_][A-Z0-9_]{0,127}$/.test(entry.name)) {
+      throw new Error("environment entry.name must be an exact environment variable name.");
+    }
     if (entry.value_kind === "PUBLIC_VALUE") {
       assertNonemptyString(entry.canonical_value, "environment entry.canonical_value");
       if (entry.content_digest !== null) throw new Error("Public environment value cannot duplicate a digest.");
