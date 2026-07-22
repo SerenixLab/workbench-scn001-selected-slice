@@ -199,12 +199,39 @@ finding and still requires every actual obligation failure to close one or more
 exact findings.
 
 All executions and attestations in tests remain synthetic mechanisms. The
-aggregate local gate passes 471 tests. Qualification comparisons still require
-trusted execution derivation, and complete multi-slot campaign orchestration,
+aggregate local gate passed 471 tests for this increment. Qualification
+comparisons still required trusted execution derivation, and complete multi-slot campaign orchestration,
 result/decision publication, project-owner key/namespace designation, protected
 integration, and fresh exact-commit independent review remain open. The prior
 `BLOCKED` disposition and all four `applicable / uncovered` controls therefore
 remain unchanged.
+
+## Phase 7 Deterministic-Qualification Runner Corrective Addendum
+
+Corrective date: 2026-07-22.
+
+The internal qualification runner closes the implemented comparator identity in
+the evaluation manifest, resolves the exact stored plan/namespace and its
+authenticated external anchor before execution, and creates two fresh actual
+selected-slice sessions for every required path. Every session requires a
+canonical Ed25519-signed start bound to the plan, namespace, receipt, execution,
+path, prospective selection basis, external anchor event, and actual run scope.
+
+Oracle proof custody now includes the exact execution material and the complete
+normalized comparator input, not only asserted digests. Replay recomputes both
+digests. The comparator alpha-renames only run-local UUID identities by stable
+first occurrence and otherwise applies exact JCS equality. All pair comparisons
+and the final `QUALIFIED`, `NOT_QUALIFIED`, or `INCONCLUSIVE` result are derived
+internally. Actual duplicate executions qualify; an injected real output
+divergence produces one exact `VALUE_MISMATCH` and `NOT_QUALIFIED`; a signed
+start with a substituted run scope fails before execution.
+
+The aggregate local gate passes 474 tests. The runner remains a non-public,
+synthetic mechanism and no generated test artifact is promotable. Complete
+bounded campaign orchestration/publication, real project-owner authority and
+external events, protected integration, and fresh exact-commit independent
+review remain open, so the prior `BLOCKED` disposition and four
+`applicable / uncovered` controls remain unchanged.
 
 ## First Phase 7 Change Requirements
 

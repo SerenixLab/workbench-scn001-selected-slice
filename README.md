@@ -175,7 +175,7 @@ Durable repository extraction remains blocked by `REPO-001`.
 
 `PHASE7_READINESS.md` records the completed start approval and the later blocked
 independent review. Phase 7 currently has a substantial mechanism layer, but its
-trusted qualification and bounded-campaign pipeline remains open; no formal
+trusted bounded-campaign pipeline remains open; no formal
 campaign authority or implementation-complete status is claimed.
 
 The current corrective implementation adds clean-commit configuration
@@ -203,7 +203,9 @@ bytes, re-authenticates namespace predecessor receipts, assigns attempt
 chronology inside one fail-closed recorder, and stores role-specific control
 propositions as canonical replayable bytes. Formal run replay rejects
 label-only proofs and checks initial-state/isolation and prospective-selection
-relations. These remain internal synthetic mechanisms: qualification comparisons
-are not yet execution-derived, bounded multi-attempt campaign orchestration is
-not yet closed, and no project anchor key, external event, campaign, or result
-has been designated.
+relations. The deterministic-qualification runner now executes every planned
+pair, retains exact oracle and normalized comparator material, and derives
+`QUALIFIED`, `NOT_QUALIFIED`, or `INCONCLUSIVE` without a result input. These
+remain internal synthetic mechanisms: bounded multi-attempt campaign
+orchestration is not yet closed, and no project anchor key, external event,
+campaign, or result has been designated.

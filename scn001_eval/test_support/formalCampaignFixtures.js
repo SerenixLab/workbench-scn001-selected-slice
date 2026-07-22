@@ -21,6 +21,8 @@ import {
   createAuthorityNamespaceIndex,
   createContentAddressedArtifactStore,
   createFormalEvidenceRecorder,
+  qualificationComparatorInputFingerprint,
+  qualificationOracleProjectionFingerprint,
   qualificationValidationBasisFingerprint,
   resolveDurableExecutionAuthority,
   validateAuthorityNamespaceIndex
@@ -38,7 +40,8 @@ import {
 import {
   FIXTURE_ANCHOR_PUBLIC_KEY,
   createFixtureAnchorReceiptBytes,
-  createFixtureFreshStartAttestationBytes
+  createFixtureFreshStartAttestationBytes,
+  createFixtureQualificationStartAttestationBytes
 } from "./anchorFixture.js";
 
 export const sha256 = (bytes) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
@@ -64,17 +67,29 @@ export async function createFormalCampaignFixture(options = {}) {
   );
   const qualificationCaptures = [];
   const qualificationFreshStarts = [];
-  for (const slot of baseFixture.qualificationPlan.identity_payload.execution_slots) {
-    qualificationFreshStarts.push(await qualificationPrivateEvidence(
-      store, baseFixture.qualificationPlan, slot.execution_id,
-      "QUALIFICATION_FRESH_START_PROOF", qualificationReceipt
+  const executions = [];
+  for (const [index, slot] of baseFixture.qualificationPlan.identity_payload.execution_slots.entries()) {
+    const runScope = `run-scope:${slot.execution_id}`;
+    qualificationFreshStarts.push(await qualificationStartEvidence(
+      store, baseFixture.qualificationPlan, qualificationNamespace, qualificationReceipt,
+      slot, runScope
     ));
-    qualificationCaptures.push(await qualificationPrivateEvidence(
-      store, baseFixture.qualificationPlan, slot.execution_id,
-      "ORACLE_CLASSIFICATION", null, slot
-    ));
+    const divergent = options.qualification === "NOT_QUALIFIED" && index === 0;
+    const capture = await qualificationOracleEvidence(
+      store, baseFixture.qualificationPlan, slot, runScope, divergent
+    );
+    qualificationCaptures.push(capture);
+    executions.push({
+      execution_id: slot.execution_id,
+      path_id: slot.path_id,
+      status: "COMPLETED",
+      capture_refs: [createExactArtifactReference(capture)],
+      oracle_projection_digest: capture.identity_payload.semantic_envelope.oracle_projection_digest,
+      comparator_input_digest: capture.identity_payload.semantic_envelope.comparator_input_digest
+    });
   }
   const evidenceBasis = {
+    executions,
     execution_capture_refs: qualificationCaptures.map(createExactArtifactReference),
     validation_attestation_ref: evidenceReference("artifact:qualification-validation:provisional"),
     anchor_receipt_ref: createExactArtifactReference(qualificationReceipt),
@@ -83,10 +98,8 @@ export async function createFormalCampaignFixture(options = {}) {
   const provisional = rebuildFormalAuthorityFixture(
     baseFixture, evidenceBasis, options.qualification ?? "QUALIFIED"
   );
-  const qualificationValidation = await qualificationPrivateEvidence(
-    store, baseFixture.qualificationPlan, "qualification:validation:fixture",
-    "VALIDATION_ATTESTATION", null, null,
-    options.qualification ?? "QUALIFIED",
+  const qualificationValidation = await qualificationValidationEvidence(
+    store, baseFixture.qualificationPlan, options.qualification ?? "QUALIFIED",
     qualificationValidationBasisFingerprint(
       baseFixture.qualificationPlan, provisional.qualificationResult
     )
@@ -513,17 +526,87 @@ async function qualificationAnchorReceipt(store, plan, namespace) {
   });
 }
 
-async function qualificationPrivateEvidence(
-  store, plan, subjectId, role, anchorReceipt = null, slot = null,
-  qualificationResult = "QUALIFIED", validationBasis = digest("d")
-) {
+async function qualificationStartEvidence(store, plan, namespace, receipt, slot, runScope) {
   const planRef = createExactArtifactReference(plan);
-  const producer = role === "QUALIFICATION_FRESH_START_PROOF"
-    ? "actor:external-start-observer"
-    : role === "VALIDATION_ATTESTATION"
-      ? "actor:qualification-result-validator"
-      : "actor:qualification-producer";
-  const recorder = createFormalEvidenceRecorder({
+  const namespaceRef = createExactArtifactReference(namespace);
+  const receiptRef = createExactArtifactReference(receipt);
+  const recorder = qualificationRecorder(store, planRef, "actor:qualification-producer", slot.execution_id);
+  const bytes = createFixtureQualificationStartAttestationBytes({
+    profile: plan.identity_payload.anchor_requirement.fresh_start_profile,
+    plan_ref: planRef,
+    namespace_index_ref: namespaceRef,
+    anchor_receipt_ref: receiptRef,
+    execution_id: slot.execution_id,
+    path_id: slot.path_id,
+    selection_basis_digest: slot.selection_basis_digest,
+    challenge: `challenge:${slot.execution_id}`,
+    issued_by: "actor:external-gate",
+    observed_by: "actor:external-gate",
+    anchor_event_id: receipt.identity_payload.semantic_envelope.external_event_id,
+    start_event_id: `event:start:${slot.execution_id}`,
+    run_scope_id: runScope,
+    producer_identity: "actor:external-start-platform",
+    issued_at: "2026-07-21T12:14:00Z"
+  });
+  return recorder.captureAuthenticatedQualificationStart({
+    artifact_id: `artifact:qualification-start:${slot.execution_id}`,
+    raw_attestation_bytes: bytes,
+    anchor_requirement: plan.identity_payload.anchor_requirement,
+    public_key: FIXTURE_ANCHOR_PUBLIC_KEY,
+    namespace_index_ref: namespaceRef,
+    anchor_receipt_ref: receiptRef,
+    execution_id: slot.execution_id,
+    path_id: slot.path_id,
+    selection_basis_digest: slot.selection_basis_digest,
+    run_scope_id: runScope,
+    sealed_at: "2026-07-21T12:20:00Z"
+  });
+}
+
+async function qualificationOracleEvidence(store, plan, slot, runScope, divergent) {
+  const planRef = createExactArtifactReference(plan);
+  const recorder = qualificationRecorder(store, planRef, "actor:qualification-producer", slot.execution_id);
+  const oracle = { path_id: slot.path_id, observed_value: divergent ? "divergent" : "stable" };
+  const comparator = { path_id: slot.path_id, observed_value: divergent ? "divergent" : "stable" };
+  return recorder.captureControlProof({
+    artifact_id: `artifact:qualification-oracle:${slot.execution_id}`,
+    proof_role: "QUALIFICATION_ORACLE_CLASSIFICATION",
+    proposition: {
+      execution_id: slot.execution_id,
+      path_id: slot.path_id,
+      plan_ref: planRef,
+      oracle_projection_digest: qualificationOracleProjectionFingerprint(oracle),
+      comparator_input_digest: qualificationComparatorInputFingerprint(comparator),
+      execution_status: "COMPLETED",
+      run_scope_id: runScope,
+      oracle_projection: oracle,
+      comparator_input: comparator
+    },
+    sealed_at: "2026-07-21T12:20:00Z"
+  });
+}
+
+async function qualificationValidationEvidence(store, plan, result, basis) {
+  const planRef = createExactArtifactReference(plan);
+  const recorder = qualificationRecorder(
+    store, planRef, "actor:qualification-result-validator", "validation"
+  );
+  return recorder.captureControlProof({
+    artifact_id: "artifact:qualification-validation:fixture",
+    proof_role: "VALIDATION_ATTESTATION",
+    proposition: {
+      validated_subject_ref: planRef,
+      validation_profile: "qualification-comparison-v1",
+      evidence_basis_digest: basis,
+      recomputed_result: result,
+      validation_result: "VALID"
+    },
+    sealed_at: "2026-07-21T12:20:00Z"
+  });
+}
+
+function qualificationRecorder(store, planRef, producer, suffix) {
+  return createFormalEvidenceRecorder({
     store,
     authority_subject_ref: planRef,
     campaign_authorization_ref: null,
@@ -531,36 +614,7 @@ async function qualificationPrivateEvidence(
     path_id: null,
     producer_identity: producer,
     validator_identity: "actor:qualification-evidence-validator",
-    event_namespace: `recorder:${subjectId.replaceAll(":", "-")}`
-  });
-  const proofRole = role === "ORACLE_CLASSIFICATION"
-    ? "QUALIFICATION_ORACLE_CLASSIFICATION"
-    : role;
-  const proposition = role === "QUALIFICATION_FRESH_START_PROOF" ? {
-      profile: "GATE_LAUNCHED_ATTEMPT",
-      execution_id: subjectId,
-      plan_ref: planRef,
-      anchor_receipt_ref: createExactArtifactReference(anchorReceipt),
-      anchor_event_id: anchorReceipt.identity_payload.semantic_envelope.external_event_id,
-      start_event_id: `event:start:${subjectId}`
-    } : role === "ORACLE_CLASSIFICATION" ? {
-      execution_id: subjectId,
-      path_id: slot.path_id,
-      plan_ref: planRef,
-      oracle_projection_digest: digest("b"),
-      comparator_input_digest: digest("c")
-    } : {
-      validated_subject_ref: planRef,
-      validation_profile: "qualification-comparison-v1",
-      evidence_basis_digest: validationBasis,
-      recomputed_result: qualificationResult,
-      validation_result: "VALID"
-    };
-  return recorder.captureControlProof({
-    artifact_id: `artifact:${role.toLowerCase()}:${subjectId.replaceAll(":", "-")}`,
-    proof_role: proofRole,
-    proposition,
-    sealed_at: "2026-07-21T12:20:00Z"
+    event_namespace: `recorder:qualification:${suffix}`
   });
 }
 

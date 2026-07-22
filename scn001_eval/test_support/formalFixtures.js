@@ -9,6 +9,9 @@ import {
   createQualificationPlan,
   createQualificationResult
 } from "../src/formalAuthority.js";
+import {
+  SELECTED_SLICE_QUALIFICATION_EQUIVALENCE
+} from "../src/deterministicQualificationRunner.js";
 import { fixtureAnchorRequirement } from "./anchorFixture.js";
 
 export const digest = (character) => `sha256:${character.repeat(64)}`;
@@ -98,18 +101,15 @@ export function createFormalAuthorityFixture({ qualification = "QUALIFIED" } = {
 
 export function rebuildFormalAuthorityFixture(fixture, evidence, qualification = "QUALIFIED") {
   const { behaviorManifest, evaluationManifest, qualificationPlan } = fixture;
-  const comparisons = qualificationComparisons(qualificationPlan);
-  if (qualification === "NOT_QUALIFIED") {
-    comparisons[0].equivalent = false;
-    comparisons[0].mismatch_class = "VALUE_MISMATCH";
-    comparisons[0].details_digest = digest("f");
-  }
+  const executions = evidence.executions
+    ?? qualificationExecutions(qualificationPlan, evidence.execution_capture_refs);
+  const comparisons = qualificationComparisons(qualificationPlan, executions);
   const qualificationResult = createQualificationResult({
     artifact_id: `artifact:qualification-result:fixture:${qualification.toLowerCase()}`,
     plan: qualificationPlan,
     behavior_manifest: behaviorManifest,
     evaluation_manifest: evaluationManifest,
-    executions: qualificationExecutions(qualificationPlan, evidence.execution_capture_refs),
+    executions,
     comparisons,
     result: qualification,
     producer_identity: "actor:qualification-result-producer",
@@ -208,17 +208,21 @@ function qualificationExecutions(plan, captureRefs = null) {
   }));
 }
 
-function qualificationComparisons(plan) {
+function qualificationComparisons(plan, executions = null) {
   return REQUIRED_PATHS.map((path) => {
     const [left, right] = plan.identity_payload.execution_slots.filter(
       (slot) => slot.path_id === path
     );
+    const leftExecution = executions?.find((entry) => entry.execution_id === left.execution_id);
+    const rightExecution = executions?.find((entry) => entry.execution_id === right.execution_id);
+    const equivalent = executions === null
+      || leftExecution.comparator_input_digest === rightExecution.comparator_input_digest;
     return {
       left_execution_id: left.execution_id,
       right_execution_id: right.execution_id,
-      equivalent: true,
-      mismatch_class: null,
-      details_digest: null
+      equivalent,
+      mismatch_class: equivalent ? null : "VALUE_MISMATCH",
+      details_digest: equivalent ? null : digest("f")
     };
   });
 }
@@ -347,11 +351,7 @@ function evaluationManifestInput() {
       },
       deterministic_replay: {
         mode: "QUALIFICATION_SUPPORTED",
-        profile_id: "DEQ-SCN001-V1",
-        profile_revision: "1",
-        comparator_fingerprint: digest("2"),
-        normalization_rules_digest: digest("3"),
-        exclusion_rules_digest: digest("4")
+        ...structuredClone(SELECTED_SLICE_QUALIFICATION_EQUIVALENCE)
       },
       run_count_policy: {
         qualified_runs_per_path: 1,

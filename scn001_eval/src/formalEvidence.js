@@ -269,6 +269,23 @@ export function freshStartAttestationSigningBytes(attestationHeader) {
   );
 }
 
+export function qualificationStartAttestationSigningBytes(attestationHeader) {
+  assertExactKeys(attestationHeader, [
+    "schema_id", "schema_revision", "algorithm", "key_id", "signed_payload"
+  ], [], "qualification-start attestation signed header");
+  if (attestationHeader.schema_id !== "zoey.external-qualification-start-attestation"
+    || attestationHeader.schema_revision !== 1
+    || attestationHeader.algorithm !== "Ed25519") {
+    throw new Error("Qualification-start attestation uses an unsupported schema or algorithm.");
+  }
+  assertOpaqueId(attestationHeader.key_id, "qualification-start attestation key_id");
+  validateQualificationStartSignedPayload(attestationHeader.signed_payload);
+  return Buffer.from(
+    `zoey:external-qualification-start-attestation:v1\n${canonicalizeJson(attestationHeader)}`,
+    "utf8"
+  );
+}
+
 export async function captureAuthenticatedAnchorReceipt(store, input) {
   assertExactKeys(input, [
     "artifact_id", "raw_receipt_bytes", "anchor_requirement", "public_key",
@@ -347,6 +364,28 @@ export async function verifyAuthenticatedFreshStartProof(
   return stored;
 }
 
+export async function verifyAuthenticatedQualificationStartProof(
+  store, artifact, anchorRequirement, publicKey, expected
+) {
+  const stored = await verifyDurableEvidence(store, artifact);
+  const raw = await store.readRawBytes(stored.identity_payload.raw_custody);
+  const document = parseAndAuthenticateQualificationStart(raw, anchorRequirement, publicKey);
+  assertExactKeys(expected, [
+    "plan_ref", "namespace_index_ref", "anchor_receipt_ref", "execution_id", "path_id",
+    "selection_basis_digest", "run_scope_id"
+  ], [], "authenticated qualification-start expectation");
+  for (const [field, expectedValue] of Object.entries(expected)) {
+    if (canonicalizeJson(document.signed_payload[field]) !== canonicalizeJson(expectedValue)) {
+      throw new Error(`Authenticated qualification-start conflicts on ${field}.`);
+    }
+  }
+  if (canonicalizeJson(qualificationStartSemanticsFrom(document.signed_payload, raw))
+      !== canonicalizeJson(stored.identity_payload.semantic_envelope)) {
+    throw new Error("Qualification-start semantics were not derived from authenticated bytes.");
+  }
+  return stored;
+}
+
 export function createFormalEvidenceRecorder(input) {
   assertExactKeys(input, [
     "store", "authority_subject_ref", "campaign_authorization_ref", "attempt_id",
@@ -375,6 +414,74 @@ export function createFormalEvidenceRecorder(input) {
   const proofRoles = [];
 
   return Object.freeze({
+    async captureAuthenticatedQualificationStart(attestationInput) {
+      if (poisoned) throw new Error("Formal evidence recorder is terminal after a failed capture.");
+      if (busy) {
+        poisoned = true;
+        throw new Error("Formal evidence recorder rejects concurrent chronology mutation.");
+      }
+      busy = true;
+      try {
+        assertExactKeys(attestationInput, [
+          "artifact_id", "raw_attestation_bytes", "anchor_requirement", "public_key",
+          "namespace_index_ref", "anchor_receipt_ref", "execution_id", "path_id",
+          "selection_basis_digest", "run_scope_id", "sealed_at"
+        ], [], "authenticated qualification-start capture input");
+        assertRecorderProofTransition(
+          input.attempt_id, proofRoles, "QUALIFICATION_FRESH_START_PROOF",
+          runtimeCaptureObserved, materialOutputObserved
+        );
+        if (input.attempt_id !== null || input.campaign_authorization_ref !== null
+          || input.authority_subject_ref.artifact_kind !== "DETERMINISTIC_QUALIFICATION_PLAN") {
+          throw new Error("Authenticated qualification start requires a plan-scoped recorder.");
+        }
+        const raw = toBuffer(attestationInput.raw_attestation_bytes);
+        const document = parseAndAuthenticateQualificationStart(
+          raw, attestationInput.anchor_requirement, attestationInput.public_key
+        );
+        const signed = document.signed_payload;
+        const expectations = {
+          plan_ref: input.authority_subject_ref,
+          namespace_index_ref: attestationInput.namespace_index_ref,
+          anchor_receipt_ref: attestationInput.anchor_receipt_ref,
+          execution_id: attestationInput.execution_id,
+          path_id: attestationInput.path_id,
+          selection_basis_digest: attestationInput.selection_basis_digest,
+          run_scope_id: attestationInput.run_scope_id
+        };
+        for (const [field, expected] of Object.entries(expectations)) {
+          if (canonicalizeJson(signed[field]) !== canonicalizeJson(expected)) {
+            throw new Error(`Qualification-start signed payload conflicts on ${field}.`);
+          }
+        }
+        const artifact = await captureFormalEvidence(input.store, {
+          artifact_id: attestationInput.artifact_id,
+          evidence_kind: "EVALUATOR_PRIVATE_CAPTURE",
+          authority_subject_ref: input.authority_subject_ref,
+          campaign_authorization_ref: null,
+          attempt_id: null,
+          path_id: null,
+          visibility: "EVALUATOR_PRIVATE",
+          media_type: "application/json",
+          encoding: "utf-8",
+          raw_bytes: raw,
+          semantic_envelope: qualificationStartSemanticsFrom(signed, raw),
+          created_order: null,
+          delivered_order: null,
+          producer_identity: signed.producer_identity,
+          validator_identity: input.validator_identity,
+          sealed_at: attestationInput.sealed_at
+        });
+        proofRoles.push("QUALIFICATION_FRESH_START_PROOF");
+        return artifact;
+      } catch (error) {
+        poisoned = true;
+        throw error;
+      } finally {
+        busy = false;
+      }
+    },
+
     async captureAuthenticatedFreshStart(attestationInput) {
       if (poisoned) throw new Error("Formal evidence recorder is terminal after a failed capture.");
       if (busy) {
@@ -572,7 +679,9 @@ export async function replayTypedControlProof(store, artifact) {
   const parsed = parseCanonicalJsonBytes(raw, "typed control proof");
   const proof = parsed.schema_id === "zoey.external-fresh-start-attestation"
     ? controlProofFromFreshStartAttestation(parsed, stored)
-    : parsed;
+    : parsed.schema_id === "zoey.external-qualification-start-attestation"
+      ? controlProofFromQualificationStartAttestation(parsed, stored)
+      : parsed;
   validateControlProofDocument(proof);
   const payload = stored.identity_payload;
   if (canonicalizeJson(proof.authority_subject_ref)
@@ -1387,9 +1496,26 @@ export async function verifyDurableQualificationEvidence(
   const fresh = payload.fresh_start_proof_refs.map(
     (reference) => supplied.get(canonicalizeJson(reference))
   );
-  const freshProofs = await Promise.all(fresh.map(
-    (artifact) => replayTypedControlProof(store, artifact)
+  const slotById = new Map(plan.identity_payload.execution_slots.map(
+    (slot) => [slot.execution_id, slot]
   ));
+  const freshProofs = await Promise.all(fresh.map(async (artifact) => {
+    const semantics = artifact.identity_payload.semantic_envelope;
+    const slot = slotById.get(semantics.execution_id);
+    if (!slot) throw new Error("Qualification start names an unplanned execution.");
+    await verifyAuthenticatedQualificationStartProof(
+      store, artifact, plan.identity_payload.anchor_requirement, anchorPublicKey, {
+        plan_ref: planRef,
+        namespace_index_ref: createExactArtifactReference(receiptNamespace),
+        anchor_receipt_ref: payload.anchor_receipt_ref,
+        execution_id: slot.execution_id,
+        path_id: slot.path_id,
+        selection_basis_digest: slot.selection_basis_digest,
+        run_scope_id: semantics.run_scope_id
+      }
+    );
+    return replayTypedControlProof(store, artifact);
+  }));
   if (freshProofs.some(
     (replay) => replay.proof.proof_role !== "QUALIFICATION_FRESH_START_PROOF"
   )) throw new Error("Qualification fresh-start artifacts are not typed proposition proofs.");
@@ -1399,6 +1525,11 @@ export async function verifyDurableQualificationEvidence(
     || !executionIds.has(artifact.identity_payload.semantic_envelope.execution_id)
     || artifact.identity_payload.semantic_envelope.profile
       !== plan.identity_payload.anchor_requirement.fresh_start_profile
+    || artifact.identity_payload.semantic_envelope.path_id
+      !== slotById.get(artifact.identity_payload.semantic_envelope.execution_id)?.path_id
+    || artifact.identity_payload.semantic_envelope.selection_basis_digest
+      !== slotById.get(artifact.identity_payload.semantic_envelope.execution_id)
+        ?.selection_basis_digest
     || canonicalizeJson(artifact.identity_payload.semantic_envelope.plan_ref)
       !== canonicalizeJson(planRef)
     || canonicalizeJson(artifact.identity_payload.semantic_envelope.anchor_receipt_ref)
@@ -1429,6 +1560,9 @@ export async function verifyDurableQualificationEvidence(
     for (const reference of execution.capture_refs) {
       const capture = supplied.get(canonicalizeJson(reference));
       const captureProof = await replayTypedControlProof(store, capture);
+      const matchingFresh = fresh.find((artifact) => (
+        artifact.identity_payload.semantic_envelope.execution_id === execution.execution_id
+      ));
       if (capture.identity_payload.semantic_envelope.capture_role !== "ORACLE_CLASSIFICATION"
         || captureProof.proof.proof_role !== "QUALIFICATION_ORACLE_CLASSIFICATION"
         || capture.identity_payload.semantic_envelope.execution_id !== execution.execution_id
@@ -1437,6 +1571,9 @@ export async function verifyDurableQualificationEvidence(
           !== execution.oracle_projection_digest
         || capture.identity_payload.semantic_envelope.comparator_input_digest
           !== execution.comparator_input_digest
+        || captureProof.proof.proposition.execution_status !== execution.status
+        || captureProof.proof.proposition.run_scope_id
+          !== matchingFresh?.identity_payload.semantic_envelope.run_scope_id
         || canonicalizeJson(capture.identity_payload.authority_subject_ref)
           !== canonicalizeJson(planRef)) {
         throw new Error("Qualification execution capture has the wrong role or plan subject.");
@@ -1461,6 +1598,14 @@ export function qualificationValidationBasisFingerprint(plan, result) {
     anchor_receipt_ref: payload.anchor_receipt_ref,
     fresh_start_proof_refs: payload.fresh_start_proof_refs
   });
+}
+
+export function qualificationOracleProjectionFingerprint(value) {
+  return fingerprintCanonicalJson("zoey:qualification-oracle-projection:v1", value);
+}
+
+export function qualificationComparatorInputFingerprint(value) {
+  return fingerprintCanonicalJson("zoey:qualification-comparator-input:v1", value);
 }
 
 function buildTypedArtifact(artifactId, artifactKind, payload) {
@@ -1629,14 +1774,17 @@ function validateEvidenceSemantics(payload) {
   } else if (payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE"
     && payload.semantic_envelope.capture_role === "QUALIFICATION_FRESH_START_PROOF") {
     assertExactKeys(payload.semantic_envelope, [
-      "capture_role", "profile", "execution_id", "plan_ref", "anchor_receipt_ref",
-      "anchor_event_id", "start_event_id", "content_digest"
+      "capture_role", "profile", "execution_id", "path_id", "plan_ref",
+      "namespace_index_ref", "anchor_receipt_ref", "selection_basis_digest",
+      "anchor_event_id", "start_event_id", "run_scope_id", "content_digest"
     ], [], "qualification fresh-start capture semantics");
     if (payload.visibility !== "EVALUATOR_PRIVATE" || payload.attempt_id !== null
       || payload.campaign_authorization_ref !== null) {
       throw new Error("Qualification fresh-start capture has invalid visibility/context.");
     }
-    for (const field of ["profile", "execution_id", "anchor_event_id", "start_event_id"]) {
+    for (const field of [
+      "profile", "execution_id", "path_id", "anchor_event_id", "start_event_id", "run_scope_id"
+    ]) {
       assertOpaqueId(payload.semantic_envelope[field], `qualification fresh-start ${field}`);
     }
     validateExactArtifactReference(payload.semantic_envelope.plan_ref, {
@@ -1645,6 +1793,13 @@ function validateEvidenceSemantics(payload) {
     validateExactArtifactReference(payload.semantic_envelope.anchor_receipt_ref, {
       allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT"]
     });
+    validateExactArtifactReference(payload.semantic_envelope.namespace_index_ref, {
+      allowedKinds: ["AUTHORITY_NAMESPACE_INDEX"]
+    });
+    assertSha256(
+      payload.semantic_envelope.selection_basis_digest,
+      "qualification fresh-start selection basis"
+    );
     assertSha256(payload.semantic_envelope.content_digest, "qualification fresh-start digest");
     if (payload.semantic_envelope.content_digest !== payload.raw_byte_digest
       || payload.semantic_envelope.anchor_event_id === payload.semantic_envelope.start_event_id
@@ -1657,7 +1812,8 @@ function validateEvidenceSemantics(payload) {
     && payload.authority_subject_ref.artifact_kind === "DETERMINISTIC_QUALIFICATION_PLAN") {
     assertExactKeys(payload.semantic_envelope, [
       "capture_role", "execution_id", "path_id", "plan_ref",
-      "oracle_projection_digest", "comparator_input_digest", "content_digest", "event_id"
+      "oracle_projection_digest", "comparator_input_digest", "execution_status", "run_scope_id",
+      "oracle_projection", "comparator_input", "content_digest", "event_id"
     ], [], "qualification oracle capture semantics");
     if (payload.visibility !== "EVALUATOR_PRIVATE" || payload.attempt_id !== null
       || payload.campaign_authorization_ref !== null || payload.path_id !== null) {
@@ -1783,6 +1939,42 @@ function parseAndAuthenticateFreshStart(rawBytes, anchorRequirement, publicKey) 
   return document;
 }
 
+function parseAndAuthenticateQualificationStart(rawBytes, anchorRequirement, publicKey) {
+  const document = parseCanonicalJsonBytes(
+    toBuffer(rawBytes), "authenticated qualification-start attestation"
+  );
+  assertExactKeys(document, [
+    "schema_id", "schema_revision", "algorithm", "key_id", "signed_payload", "signature"
+  ], [], "authenticated qualification-start attestation");
+  const header = {
+    schema_id: document.schema_id,
+    schema_revision: document.schema_revision,
+    algorithm: document.algorithm,
+    key_id: document.key_id,
+    signed_payload: structuredClone(document.signed_payload)
+  };
+  const policy = anchorRequirement.receipt_authentication;
+  if (document.algorithm !== policy.algorithm || document.key_id !== policy.key_id
+    || anchorPublicKeyFingerprint(publicKey) !== policy.public_key_fingerprint) {
+    throw new Error("Qualification-start verifier conflicts with owner-pinned policy.");
+  }
+  if (typeof document.signature !== "string"
+    || !/^[A-Za-z0-9+/]+={0,2}$/.test(document.signature)) {
+    throw new Error("Qualification-start signature encoding is invalid.");
+  }
+  const signature = Buffer.from(document.signature, "base64");
+  if (signature.toString("base64") !== document.signature
+    || !verifySignature(
+      null, qualificationStartAttestationSigningBytes(header), publicKey, signature
+    )) {
+    throw new Error("Qualification-start signature authentication failed.");
+  }
+  if (document.signed_payload.profile !== anchorRequirement.fresh_start_profile) {
+    throw new Error("Qualification-start profile conflicts with anchor policy.");
+  }
+  return document;
+}
+
 function validateFreshStartSignedPayload(payload) {
   assertExactKeys(payload, [
     "profile", "authorization_ref", "namespace_index_ref", "anchor_receipt_ref",
@@ -1809,6 +2001,34 @@ function validateFreshStartSignedPayload(payload) {
   validateCreated(payload.issued_at, payload.producer_identity);
 }
 
+function validateQualificationStartSignedPayload(payload) {
+  assertExactKeys(payload, [
+    "profile", "plan_ref", "namespace_index_ref", "anchor_receipt_ref",
+    "execution_id", "path_id", "selection_basis_digest", "challenge", "issued_by",
+    "observed_by", "anchor_event_id", "start_event_id", "run_scope_id",
+    "producer_identity", "issued_at"
+  ], [], "qualification-start signed payload");
+  validateExactArtifactReference(payload.plan_ref, {
+    allowedKinds: ["DETERMINISTIC_QUALIFICATION_PLAN"]
+  });
+  validateExactArtifactReference(payload.namespace_index_ref, {
+    allowedKinds: ["AUTHORITY_NAMESPACE_INDEX"]
+  });
+  validateExactArtifactReference(payload.anchor_receipt_ref, {
+    allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT"]
+  });
+  for (const field of [
+    "profile", "execution_id", "path_id", "challenge", "issued_by", "observed_by",
+    "anchor_event_id", "start_event_id", "run_scope_id", "producer_identity"
+  ]) assertOpaqueId(payload[field], `qualification-start signed payload.${field}`);
+  assertSha256(payload.selection_basis_digest, "qualification-start selection basis");
+  if (!REQUIRED_PATHS.includes(payload.path_id)
+    || payload.anchor_event_id === payload.start_event_id) {
+    throw new Error("Qualification-start path or causal event closure is invalid.");
+  }
+  validateCreated(payload.issued_at, payload.producer_identity);
+}
+
 function freshStartSemanticsFrom(payload, rawBytes) {
   validateFreshStartSignedPayload(payload);
   return {
@@ -1822,6 +2042,24 @@ function freshStartSemanticsFrom(payload, rawBytes) {
     start_event_id: payload.start_event_id,
     run_scope_id: payload.run_scope_id,
     capture_binding_digest: sha256Bytes(toBuffer(rawBytes))
+  };
+}
+
+function qualificationStartSemanticsFrom(payload, rawBytes) {
+  validateQualificationStartSignedPayload(payload);
+  return {
+    capture_role: "QUALIFICATION_FRESH_START_PROOF",
+    profile: payload.profile,
+    execution_id: payload.execution_id,
+    path_id: payload.path_id,
+    plan_ref: structuredClone(payload.plan_ref),
+    namespace_index_ref: structuredClone(payload.namespace_index_ref),
+    anchor_receipt_ref: structuredClone(payload.anchor_receipt_ref),
+    selection_basis_digest: payload.selection_basis_digest,
+    anchor_event_id: payload.anchor_event_id,
+    start_event_id: payload.start_event_id,
+    run_scope_id: payload.run_scope_id,
+    content_digest: sha256Bytes(toBuffer(rawBytes))
   };
 }
 
@@ -1901,6 +2139,36 @@ function controlProofFromFreshStartAttestation(document, artifact) {
       challenge: signed.challenge,
       issued_by: signed.issued_by,
       observed_by: signed.observed_by,
+      anchor_event_id: signed.anchor_event_id,
+      start_event_id: signed.start_event_id,
+      run_scope_id: signed.run_scope_id
+    }
+  };
+}
+
+function controlProofFromQualificationStartAttestation(document, artifact) {
+  assertExactKeys(document, [
+    "schema_id", "schema_revision", "algorithm", "key_id", "signed_payload", "signature"
+  ], [], "external qualification-start proof document");
+  validateQualificationStartSignedPayload(document.signed_payload);
+  const signed = document.signed_payload;
+  return {
+    schema_id: "zoey.formal-control-proof",
+    schema_revision: 1,
+    proof_role: "QUALIFICATION_FRESH_START_PROOF",
+    authority_subject_ref: structuredClone(artifact.identity_payload.authority_subject_ref),
+    campaign_authorization_ref: null,
+    attempt_id: null,
+    path_id: null,
+    event_id: signed.start_event_id,
+    proposition: {
+      profile: signed.profile,
+      execution_id: signed.execution_id,
+      path_id: signed.path_id,
+      plan_ref: structuredClone(signed.plan_ref),
+      namespace_index_ref: structuredClone(signed.namespace_index_ref),
+      anchor_receipt_ref: structuredClone(signed.anchor_receipt_ref),
+      selection_basis_digest: signed.selection_basis_digest,
       anchor_event_id: signed.anchor_event_id,
       start_event_id: signed.start_event_id,
       run_scope_id: signed.run_scope_id
@@ -2042,13 +2310,16 @@ function validateFreshStartProposition(value, proof) {
 
 function validateQualificationFreshStartProposition(value, proof) {
   assertExactKeys(value, [
-    "profile", "execution_id", "plan_ref", "anchor_receipt_ref",
-    "anchor_event_id", "start_event_id"
+    "profile", "execution_id", "path_id", "plan_ref", "namespace_index_ref",
+    "anchor_receipt_ref", "selection_basis_digest", "anchor_event_id", "start_event_id",
+    "run_scope_id"
   ], [], "qualification fresh-start proposition");
   if (proof.attempt_id !== null || proof.campaign_authorization_ref !== null) {
     throw new Error("Qualification fresh-start proof cannot be campaign-attempt bound.");
   }
-  for (const field of ["profile", "execution_id", "anchor_event_id", "start_event_id"]) {
+  for (const field of [
+    "profile", "execution_id", "path_id", "anchor_event_id", "start_event_id", "run_scope_id"
+  ]) {
     assertOpaqueId(value[field], `qualification fresh-start proposition.${field}`);
   }
   validateExactArtifactReference(value.plan_ref, {
@@ -2057,7 +2328,11 @@ function validateQualificationFreshStartProposition(value, proof) {
   validateExactArtifactReference(value.anchor_receipt_ref, {
     allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT"]
   });
-  if (value.anchor_event_id === value.start_event_id
+  validateExactArtifactReference(value.namespace_index_ref, {
+    allowedKinds: ["AUTHORITY_NAMESPACE_INDEX"]
+  });
+  assertSha256(value.selection_basis_digest, "qualification fresh-start selection basis");
+  if (!REQUIRED_PATHS.includes(value.path_id) || value.anchor_event_id === value.start_event_id
     || canonicalizeJson(value.plan_ref) !== canonicalizeJson(proof.authority_subject_ref)) {
     throw new Error("Qualification fresh-start proof has invalid plan or causal closure.");
   }
@@ -2066,7 +2341,8 @@ function validateQualificationFreshStartProposition(value, proof) {
 function validateQualificationOracleProposition(value, proof) {
   assertExactKeys(value, [
     "execution_id", "path_id", "plan_ref", "oracle_projection_digest",
-    "comparator_input_digest"
+    "comparator_input_digest", "execution_status", "run_scope_id",
+    "oracle_projection", "comparator_input"
   ], [], "qualification oracle proposition");
   if (proof.attempt_id !== null || proof.campaign_authorization_ref !== null) {
     throw new Error("Qualification oracle proof cannot be campaign-attempt bound.");
@@ -2078,6 +2354,22 @@ function validateQualificationOracleProposition(value, proof) {
   });
   for (const field of ["oracle_projection_digest", "comparator_input_digest"]) {
     assertSha256(value[field], `qualification oracle proposition.${field}`);
+  }
+  assertOpaqueId(value.run_scope_id, "qualification oracle run_scope_id");
+  assertPlainObject(value.oracle_projection, "qualification oracle projection");
+  if (!["COMPLETED", "INVALID"].includes(value.execution_status)) {
+    throw new Error("Qualification oracle execution status is invalid.");
+  }
+  if (value.execution_status === "COMPLETED") {
+    assertPlainObject(value.comparator_input, "qualification comparator input");
+  } else if (value.comparator_input !== null) {
+    throw new Error("Invalid qualification execution cannot fabricate comparator input.");
+  }
+  if (qualificationOracleProjectionFingerprint(value.oracle_projection)
+      !== value.oracle_projection_digest
+    || qualificationComparatorInputFingerprint(value.comparator_input)
+      !== value.comparator_input_digest) {
+    throw new Error("Qualification oracle digests were not derived from captured material.");
   }
   if (canonicalizeJson(value.plan_ref) !== canonicalizeJson(proof.authority_subject_ref)) {
     throw new Error("Qualification oracle proof names a different plan.");
