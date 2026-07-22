@@ -170,11 +170,41 @@ comparison, result, anchor, and fresh-start basis.
 
 All keys and receipts used by tests are generated synthetic fixtures. This
 increment does not designate the project-owner key or effective namespace, does
-not make qualification comparisons execution-derived, and does not connect the
-four-path oracle transcript to durable formal-run sealing or interruption
-retention. The prior `BLOCKED` disposition and all four `applicable / uncovered`
-Phase 7 controls remain unchanged pending the remaining integration and fresh
-independent review.
+not make qualification comparisons execution-derived, and does not orchestrate
+a complete bounded campaign. The attempt-pipeline increment below closes the
+runner-to-record portion. The prior `BLOCKED` disposition and all four
+`applicable / uncovered` Phase 7 controls remain unchanged pending the remaining
+qualification/campaign integration and fresh independent review.
+
+## Phase 7 Formal-Attempt Pipeline Corrective Addendum
+
+Corrective date: 2026-07-22.
+
+The internal attempt pipeline creates the actual selected-slice execution
+session before asking an external adapter for a fresh-start attestation. The
+canonical Ed25519-signed attestation binds the exact authorization, effective
+namespace, anchor receipt, slot, attempt, path, external anchor event, and
+recorder-owned run scope. Signature verification and exact-scope comparison
+complete before any path event executes. A valid signature over a substituted
+run scope and unsigned start material both fail closed.
+
+The pipeline records initial state, isolation, prospective selection, every SUT
+input/output, simulator request/realization, and post-event inspection through
+one chronology-owning durable recorder. It seals only runner-derived validity,
+invariant, obligation, and finding fields. A missing material output becomes an
+exact obligation failure with downstream `NOT_REACHED`; an execution exception
+retains its partial exact evidence as `ABANDONED_RETAINED` and creates no scored
+run. Formal-run validation now accepts `NOT_REACHED` only with no imported
+finding and still requires every actual obligation failure to close one or more
+exact findings.
+
+All executions and attestations in tests remain synthetic mechanisms. The
+aggregate local gate passes 471 tests. Qualification comparisons still require
+trusted execution derivation, and complete multi-slot campaign orchestration,
+result/decision publication, project-owner key/namespace designation, protected
+integration, and fresh exact-commit independent review remain open. The prior
+`BLOCKED` disposition and all four `applicable / uncovered` controls therefore
+remain unchanged.
 
 ## First Phase 7 Change Requirements
 

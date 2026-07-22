@@ -107,6 +107,10 @@ const REQUIRED_EVIDENCE_KINDS = Object.freeze([
   "SIMULATOR_REQUEST_CAPTURE", "SIMULATOR_REALIZATION_CAPTURE",
   "EVALUATOR_PRIVATE_CAPTURE"
 ]);
+const MANDATORY_EVIDENCE_KINDS = Object.freeze([
+  "SUT_INPUT_CAPTURE", "SUT_OUTPUT_CAPTURE", "SUT_INSPECTION_CAPTURE",
+  "EVALUATOR_PRIVATE_CAPTURE"
+]);
 const HARD_RULE_IDS = new Set(Array.from(
   { length: 16 }, (_, index) => `SCN001-SSFO-V0.2.0-INV-${String(index + 1).padStart(3, "0")}`
 ));
@@ -363,7 +367,9 @@ async function validateRunInputs(input) {
   const initialProof = controlProofs.get("INITIAL_STATE_PROOF");
   const isolationProof = controlProofs.get("RUN_ISOLATION_PROOF");
   const selectionProof = controlProofs.get("SELECTION_INDEPENDENCE");
-  if (initialProof.proposition.run_scope_id !== isolationProof.proposition.run_scope_id
+  const freshProof = controlProofs.get("FRESH_START_PROOF");
+  if (freshProof.proposition.run_scope_id !== initialProof.proposition.run_scope_id
+    || initialProof.proposition.run_scope_id !== isolationProof.proposition.run_scope_id
     || selectionProof.proposition.selection_basis_digest !== slot.selection_basis_digest
     || selectionProof.proposition.seed_commitment !== slot.seed_commitment) {
     throw new Error("Formal run typed proofs conflict with run isolation or prospective selection.");
@@ -422,7 +428,7 @@ async function validateRunInputs(input) {
       evidence_ref: createExactArtifactReference(artifact),
       raw_byte_digest: artifact.identity_payload.raw_byte_digest
     }));
-    if (refsByKind[kind].length === 0) {
+    if (MANDATORY_EVIDENCE_KINDS.includes(kind) && refsByKind[kind].length === 0) {
       throw new Error(`Formal run is missing required ${kind} evidence.`);
     }
   }
@@ -606,7 +612,10 @@ function validateObligationVector(pathId, results, findings) {
       throw new Error("Obligation result omits or imports a failure finding.");
     }
     const relevant = findings.filter((finding) => entry.finding_ids.includes(finding.finding_id));
-    if ((entry.result === "PASS") !== (relevant.length === 0)
+    const findingCardinalityInvalid = (entry.result === "PASS" && relevant.length !== 0)
+      || (entry.result === "OBLIGATION_FAIL" && relevant.length === 0)
+      || (entry.result === "NOT_REACHED" && relevant.length !== 0);
+    if (findingCardinalityInvalid
       || relevant.some((finding) => !finding.affected_claim_classes.includes(entry.claim_class)
         || !expected.obligation_ids.includes(finding.rule_id))) {
       throw new Error("Obligation result does not close its exact failure findings.");

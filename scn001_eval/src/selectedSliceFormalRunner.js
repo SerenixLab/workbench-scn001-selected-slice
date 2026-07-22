@@ -23,10 +23,36 @@ export function executeSelectedSlicePathForMechanismTest(input, sutBoundary) {
 }
 
 function executeWithBoundary(pathId, sutBoundary) {
+  const session = createExecutionSession(pathId, sutBoundary);
+  try {
+    const result = session.executeRetainingInterruption();
+    if (result.execution_status === "INTERRUPTED") {
+      throw new Error(`Selected-slice execution interrupted: ${result.interruption.message}`);
+    }
+    return result;
+  } finally {
+    session.close();
+  }
+}
+
+export function createSelectedSlicePathSession(input) {
+  assertRunnerInput(input);
+  return createExecutionSession(input.path_id, createSutBoundary());
+}
+
+export function createSelectedSlicePathSessionForMechanismTest(input, sutBoundary) {
+  assertRunnerInput(input);
+  return createExecutionSession(input.path_id, sutBoundary);
+}
+
+function createExecutionSession(pathId, sutBoundary) {
   const harness = createHarnessForFormalRunner(sutBoundary);
   const runRef = harness.startRun();
+  const initialInspection = harness.captureInspectionSnapshot(runRef);
   const events = [];
   let nextEventOrder = 1;
+  let executionStarted = false;
+  let closed = false;
   const record = (eventKind, bundleId, result, sourceMaterial = null) => {
     events.push({
       event_order: nextEventOrder,
@@ -39,26 +65,63 @@ function executeWithBoundary(pathId, sutBoundary) {
     nextEventOrder += 1;
     return result;
   };
-  try {
-    if (pathId === PATHS.CANONICAL) executeCanonical(harness, runRef, record);
-    if (pathId === PATHS.NO_SPLIT) executeNoSplit(harness, runRef, record);
-    if (pathId === PATHS.DRILL_OPT_IN) executeDrillOptIn(harness, runRef, record);
-    if (pathId === PATHS.RECENT_BASIS) executeRecentBasis(harness, runRef, record);
-    const projection = harness.captureFormalOracleProjection(runRef);
-    const derivation = derivePathOutcomes(pathId, projection);
-    return deepFreeze({
-      path_id: pathId,
-      fixture_oracle_package: "SCN001-SSFO-V0.2.0",
-      runner_policy: "CONSERVATIVE_THREE_RUN_V1",
-      run_ref: runRef,
-      event_count: events.length,
-      events,
-      oracle_projection: projection,
-      ...derivation
-    });
-  } finally {
-    harness.endRun(runRef);
-  }
+  return Object.freeze({
+    path_id: pathId,
+    run_ref: runRef,
+    initial_inspection: initialInspection,
+    executeRetainingInterruption() {
+      if (closed || executionStarted) {
+        throw new Error("Selected-slice execution session is closed or already consumed.");
+      }
+      executionStarted = true;
+      try {
+        if (pathId === PATHS.CANONICAL) executeCanonical(harness, runRef, record);
+        if (pathId === PATHS.NO_SPLIT) executeNoSplit(harness, runRef, record);
+        if (pathId === PATHS.DRILL_OPT_IN) executeDrillOptIn(harness, runRef, record);
+        if (pathId === PATHS.RECENT_BASIS) executeRecentBasis(harness, runRef, record);
+        const projection = harness.captureFormalOracleProjection(runRef);
+        const derivation = derivePathOutcomes(pathId, projection);
+        return deepFreeze({
+          execution_status: "COMPLETED",
+          path_id: pathId,
+          fixture_oracle_package: "SCN001-SSFO-V0.2.0",
+          runner_policy: "CONSERVATIVE_THREE_RUN_V1",
+          run_ref: runRef,
+          initial_inspection: initialInspection,
+          event_count: events.length,
+          events,
+          oracle_projection: projection,
+          ...derivation
+        });
+      } catch (error) {
+        return deepFreeze({
+          execution_status: "INTERRUPTED",
+          path_id: pathId,
+          fixture_oracle_package: "SCN001-SSFO-V0.2.0",
+          runner_policy: "CONSERVATIVE_THREE_RUN_V1",
+          run_ref: runRef,
+          initial_inspection: initialInspection,
+          event_count: events.length,
+          events,
+          interruption: {
+            reason_code: "SCN001-SSFO-V0.2.0-VAL-010",
+            error_name: error instanceof Error ? error.name : "NonErrorThrow",
+            message: error instanceof Error ? error.message : String(error)
+          },
+          run_validity: "INVALID_UNSCORABLE",
+          invariant_result: null,
+          obligation_results: [],
+          failure_assertions: []
+        });
+      }
+    },
+    close() {
+      if (!closed) {
+        harness.endRun(runRef);
+        closed = true;
+      }
+    }
+  });
 }
 
 function executeCanonical(harness, runRef, record) {

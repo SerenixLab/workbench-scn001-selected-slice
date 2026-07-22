@@ -47,6 +47,7 @@ import {
   runRecordReference
 } from "../test_support/formalFixtures.js";
 import { createFormalCampaignFixture } from "../test_support/formalCampaignFixtures.js";
+import { createFixtureFreshStartAttestationBytes } from "../test_support/anchorFixture.js";
 
 const sha256 = (bytes) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 
@@ -209,7 +210,8 @@ test("recorder owns chronology and typed proof replay rejects label-only asserti
       issued_by: "actor:external-gate",
       observed_by: "actor:external-gate",
       anchor_event_id: "event:protected-gate:formal-campaign-fixture",
-      start_event_id: "event:start:chronology-test"
+      start_event_id: "event:start:chronology-test",
+      run_scope_id: "run-scope:chronology-test"
     },
     sealed_at: "2026-07-21T13:29:00Z"
   });
@@ -328,7 +330,8 @@ test("recorder rejects concurrent capture before chronology can fork", async () 
     issued_by: "actor:external-gate",
     observed_by: "actor:external-gate",
     anchor_event_id: "event:protected-gate:formal-campaign-fixture",
-    start_event_id: "event:start:concurrency-test"
+    start_event_id: "event:start:concurrency-test",
+    run_scope_id: "run-scope:concurrency-test"
   };
   const results = await Promise.allSettled([
     recorder.captureControlProof({
@@ -735,18 +738,32 @@ async function durableStartSetup() {
     validator_identity: "actor:formal-evidence-validator",
     event_namespace: `recorder:${slot.attempt_id}`
   });
-  const freshStart = await recorder.captureControlProof({
+  const freshAttestationBytes = createFixtureFreshStartAttestationBytes({
+    profile: "GATE_LAUNCHED_ATTEMPT",
+    authorization_ref: authorizationRef,
+    namespace_index_ref: namespaceRef,
+    anchor_receipt_ref: createExactArtifactReference(receipt),
+    slot_id: slot.slot_id,
+    attempt_id: slot.attempt_id,
+    path_id: slot.path_id,
+    challenge: "challenge:post-anchor:001",
+    issued_by: "actor:external-gate",
+    observed_by: "actor:external-gate",
+    anchor_event_id: "event:protected-gate:formal-campaign-fixture",
+    start_event_id: "event:attempt-start:001",
+    run_scope_id: "run-scope:attempt-start:001",
+    producer_identity: "actor:external-start-platform",
+    issued_at: "2026-07-21T13:29:00Z"
+  });
+  const freshStart = await recorder.captureAuthenticatedFreshStart({
     artifact_id: "artifact:fresh-start:campaign:001",
-    proof_role: "FRESH_START_PROOF",
-    proposition: {
-      profile: "GATE_LAUNCHED_ATTEMPT",
-      slot_id: slot.slot_id,
-      challenge: "challenge:post-anchor:001",
-      issued_by: "actor:external-gate",
-      observed_by: "actor:external-gate",
-      anchor_event_id: "event:protected-gate:formal-campaign-fixture",
-      start_event_id: "event:attempt-start:001"
-    },
+    raw_attestation_bytes: freshAttestationBytes,
+    anchor_requirement: fixture.campaignAuthorization.identity_payload.anchor_requirement,
+    public_key: campaign.anchorPublicKey,
+    namespace_index_ref: namespaceRef,
+    anchor_receipt_ref: createExactArtifactReference(receipt),
+    slot_id: slot.slot_id,
+    run_scope_id: "run-scope:attempt-start:001",
     sealed_at: "2026-07-21T13:30:00Z"
   });
   const startInput = {
@@ -777,6 +794,7 @@ async function durableStartSetup() {
       observed_by: "actor:external-gate",
       anchor_event_id: "event:protected-gate:formal-campaign-fixture",
       start_event_id: "event:attempt-start:001",
+      run_scope_id: "run-scope:attempt-start:001",
       capture_binding_digest: freshStart.identity_payload.semantic_envelope.capture_binding_digest,
       verification_result: "VERIFIED"
     }

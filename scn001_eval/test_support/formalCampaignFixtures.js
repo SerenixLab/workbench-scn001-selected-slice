@@ -37,7 +37,8 @@ import {
 } from "./formalFixtures.js";
 import {
   FIXTURE_ANCHOR_PUBLIC_KEY,
-  createFixtureAnchorReceiptBytes
+  createFixtureAnchorReceiptBytes,
+  createFixtureFreshStartAttestationBytes
 } from "./anchorFixture.js";
 
 export const sha256 = (bytes) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
@@ -158,18 +159,32 @@ export async function createAuthorizedAttempt(setup, slot) {
     validator_identity: "actor:formal-evidence-validator",
     event_namespace: `recorder:${slot.attempt_id}`
   });
-  const freshStart = await recorder.captureControlProof({
+  const freshAttestationBytes = createFixtureFreshStartAttestationBytes({
+    profile: "GATE_LAUNCHED_ATTEMPT",
+    authorization_ref: authorizationRef,
+    namespace_index_ref: namespaceRef,
+    anchor_receipt_ref: receiptRef,
+    slot_id: slot.slot_id,
+    attempt_id: slot.attempt_id,
+    path_id: slot.path_id,
+    challenge: `challenge:${slot.attempt_id}`,
+    issued_by: "actor:external-gate",
+    observed_by: "actor:external-gate",
+    anchor_event_id: "event:protected-gate:formal-campaign-fixture",
+    start_event_id: `event:start:${slot.attempt_id}`,
+    run_scope_id: `run-scope:${slot.attempt_id}`,
+    producer_identity: "actor:external-start-platform",
+    issued_at: "2026-07-21T13:24:00Z"
+  });
+  const freshStart = await recorder.captureAuthenticatedFreshStart({
     artifact_id: `artifact:fresh-start:${slot.attempt_id}`,
-    proof_role: "FRESH_START_PROOF",
-    proposition: {
-      profile: "GATE_LAUNCHED_ATTEMPT",
-      slot_id: slot.slot_id,
-      challenge: `challenge:${slot.attempt_id}`,
-      issued_by: "actor:external-gate",
-      observed_by: "actor:external-gate",
-      anchor_event_id: "event:protected-gate:formal-campaign-fixture",
-      start_event_id: `event:start:${slot.attempt_id}`
-    },
+    raw_attestation_bytes: freshAttestationBytes,
+    anchor_requirement: authorization.identity_payload.anchor_requirement,
+    public_key: setup.anchorPublicKey,
+    namespace_index_ref: namespaceRef,
+    anchor_receipt_ref: receiptRef,
+    slot_id: slot.slot_id,
+    run_scope_id: `run-scope:${slot.attempt_id}`,
     sealed_at: "2026-07-21T13:25:00Z"
   });
   const freshSemantics = freshStart.identity_payload.semantic_envelope;
@@ -201,6 +216,7 @@ export async function createAuthorizedAttempt(setup, slot) {
       observed_by: "actor:external-gate",
       anchor_event_id: "event:protected-gate:formal-campaign-fixture",
       start_event_id: `event:start:${slot.attempt_id}`,
+      run_scope_id: `run-scope:${slot.attempt_id}`,
       capture_binding_digest: freshSemantics.capture_binding_digest,
       verification_result: "VERIFIED"
     }

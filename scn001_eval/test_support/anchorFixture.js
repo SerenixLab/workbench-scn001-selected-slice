@@ -2,7 +2,8 @@ import { generateKeyPairSync, sign } from "node:crypto";
 
 import {
   anchorPublicKeyFingerprint,
-  anchorReceiptSigningBytes
+  anchorReceiptSigningBytes,
+  freshStartAttestationSigningBytes
 } from "../src/formalEvidence.js";
 import { canonicalizeJson } from "../src/formalArtifactIdentity.js";
 
@@ -44,4 +45,21 @@ export function createFixtureAnchorReceiptBytes(signedPayload) {
     signature: sign(null, anchorReceiptSigningBytes(header), keyPair.privateKey).toString("base64")
   };
   return Buffer.from(`${canonicalizeJson(receipt)}\n`, "utf8");
+}
+
+export function createFixtureFreshStartAttestationBytes(signedPayload) {
+  const header = {
+    schema_id: "zoey.external-fresh-start-attestation",
+    schema_revision: 1,
+    algorithm: "Ed25519",
+    key_id: "key:fixture-external-anchor",
+    signed_payload: structuredClone(signedPayload)
+  };
+  const attestation = {
+    ...header,
+    signature: sign(
+      null, freshStartAttestationSigningBytes(header), keyPair.privateKey
+    ).toString("base64")
+  };
+  return Buffer.from(`${canonicalizeJson(attestation)}\n`, "utf8");
 }

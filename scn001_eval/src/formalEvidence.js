@@ -252,6 +252,23 @@ export function anchorReceiptSigningBytes(receiptHeader) {
   );
 }
 
+export function freshStartAttestationSigningBytes(attestationHeader) {
+  assertExactKeys(attestationHeader, [
+    "schema_id", "schema_revision", "algorithm", "key_id", "signed_payload"
+  ], [], "fresh-start attestation signed header");
+  if (attestationHeader.schema_id !== "zoey.external-fresh-start-attestation"
+    || attestationHeader.schema_revision !== 1
+    || attestationHeader.algorithm !== "Ed25519") {
+    throw new Error("Fresh-start attestation uses an unsupported schema or algorithm.");
+  }
+  assertOpaqueId(attestationHeader.key_id, "fresh-start attestation key_id");
+  validateFreshStartSignedPayload(attestationHeader.signed_payload);
+  return Buffer.from(
+    `zoey:external-fresh-start-attestation:v1\n${canonicalizeJson(attestationHeader)}`,
+    "utf8"
+  );
+}
+
 export async function captureAuthenticatedAnchorReceipt(store, input) {
   assertExactKeys(input, [
     "artifact_id", "raw_receipt_bytes", "anchor_requirement", "public_key",
@@ -306,6 +323,30 @@ export async function verifyAuthenticatedAnchorReceipt(
   return stored;
 }
 
+export async function verifyAuthenticatedFreshStartProof(
+  store, artifact, anchorRequirement, publicKey, expected
+) {
+  const stored = await verifyDurableEvidence(store, artifact);
+  const raw = await store.readRawBytes(stored.identity_payload.raw_custody);
+  const document = parseAndAuthenticateFreshStart(raw, anchorRequirement, publicKey);
+  assertExactKeys(expected, [
+    "authorization_ref", "namespace_index_ref", "anchor_receipt_ref", "slot_id",
+    "attempt_id", "path_id", "run_scope_id"
+  ], [], "authenticated fresh-start expectation");
+  const signed = document.signed_payload;
+  for (const [field, expectedValue] of Object.entries(expected)) {
+    if (canonicalizeJson(signed[field]) !== canonicalizeJson(expectedValue)) {
+      throw new Error(`Authenticated fresh-start attestation conflicts on ${field}.`);
+    }
+  }
+  const semantics = freshStartSemanticsFrom(signed, raw);
+  if (canonicalizeJson(semantics) !== canonicalizeJson(stored.identity_payload.semantic_envelope)
+    || signed.producer_identity !== stored.identity_payload.producer_identity) {
+    throw new Error("Fresh-start proof semantics were not derived from authenticated bytes.");
+  }
+  return stored;
+}
+
 export function createFormalEvidenceRecorder(input) {
   assertExactKeys(input, [
     "store", "authority_subject_ref", "campaign_authorization_ref", "attempt_id",
@@ -334,6 +375,74 @@ export function createFormalEvidenceRecorder(input) {
   const proofRoles = [];
 
   return Object.freeze({
+    async captureAuthenticatedFreshStart(attestationInput) {
+      if (poisoned) throw new Error("Formal evidence recorder is terminal after a failed capture.");
+      if (busy) {
+        poisoned = true;
+        throw new Error("Formal evidence recorder rejects concurrent chronology mutation.");
+      }
+      busy = true;
+      try {
+        assertExactKeys(attestationInput, [
+          "artifact_id", "raw_attestation_bytes", "anchor_requirement", "public_key",
+          "namespace_index_ref", "anchor_receipt_ref", "slot_id", "run_scope_id", "sealed_at"
+        ], [], "authenticated fresh-start capture input");
+        assertRecorderProofTransition(
+          input.attempt_id, proofRoles, "FRESH_START_PROOF",
+          runtimeCaptureObserved, materialOutputObserved
+        );
+        if (input.attempt_id === null || input.campaign_authorization_ref === null) {
+          throw new Error("Authenticated fresh-start capture requires an attempt recorder.");
+        }
+        const raw = toBuffer(attestationInput.raw_attestation_bytes);
+        const document = parseAndAuthenticateFreshStart(
+          raw, attestationInput.anchor_requirement, attestationInput.public_key
+        );
+        const signed = document.signed_payload;
+        const expectations = {
+          authorization_ref: input.campaign_authorization_ref,
+          namespace_index_ref: attestationInput.namespace_index_ref,
+          anchor_receipt_ref: attestationInput.anchor_receipt_ref,
+          slot_id: attestationInput.slot_id,
+          attempt_id: input.attempt_id,
+          path_id: input.path_id,
+          run_scope_id: attestationInput.run_scope_id
+        };
+        for (const [field, expected] of Object.entries(expectations)) {
+          if (canonicalizeJson(signed[field]) !== canonicalizeJson(expected)) {
+            throw new Error(`Fresh-start signed payload conflicts on ${field}.`);
+          }
+        }
+        const createdOrder = eventOrder + 1;
+        const artifact = await captureFormalEvidence(input.store, {
+          artifact_id: attestationInput.artifact_id,
+          evidence_kind: "EVALUATOR_PRIVATE_CAPTURE",
+          authority_subject_ref: input.authority_subject_ref,
+          campaign_authorization_ref: input.campaign_authorization_ref,
+          attempt_id: input.attempt_id,
+          path_id: input.path_id,
+          visibility: "EVALUATOR_PRIVATE",
+          media_type: "application/json",
+          encoding: "utf-8",
+          raw_bytes: raw,
+          semantic_envelope: freshStartSemanticsFrom(signed, raw),
+          created_order: createdOrder,
+          delivered_order: null,
+          producer_identity: signed.producer_identity,
+          validator_identity: input.validator_identity,
+          sealed_at: attestationInput.sealed_at
+        });
+        eventOrder = createdOrder;
+        proofRoles.push("FRESH_START_PROOF");
+        return artifact;
+      } catch (error) {
+        poisoned = true;
+        throw error;
+      } finally {
+        busy = false;
+      }
+    },
+
     async captureControlProof(proofInput) {
       if (poisoned) throw new Error("Formal evidence recorder is terminal after a failed capture.");
       if (busy) {
@@ -460,7 +569,10 @@ export async function replayTypedControlProof(store, artifact) {
     throw new Error("Typed control-proof replay requires evaluator-private evidence.");
   }
   const raw = await store.readRawBytes(stored.identity_payload.raw_custody);
-  const proof = parseCanonicalJsonBytes(raw, "typed control proof");
+  const parsed = parseCanonicalJsonBytes(raw, "typed control proof");
+  const proof = parsed.schema_id === "zoey.external-fresh-start-attestation"
+    ? controlProofFromFreshStartAttestation(parsed, stored)
+    : parsed;
   validateControlProofDocument(proof);
   const payload = stored.identity_payload;
   if (canonicalizeJson(proof.authority_subject_ref)
@@ -1107,6 +1219,21 @@ async function resolveDurableExecutionAuthorityInternal(input, requireCurrentHea
     input.anchor_public_key
   );
   await verifyTypedControlProof(input.store, input.fresh_start_capture);
+  await verifyAuthenticatedFreshStartProof(
+    input.store,
+    input.fresh_start_capture,
+    authorization.anchor_requirement,
+    input.anchor_public_key,
+    {
+      authorization_ref: authorizationRef,
+      namespace_index_ref: namespaceRef,
+      anchor_receipt_ref: receiptRef,
+      slot_id: input.preflight.slot.slot_id,
+      attempt_id: input.preflight.slot.attempt_id,
+      path_id: input.preflight.slot.path_id,
+      run_scope_id: input.preflight.fresh_start_proof.run_scope_id
+    }
+  );
   const receiptSemantics = input.anchor_receipt.identity_payload.semantic_envelope;
   const startSemantics = input.fresh_start_capture.identity_payload.semantic_envelope;
   if (input.anchor_receipt.identity_payload.evidence_kind !== "ANCHOR_RECEIPT"
@@ -1136,6 +1263,7 @@ async function resolveDurableExecutionAuthorityInternal(input, requireCurrentHea
     || startSemantics.observed_by !== input.preflight.fresh_start_proof.observed_by
     || startSemantics.anchor_event_id !== receiptSemantics.external_event_id
     || startSemantics.start_event_id !== input.preflight.fresh_start_proof.start_event_id
+    || startSemantics.run_scope_id !== input.preflight.fresh_start_proof.run_scope_id
     || startSemantics.capture_binding_digest
       !== input.preflight.fresh_start_proof.capture_binding_digest
     || input.fresh_start_capture.identity_payload.attempt_id
@@ -1481,11 +1609,12 @@ function validateEvidenceSemantics(payload) {
     }
     assertExactKeys(payload.semantic_envelope, [
       "capture_role", "profile", "slot_id", "challenge", "issued_by", "observed_by",
-      "anchor_event_id", "start_event_id", "capture_binding_digest"
+      "anchor_event_id", "start_event_id", "run_scope_id", "capture_binding_digest"
     ], [], "fresh-start capture semantics");
     assertNonemptyString(payload.semantic_envelope.profile, "fresh-start capture profile");
     for (const field of [
-      "slot_id", "challenge", "issued_by", "observed_by", "anchor_event_id", "start_event_id"
+      "slot_id", "challenge", "issued_by", "observed_by", "anchor_event_id", "start_event_id",
+      "run_scope_id"
     ]) assertOpaqueId(payload.semantic_envelope[field], `fresh-start capture ${field}`);
     assertSha256(
       payload.semantic_envelope.capture_binding_digest,
@@ -1621,6 +1750,81 @@ function parseAndAuthenticateAnchorReceipt(rawBytes, anchorRequirement, publicKe
   return document;
 }
 
+function parseAndAuthenticateFreshStart(rawBytes, anchorRequirement, publicKey) {
+  const raw = toBuffer(rawBytes);
+  const document = parseCanonicalJsonBytes(raw, "authenticated fresh-start attestation");
+  assertExactKeys(document, [
+    "schema_id", "schema_revision", "algorithm", "key_id", "signed_payload", "signature"
+  ], [], "authenticated fresh-start attestation");
+  const header = {
+    schema_id: document.schema_id,
+    schema_revision: document.schema_revision,
+    algorithm: document.algorithm,
+    key_id: document.key_id,
+    signed_payload: structuredClone(document.signed_payload)
+  };
+  const policy = anchorRequirement.receipt_authentication;
+  if (document.algorithm !== policy.algorithm || document.key_id !== policy.key_id
+    || anchorPublicKeyFingerprint(publicKey) !== policy.public_key_fingerprint) {
+    throw new Error("Fresh-start verifier does not match the owner-pinned authentication policy.");
+  }
+  if (typeof document.signature !== "string"
+    || !/^[A-Za-z0-9+/]+={0,2}$/.test(document.signature)) {
+    throw new Error("Fresh-start attestation signature encoding is invalid.");
+  }
+  const signature = Buffer.from(document.signature, "base64");
+  if (signature.toString("base64") !== document.signature
+    || !verifySignature(null, freshStartAttestationSigningBytes(header), publicKey, signature)) {
+    throw new Error("Fresh-start attestation signature authentication failed.");
+  }
+  if (document.signed_payload.profile !== anchorRequirement.fresh_start_profile) {
+    throw new Error("Authenticated fresh-start profile conflicts with anchor policy.");
+  }
+  return document;
+}
+
+function validateFreshStartSignedPayload(payload) {
+  assertExactKeys(payload, [
+    "profile", "authorization_ref", "namespace_index_ref", "anchor_receipt_ref",
+    "slot_id", "attempt_id", "path_id", "challenge", "issued_by", "observed_by",
+    "anchor_event_id", "start_event_id", "run_scope_id", "producer_identity", "issued_at"
+  ], [], "fresh-start signed payload");
+  validateExactArtifactReference(payload.authorization_ref, {
+    allowedKinds: ["CAMPAIGN_AUTHORIZATION"]
+  });
+  validateExactArtifactReference(payload.namespace_index_ref, {
+    allowedKinds: ["AUTHORITY_NAMESPACE_INDEX"]
+  });
+  validateExactArtifactReference(payload.anchor_receipt_ref, {
+    allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT"]
+  });
+  for (const field of [
+    "profile", "slot_id", "attempt_id", "path_id", "challenge", "issued_by",
+    "observed_by", "anchor_event_id", "start_event_id", "run_scope_id", "producer_identity"
+  ]) assertOpaqueId(payload[field], `fresh-start signed payload.${field}`);
+  if (!REQUIRED_PATHS.includes(payload.path_id)
+    || payload.anchor_event_id === payload.start_event_id) {
+    throw new Error("Fresh-start signed path or causal event closure is invalid.");
+  }
+  validateCreated(payload.issued_at, payload.producer_identity);
+}
+
+function freshStartSemanticsFrom(payload, rawBytes) {
+  validateFreshStartSignedPayload(payload);
+  return {
+    capture_role: "FRESH_START_PROOF",
+    profile: payload.profile,
+    slot_id: payload.slot_id,
+    challenge: payload.challenge,
+    issued_by: payload.issued_by,
+    observed_by: payload.observed_by,
+    anchor_event_id: payload.anchor_event_id,
+    start_event_id: payload.start_event_id,
+    run_scope_id: payload.run_scope_id,
+    capture_binding_digest: sha256Bytes(toBuffer(rawBytes))
+  };
+}
+
 function validateAnchorReceiptSignedPayload(payload) {
   assertExactKeys(payload, [
     "profile", "authority_subject_ref", "namespace_index_ref", "external_commit_sha",
@@ -1674,6 +1878,34 @@ function buildControlProofDocument(recorder, input, eventId) {
   };
   validateControlProofDocument(proof);
   return proof;
+}
+
+function controlProofFromFreshStartAttestation(document, artifact) {
+  assertExactKeys(document, [
+    "schema_id", "schema_revision", "algorithm", "key_id", "signed_payload", "signature"
+  ], [], "external fresh-start proof document");
+  validateFreshStartSignedPayload(document.signed_payload);
+  const signed = document.signed_payload;
+  return {
+    schema_id: "zoey.formal-control-proof",
+    schema_revision: 1,
+    proof_role: "FRESH_START_PROOF",
+    authority_subject_ref: structuredClone(artifact.identity_payload.authority_subject_ref),
+    campaign_authorization_ref: structuredClone(signed.authorization_ref),
+    attempt_id: signed.attempt_id,
+    path_id: signed.path_id,
+    event_id: signed.start_event_id,
+    proposition: {
+      profile: signed.profile,
+      slot_id: signed.slot_id,
+      challenge: signed.challenge,
+      issued_by: signed.issued_by,
+      observed_by: signed.observed_by,
+      anchor_event_id: signed.anchor_event_id,
+      start_event_id: signed.start_event_id,
+      run_scope_id: signed.run_scope_id
+    }
+  };
 }
 
 function assertRecorderProofTransition(
@@ -1795,12 +2027,13 @@ function validateValidationAttestationProposition(value) {
 function validateFreshStartProposition(value, proof) {
   assertExactKeys(value, [
     "profile", "slot_id", "challenge", "issued_by", "observed_by", "anchor_event_id",
-    "start_event_id"
+    "start_event_id", "run_scope_id"
   ], [], "fresh-start proposition");
   if (proof.attempt_id === null) throw new Error("Fresh-start proof must be attempt-bound.");
   assertNonemptyString(value.profile, "fresh-start profile");
   for (const field of [
-    "slot_id", "challenge", "issued_by", "observed_by", "anchor_event_id", "start_event_id"
+    "slot_id", "challenge", "issued_by", "observed_by", "anchor_event_id", "start_event_id",
+    "run_scope_id"
   ]) assertOpaqueId(value[field], `fresh-start proposition.${field}`);
   if (value.anchor_event_id === value.start_event_id) {
     throw new Error("Fresh-start proof cannot reuse its anchor event as start.");

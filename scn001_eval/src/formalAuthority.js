@@ -1251,7 +1251,7 @@ function validateAnchorVerification(value, authorization, namespaceRef, receiptR
 function validateFreshStartProof(value, anchorRequirement, verification, slotId) {
   assertExactKeys(value, [
     "profile", "slot_id", "challenge", "issued_by", "observed_by", "anchor_event_id",
-    "start_event_id", "capture_binding_digest", "verification_result"
+    "start_event_id", "run_scope_id", "capture_binding_digest", "verification_result"
   ], [], "fresh-start proof");
   if (value.profile !== anchorRequirement.fresh_start_profile
     || value.slot_id !== slotId
@@ -1266,6 +1266,7 @@ function validateFreshStartProof(value, anchorRequirement, verification, slotId)
   assertOpaqueId(value.issued_by, "fresh-start proof.issued_by");
   assertOpaqueId(value.observed_by, "fresh-start proof.observed_by");
   assertOpaqueId(value.start_event_id, "fresh-start proof.start_event_id");
+  assertOpaqueId(value.run_scope_id, "fresh-start proof.run_scope_id");
   assertSha256(value.capture_binding_digest, "fresh-start proof.capture_binding_digest");
 }
 

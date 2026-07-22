@@ -175,8 +175,8 @@ Durable repository extraction remains blocked by `REPO-001`.
 
 `PHASE7_READINESS.md` records the completed start approval and the later blocked
 independent review. Phase 7 currently has a substantial mechanism layer, but its
-trusted derivation/execution/custody pipeline remains open; no formal campaign
-authority or implementation-complete status is claimed.
+trusted qualification and bounded-campaign pipeline remains open; no formal
+campaign authority or implementation-complete status is claimed.
 
 The current corrective implementation adds clean-commit configuration
 measurement and a non-public trusted authorization path that reconstructs both
@@ -186,12 +186,15 @@ test assumptions, and conflicting in-memory artifact identities. This measured-
 configuration component alone is not a formal runner or permission to execute
 a campaign.
 
-An internal corrective runner now executes the exact four-path fixture flow and
+An internal corrective runner executes the exact four-path fixture flow and
 derives path/claim outcomes from evaluator-private checkpoint reconstruction;
 callers cannot supply validity, invariant, or obligation classifications. It
-also owns a monotonic event transcript containing delivered fixture material
-and post-event inspections. This is an unsealed execution/oracle core only. It
-is not exported by the package root, is not durable formal evidence, and cannot
+also owns the event transcript containing delivered fixture material and post-
+event inspections. A new internal attempt pipeline binds a signed post-anchor
+fresh-start attestation to the exact recorder-owned run scope, converts that
+transcript into byte-exact typed custody, derives failure findings from captured
+inspections, and either seals the resulting formal run or retains an interrupted
+attempt without scoring it. It is not exported by the package root and cannot
 start or authorize a real campaign by itself.
 
 The evidence-trust corrective layer now pins an Ed25519 verifier in the
@@ -200,7 +203,7 @@ bytes, re-authenticates namespace predecessor receipts, assigns attempt
 chronology inside one fail-closed recorder, and stores role-specific control
 propositions as canonical replayable bytes. Formal run replay rejects
 label-only proofs and checks initial-state/isolation and prospective-selection
-relations. These are still internal synthetic mechanisms: the four-path runner
-has not yet been connected to durable capture and formal sealing, qualification
-comparisons are not yet execution-derived, and no project anchor key, external
-event, campaign, or result has been designated.
+relations. These remain internal synthetic mechanisms: qualification comparisons
+are not yet execution-derived, bounded multi-attempt campaign orchestration is
+not yet closed, and no project anchor key, external event, campaign, or result
+has been designated.

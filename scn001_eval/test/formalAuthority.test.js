@@ -563,6 +563,7 @@ function executionStartInput(authorization) {
       observed_by: "actor:external-gate",
       anchor_event_id: "event:protected-gate:001",
       start_event_id: "event:attempt-start:001",
+      run_scope_id: "run-scope:attempt-start:001",
       capture_binding_digest: digest("a"),
       verification_result: "VERIFIED"
     }
