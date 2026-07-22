@@ -174,9 +174,10 @@ milestone acceptance, broader `SCN-001` acceptance, or production readiness.
 Durable repository extraction remains blocked by `REPO-001`.
 
 `PHASE7_READINESS.md` records the completed start approval and the later blocked
-independent review. Phase 7 currently has a substantial mechanism layer, but its
-trusted bounded-campaign pipeline remains open; no formal
-campaign authority or implementation-complete status is claimed.
+independent review. The internal Phase 7 implementation pipeline is now complete
+through bounded-result creation, but formal reliance remains blocked pending
+fresh exact-commit independent review, protected integration, and real external
+project-owner authority. No real campaign authority is claimed.
 
 The current corrective implementation adds clean-commit configuration
 measurement and a non-public trusted authorization path that reconstructs both
@@ -207,5 +208,6 @@ relations. The deterministic-qualification runner now executes every planned
 pair, retains exact oracle and normalized comparator material, and derives
 `QUALIFIED`, `NOT_QUALIFIED`, or `INCONCLUSIVE` without a result input. These
 remain internal synthetic mechanisms: bounded multi-attempt campaign
-orchestration is not yet closed, and no project anchor key, external event,
-campaign, or result has been designated.
+orchestration now creates a bounded result but deliberately leaves it pending an
+external owner standing decision. No project anchor key, external event, real
+campaign, authoritative standing, or claim has been designated.

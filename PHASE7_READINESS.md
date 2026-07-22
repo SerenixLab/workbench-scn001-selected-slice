@@ -233,6 +233,32 @@ external events, protected integration, and fresh exact-commit independent
 review remain open, so the prior `BLOCKED` disposition and four
 `applicable / uncovered` controls remain unchanged.
 
+## Phase 7 Bounded-Campaign Runner Corrective Addendum
+
+Corrective date: 2026-07-22.
+
+The internal campaign runner consumes only the prospectively authorized primary
+slots and invokes the trusted attempt pipeline for each one. The qualified branch
+executes four runs; the conservative branch executes all twelve. It derives the
+complete attempt inventory, freezes the durable campaign index, creates the
+exact successor namespace, requires an externally signed receipt over that
+namespace, and independently creates the bounded result. Caller inputs cannot
+provide attempt outcomes, aggregate classifications, or owner standing.
+
+Both run-count branches derive `BOUNDED_PASS` from actual complete conjunctive
+execution in regression tests. The returned state is always
+`RESULT_PENDING_OWNER_STANDING`, with `claim_authorized: false`; a real `CURRENT`
+standing still requires its separate independent reviewer and project-owner act
+and later result-indexing namespace. The aggregate local gate passes 477 tests.
+
+This closes the internal Phase 7 implementation pipeline at
+`PHASE7_IMPLEMENTATION_COMPLETE_EXTERNAL_CLOSURE_PENDING`. All current artifacts
+remain synthetic and non-promotable. Fresh exact-commit independent review,
+protected required-check verification/integration, project-owner key/effective
+namespace designation, real external events, and the human standing decision
+remain mandatory before formal reliance or any bounded claim. The four controls
+remain `applicable / uncovered` until those external closures are recorded.
+
 ## First Phase 7 Change Requirements
 
 Before or in the same change that first implements a governed Phase 7 artifact:
