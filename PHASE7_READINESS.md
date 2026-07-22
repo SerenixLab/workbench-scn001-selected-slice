@@ -126,6 +126,26 @@ recorder-owned chronology, authenticated external anchoring, or semantic replay
 from raw captures. It must pass the complete gate and fresh independent review
 before its mechanisms receive formal reliance.
 
+The next corrective increment adds a non-public formal-execution/oracle core.
+It creates the SUT public boundary internally, executes all four accepted paths
+from exact evaluator-owned fixture material, records a monotonic event sequence
+with the delivered material and post-event inspection snapshot, and derives the
+five-class obligation vector without accepting caller outcome fields. It
+includes the declared initialized history and current resume assertions,
+separate temporal and scoped-comparison predicates, same-run counterfactual
+prefixes, hard-failure branches for unsupported equal-calibration activation
+and drill-scope misuse, and downstream `NOT_REACHED` derivation. A missing SUT
+material output regression becomes an evaluator-derived obligation failure
+rather than a caller-selected result. The work also corrects checkpoint replay
+so a mixed initial ingestion may carry its exact fixture-initialized assertion
+results without being falsely rejected or accepting extra initialized results.
+
+This execution/oracle core is still `REVIEW_PENDING` and is deliberately absent
+from the package root. Its transcript is not yet converted into typed durable
+evidence or a sealed formal run, and it does not authenticate an external start,
+derive proposition-specific control proofs, or retain an interrupted attempt.
+The authoritative Phase 7 status therefore remains unchanged.
+
 ## First Phase 7 Change Requirements
 
 Before or in the same change that first implements a governed Phase 7 artifact:

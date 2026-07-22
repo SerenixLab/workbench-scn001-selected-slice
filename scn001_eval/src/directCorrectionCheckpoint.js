@@ -837,13 +837,43 @@ export function validateBoundFact(snapshot, evidence, fact, origin) {
   const interaction = records.get(fact.firstInteractionRef);
   const ingestion = uniqueCreator(snapshot, interaction, `${fact.role} ingestion`);
   const actor = records.get(fact.sourceActorRef);
+  const initializedAssertions = snapshot.records.filter((record) => (
+    record.family === "attributed_assertion"
+      && record.statusOrigin === "fixture_initialized"
+      && record.createdByTransitionRef === ingestion?.reference
+  )).sort((left, right) => left.createdOrder - right.createdOrder);
+  const initializedCommunications = interaction?.inputReferences.map(
+    (reference) => records.get(reference)
+  ).filter((record) => (
+    record?.family === "input_fact"
+      && record.role === "communication"
+      && record.payload?.semanticStatusOrigin === "fixture_initialized"
+  )) ?? [];
+  const initializedClosureIsExact = initializedAssertions.length
+    === initializedCommunications.length && initializedCommunications.every((communication) => (
+    initializedAssertions.some((assertion) => (
+      hasExactKeys(assertion, ATTRIBUTION_KEYS)
+        && assertion.origin === "fixture"
+        && assertion.sourceCommunicationRef === communication.reference
+        && assertion.sourceActorRef === communication.sourceActorRef
+        && assertion.context === communication.payload.context
+        && assertion.occurrenceOrder === communication.payload.occurrenceOrder
+        && assertion.epistemicStatus === "attributed_user_assertion"
+        && assertion.statusOrigin === "fixture_initialized"
+        && assertion.interactionRef === interaction.reference
+        && assertion.createdByTransitionRef === ingestion.reference
+        && communication.createdOrder < assertion.createdOrder
+        && assertion.createdOrder < interaction.createdOrder
+    ))
+  ));
   const sources = snapshot.relations.filter((relation) => (
     relation.fromRef === fact.reference && relation.relationKind === "source"
   ));
   const bases = snapshot.relations.filter((relation) => (
     relation.fromRef === ingestion.reference && relation.relationKind === "basis"
   ));
-  if (matches[0].firstIngestionTransitionRef !== interaction?.createdByTransitionRef
+  if (!initializedClosureIsExact
+    || matches[0].firstIngestionTransitionRef !== interaction?.createdByTransitionRef
     || matches[0].firstIngestionTransitionRef !== ingestion.reference
     || actor?.family !== "semantic_source" || actor.origin !== origin
     || actor.sourceActor !== fact.payload.sourceActor
@@ -860,7 +890,9 @@ export function validateBoundFact(snapshot, evidence, fact, origin) {
     || ingestion.interactionRef !== interaction.reference
     || interaction.createdByTransitionRef !== ingestion.reference
     || JSON.stringify(ingestion.inputReferences) !== JSON.stringify(interaction.inputReferences)
-    || JSON.stringify(ingestion.resultReferences) !== JSON.stringify([interaction.reference])
+    || JSON.stringify(ingestion.resultReferences) !== JSON.stringify([
+      interaction.reference, ...initializedAssertions.map((assertion) => assertion.reference)
+    ])
     || ingestion.result !== "accepted"
     || bases.length !== interaction.inputReferences.length
     || interaction.inputReferences.some((reference) => (

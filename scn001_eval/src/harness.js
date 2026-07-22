@@ -165,6 +165,10 @@ export function createEvaluationHarness(sutBoundary, ...extraArguments) {
   return createHarnessForMechanismTests(sutBoundary);
 }
 
+export function createHarnessForFormalRunner(sutBoundary) {
+  return createHarnessForMechanismTests(sutBoundary, { formalOracleProjection: true });
+}
+
 export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
   assertPublicBoundary(sutBoundary);
   const renderOutput = dependencies.renderOutput ?? realizeAvailableOutput;
@@ -175,7 +179,7 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
   const runSourceBindings = new Map();
   const runTransport = new Map();
 
-  return Object.freeze({
+  const api = {
     startRun() {
       const runRef = sutBoundary.startRun();
       runSourceFactReferences.set(runRef, new Map());
@@ -581,7 +585,11 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
     captureInspectionSnapshot(runRef) {
       return sutBoundary.captureInspectionSnapshot(runRef);
     }
-  });
+  };
+  if (dependencies.formalOracleProjection === true) {
+    api.captureFormalOracleProjection = (runRef) => formalOracleProjection(runRef);
+  }
+  return Object.freeze(api);
 
   function sourceFactReferenceForRun(runRef) {
       const sourceReferences = runSourceFactReferences.get(runRef);
@@ -606,6 +614,52 @@ export function createHarnessForMechanismTests(sutBoundary, dependencies = {}) {
       simulatorFactRef: entry.simulatorFactRef,
       record: structuredClone(entry.record)
     }));
+  }
+
+  function formalOracleProjection(runRef) {
+    const snapshot = sutBoundary.captureInspectionSnapshot(runRef);
+    const sourceBindings = sourceBindingEvidenceForRun(runRef);
+    const simulatorRouting = simulatorRoutingEvidenceForRun(runRef);
+    const activeProduction = findExactActiveProductionTrial(snapshot, sourceBindings);
+    const direct = findExactDirectCorrectionRealization(snapshot, sourceBindings);
+    const delayedCandidate = findExactDelayedCorrectionCandidate(snapshot, sourceBindings);
+    const delayedActive = findExactActiveDelayedCorrectionTrial(snapshot, sourceBindings);
+    const canonicalLater = findExactLaterUse(
+      snapshot, sourceBindings, "canonical_spontaneous_later_use"
+    );
+    const drillOptIn = findExactLaterUse(
+      snapshot, sourceBindings, "drill_opt_in_counterfactual"
+    );
+    const laterRealization = findExactLaterRealization(snapshot, sourceBindings);
+    const canonicalIntervention = findExactCanonicalIntervention(
+      snapshot, sourceBindings, simulatorRouting
+    );
+    const laterOutcome = findExactLaterOutcome(snapshot, sourceBindings, simulatorRouting);
+    const explanation = findExactExplanation(snapshot, sourceBindings, simulatorRouting);
+    const focusedRealizations = !activeProduction ? [] : findEligibleFocusedDrillRealizations(
+      sutBoundary, runRef, runTransport.get(runRef), sourceBindings
+    );
+    return deepFreeze({
+      snapshot,
+      simulator_routing: simulatorRouting,
+      temporal_assessments: snapshot.records.filter(
+        (record) => record.family === "temporal_eligibility_assessment"
+      ),
+      checkpoints: {
+        production_active: Boolean(activeProduction),
+        proposal_realized: Boolean(activeProduction),
+        focused_drill_realized: focusedRealizations.length === 1,
+        direct_correction_realized: Boolean(direct),
+        delayed_candidate: Boolean(delayedCandidate),
+        delayed_active: Boolean(delayedActive),
+        canonical_later_disposition: Boolean(canonicalLater),
+        drill_opt_in_disposition: Boolean(drillOptIn),
+        later_realization: Boolean(laterRealization),
+        canonical_intervention: Boolean(canonicalIntervention),
+        later_outcome: Boolean(laterOutcome),
+        explanation: Boolean(explanation)
+      }
+    });
   }
 
   function deliverProjectedFixtureRecords(runRef, fixtureRecords) {
