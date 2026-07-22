@@ -1,6 +1,6 @@
 # Phase 7 Readiness Record
 
-Status: `PHASE7_IMPLEMENTATION_COMPLETE_LOCAL_REVIEW_PENDING`
+Status: `PHASE7_MECHANISM_LAYER_COMPLETE_PIPELINE_CLOSURE_PENDING`
 
 Date: 2026-07-21
 
@@ -90,10 +90,20 @@ All Phase 7 objects in tests are synthetic; no effective real campaign
 namespace, external anchor, formal execution, bounded result, or standing
 decision has been created.
 
-The complete local gate passes 453 tests. Phase 7 implementation is therefore
-locally complete at the mechanism/test/documentation level. Fresh independent
-review of the final exact commit remains required before formal reliance; this
-status is not campaign readiness or permission to create a formal claim.
+The implementation task reported a complete local gate with 453 passing tests.
+A later independent red-team review of exact range `e6e1dc1..28c9ad0` returned
+`BLOCKED`: the artifact grammar and authority graph are substantial, but trusted
+manifest measurement, qualification comparison, formal oracle derivation,
+invalidity-predicate replay, role-specific proof derivation, authenticated
+external authority, globally unique artifact identity, hardened custody, and a
+bounded formal runner are not yet closed. The four Phase 7 conformance controls
+remain `applicable / uncovered`. This status is not campaign readiness or
+permission to create a formal claim.
+
+The first corrective increment closes the discovered open invalidity-code
+catalogue, rejects same-kind/same-ID conflicting fingerprints in durable
+custody, and rejects symlinked custody parents. Those fixes do not by themselves
+close the trusted production pipeline.
 
 ## First Phase 7 Change Requirements
 

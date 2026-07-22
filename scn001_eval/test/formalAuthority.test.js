@@ -362,6 +362,19 @@ test("run invalidity remains immutable and replacement allocation enforces stop 
     () => createInitialRunInvalidityDecision(unsupportedReason),
     /pre-registered reason code/
   );
+
+  const catalogueAlias = invalidityInput(
+    authorization,
+    "artifact:invalidity:catalogue-alias",
+    "artifact:run-record:invalid:catalogue-alias",
+    "attempt:primary:01:1",
+    REQUIRED_PATHS[0],
+    "SCN001-SSFO-V0.2.0-VAL-999"
+  );
+  assert.throws(
+    () => createInitialRunInvalidityDecision(catalogueAlias),
+    /pre-registered reason code/
+  );
 });
 
 test("material authority changes require distinct review and project-owner acceptance", () => {

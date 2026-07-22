@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -12,6 +12,7 @@ import {
 } from "../src/configurationIdentity.js";
 import {
   ARTIFACT_HASH_DOMAIN,
+  createCanonicalArtifact,
   createExactArtifactReference,
   fingerprintCanonicalJson
 } from "../src/formalArtifactIdentity.js";
@@ -55,6 +56,40 @@ test("content-addressed custody preserves exact bytes and rejects reconstructed 
   await assert.rejects(
     () => store.readRawBytes({ ...custody, relative_path: "../escaped.bin" }),
     /normalized content-addressed relative path/
+  );
+});
+
+test("custody rejects symlinked parents and conflicting global artifact identities", async () => {
+  const parent = await mkdtemp(join(tmpdir(), "zoey-formal-evidence-hostile-"));
+  const root = join(parent, "store");
+  const outside = join(parent, "outside");
+  await mkdir(root);
+  await mkdir(outside);
+  await symlink(outside, join(root, "raw"), "dir");
+  const hostileStore = createContentAddressedArtifactStore(root);
+  await assert.rejects(
+    () => hostileStore.writeRawBytes(Buffer.from("must remain inside custody")),
+    /real directory|symlink/
+  );
+
+  const store = await temporaryStore();
+  const fixture = createFormalAuthorityFixture();
+  const original = fixture.qualificationPlan;
+  const conflictingPayload = structuredClone(original.identity_payload);
+  conflictingPayload.created_at = "2026-07-21T12:00:01Z";
+  const conflicting = createCanonicalArtifact({
+    artifact_id: original.artifact_id,
+    artifact_kind: original.artifact_kind,
+    identity_payload: conflictingPayload
+  });
+  const validator = (artifact) => validateQualificationPlan(artifact, {
+    behaviorManifest: fixture.behaviorManifest,
+    evaluationManifest: fixture.evaluationManifest
+  });
+  await store.writeArtifact(original, validator);
+  await assert.rejects(
+    () => store.writeArtifact(conflicting, validator),
+    /Artifact identity conflict/
   );
 });
 

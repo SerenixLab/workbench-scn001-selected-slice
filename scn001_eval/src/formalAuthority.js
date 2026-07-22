@@ -60,6 +60,10 @@ const MATERIAL_AUTHORITY_DECISIONS = Object.freeze([
   "CAMPAIGN_SUPERSESSION",
   "NAMESPACE_RECONCILIATION"
 ]);
+const RUN_INVALIDITY_REASON_CODES = Object.freeze(Array.from(
+  { length: 10 },
+  (_, index) => `SCN001-SSFO-V0.2.0-VAL-${String(index + 1).padStart(3, "0")}`
+));
 
 export function createQualificationPlan(input) {
   assertExactKeys(input, [
@@ -590,7 +594,7 @@ export function createInitialRunInvalidityDecision(input) {
     throw new Error("Run invalidity does not bind its exact attempt allocation.");
   }
   if (!REQUIRED_PATHS.includes(input.path_id)
-    || !/^SCN001-SSFO-V0\.2\.0-VAL-[0-9]{3}$/.test(input.reason_code)) {
+    || !RUN_INVALIDITY_REASON_CODES.includes(input.reason_code)) {
     throw new Error("Run-invalidity path or pre-registered reason code is invalid.");
   }
   validateEvidenceReferences(input.basis_evidence_refs, "run-invalidity basis_evidence_refs");
@@ -670,7 +674,7 @@ export function validateInitialRunInvalidityDecision(decision, authorization) {
   }
   if (!REQUIRED_PATHS.includes(payload.path_id)
     || payload.run_validity !== "INVALID_UNSCORABLE"
-    || !/^SCN001-SSFO-V0\.2\.0-VAL-[0-9]{3}$/.test(payload.reason_code)) {
+    || !RUN_INVALIDITY_REASON_CODES.includes(payload.reason_code)) {
     throw new Error("Initial run-invalidity classification is invalid.");
   }
   validateEvidenceReferences(payload.basis_evidence_refs, "run-invalidity basis_evidence_refs");

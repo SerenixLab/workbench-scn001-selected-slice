@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { constants, realpathSync } from "node:fs";
+import { lstat, mkdir, open, readFile, readdir, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import {
@@ -55,7 +56,7 @@ const ATTEMPT_DISPOSITIONS = Object.freeze([
 ]);
 
 export function createContentAddressedArtifactStore(rootDirectory) {
-  const root = resolve(rootDirectory);
+  const root = realpathSync(resolve(rootDirectory));
   return Object.freeze({
     root,
 
@@ -63,7 +64,7 @@ export function createContentAddressedArtifactStore(rootDirectory) {
       const buffer = toBuffer(bytes);
       const byteDigest = sha256Bytes(buffer);
       const relativePath = join("raw", `${byteDigest.slice("sha256:".length)}.bin`);
-      await writeImmutable(join(root, relativePath), buffer);
+      await writeImmutable(root, join(root, relativePath), buffer);
       return deepFreeze({
         custody_kind: "CONTENT_ADDRESSED_FILE",
         relative_path: relativePath,
@@ -86,22 +87,25 @@ export function createContentAddressedArtifactStore(rootDirectory) {
     async writeArtifact(artifact, typedValidator) {
       await typedValidator(artifact);
       const reference = createExactArtifactReference(artifact);
+      await claimArtifactIdentity(root, reference);
       const relativePath = artifactRelativePath(reference);
       const bytes = Buffer.from(`${canonicalizeJson(artifact)}\n`, "utf8");
-      await writeImmutable(join(root, relativePath), bytes);
+      await writeImmutable(root, join(root, relativePath), bytes);
       return reference;
     },
 
     async writeConfigurationManifest(manifest, typedValidator) {
       await typedValidator(manifest);
       const reference = createConfigurationManifestReference(manifest);
+      await claimArtifactIdentity(root, reference);
       const bytes = Buffer.from(`${canonicalizeJson(manifest)}\n`, "utf8");
-      await writeImmutable(join(root, artifactRelativePath(reference)), bytes);
+      await writeImmutable(root, join(root, artifactRelativePath(reference)), bytes);
       return reference;
     },
 
     async readArtifact(reference, typedValidator) {
       validateExactArtifactReference(reference);
+      await verifyArtifactIdentityClaim(root, reference);
       const bytes = await readFile(safeStorePath(root, artifactRelativePath(reference)));
       const artifact = JSON.parse(bytes.toString("utf8"));
       if (!bytes.equals(Buffer.from(`${canonicalizeJson(artifact)}\n`, "utf8"))) {
@@ -114,6 +118,7 @@ export function createContentAddressedArtifactStore(rootDirectory) {
 
     async readConfigurationManifest(reference, typedValidator) {
       validateConfigurationManifestReference(reference);
+      await verifyArtifactIdentityClaim(root, reference);
       const bytes = await readFile(safeStorePath(root, artifactRelativePath(reference)));
       const manifest = JSON.parse(bytes.toString("utf8"));
       if (!bytes.equals(Buffer.from(`${canonicalizeJson(manifest)}\n`, "utf8"))) {
@@ -136,6 +141,7 @@ export function createContentAddressedArtifactStore(rootDirectory) {
         throw error;
       }
       const references = [];
+      const identities = new Map();
       for (const entry of entries) {
         if (!entry.isFile() || !/^[0-9a-f]{64}-[0-9a-f]{64}\.json$/.test(entry.name)) continue;
         const bytes = await readFile(join(directory, entry.name));
@@ -144,7 +150,14 @@ export function createContentAddressedArtifactStore(rootDirectory) {
           throw new Error("Indexed artifact bytes are not the exact canonical representation.");
         }
         validateCanonicalArtifact(artifact, { allowedKinds: [artifactKind] });
-        references.push(createExactArtifactReference(artifact));
+        const reference = createExactArtifactReference(artifact);
+        const prior = identities.get(reference.artifact_id);
+        if (prior !== undefined && prior !== reference.content_fingerprint) {
+          throw new Error("Artifact store contains one artifact ID with conflicting fingerprints.");
+        }
+        identities.set(reference.artifact_id, reference.content_fingerprint);
+        await verifyArtifactIdentityClaim(root, reference);
+        references.push(reference);
       }
       references.sort((left, right) => left.content_fingerprint.localeCompare(right.content_fingerprint));
       return references;
@@ -1582,6 +1595,49 @@ function artifactRelativePath(reference) {
   );
 }
 
+function identityClaimRelativePath(reference) {
+  return join(
+    "identity-claims",
+    reference.artifact_kind,
+    `${createHash("sha256").update(reference.artifact_id, "utf8").digest("hex")}.json`
+  );
+}
+
+function identityClaimBytes(reference) {
+  return Buffer.from(`${canonicalizeJson({
+    artifact_kind: reference.artifact_kind,
+    artifact_id: reference.artifact_id,
+    content_fingerprint: reference.content_fingerprint
+  })}\n`, "utf8");
+}
+
+async function claimArtifactIdentity(root, reference) {
+  try {
+    await writeImmutable(
+      root,
+      safeStorePath(root, identityClaimRelativePath(reference)),
+      identityClaimBytes(reference)
+    );
+  } catch (error) {
+    if (/collision or mutation/.test(error.message)) {
+      throw new Error(
+        `Artifact identity conflict for ${reference.artifact_kind}:${reference.artifact_id}.`
+      );
+    }
+    throw error;
+  }
+}
+
+async function verifyArtifactIdentityClaim(root, reference) {
+  const claimPath = safeStorePath(root, identityClaimRelativePath(reference));
+  const bytes = await readFile(claimPath);
+  if (!bytes.equals(identityClaimBytes(reference))) {
+    throw new Error(
+      `Artifact identity conflict for ${reference.artifact_kind}:${reference.artifact_id}.`
+    );
+  }
+}
+
 function safeStorePath(root, relativePath) {
   const target = resolve(root, relativePath);
   const fromRoot = relative(root, target);
@@ -1591,10 +1647,19 @@ function safeStorePath(root, relativePath) {
   return target;
 }
 
-async function writeImmutable(path, bytes) {
-  await mkdir(dirname(path), { recursive: true });
+async function writeImmutable(root, path, bytes) {
+  await ensureSafeStoreParent(root, path);
+  let handle;
+  let created = false;
   try {
-    await writeFile(path, bytes, { flag: "wx", mode: 0o444 });
+    handle = await open(
+      path,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+      0o444
+    );
+    await handle.writeFile(bytes);
+    await handle.sync();
+    created = true;
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
     const status = await lstat(path);
@@ -1603,6 +1668,47 @@ async function writeImmutable(path, bytes) {
     }
     const existing = await readFile(path);
     if (!existing.equals(bytes)) throw new Error("Content-addressed path collision or mutation detected.");
+  } finally {
+    await handle?.close();
+  }
+  if (created) {
+    const directory = await open(dirname(path), constants.O_RDONLY);
+    try {
+      await directory.sync();
+    } finally {
+      await directory.close();
+    }
+  }
+}
+
+async function ensureSafeStoreParent(root, path) {
+  const parent = dirname(path);
+  const fromRoot = relative(root, parent);
+  if (fromRoot.startsWith("..") || isAbsolute(fromRoot)) {
+    throw new Error("Artifact custody parent escapes the evidence store.");
+  }
+  const rootStatus = await lstat(root);
+  if (!rootStatus.isDirectory() || rootStatus.isSymbolicLink()) {
+    throw new Error("Artifact custody root must be a real directory, not a symlink.");
+  }
+  const segments = fromRoot === "" ? [] : fromRoot.split("/");
+  let current = root;
+  for (const segment of segments) {
+    if (segment === "") continue;
+    current = join(current, segment);
+    try {
+      await mkdir(current);
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
+    const status = await lstat(current);
+    if (!status.isDirectory() || status.isSymbolicLink()) {
+      throw new Error("Artifact custody parent must be a real directory, not a symlink.");
+    }
+  }
+  const resolvedParent = await realpath(parent);
+  if (resolvedParent !== parent) {
+    throw new Error("Artifact custody parent resolves through a symlink.");
   }
 }
 

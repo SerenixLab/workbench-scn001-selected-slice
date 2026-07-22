@@ -3871,10 +3871,32 @@ Current authoritative status counts remain:
 - no applicable rule `revalidation-required`; and
 - no rule claimed `enforced`.
 
-This closes Phase 7 implementation locally at the mechanism, regression, and
-documentation level. Fresh independent review of the final exact commit is
-still pending and remains required before formal reliance. All test artifacts
-are synthetic and permanently non-formal. No effective project-owner namespace,
-real external anchor event, formal campaign execution, authoritative bounded
-result, claim permission, milestone disposition, or repository extraction has
-been created or implied.
+This historical implementation-task conclusion was superseded by the independent
+red-team disposition below. All test artifacts remain synthetic and permanently
+non-formal. No effective project-owner namespace, real external anchor event,
+formal campaign execution, authoritative bounded result, claim permission,
+milestone disposition, or repository extraction has been created or implied.
+
+## Phase 7 Independent Pipeline-Closure Review
+
+Review date: 2026-07-22.
+
+Exact reviewed range: `e6e1dc1..28c9ad0`.
+
+Disposition: `BLOCKED`.
+
+The review confirmed the implemented canonical artifact grammar, exact-reference
+graph, durable-byte replay, cumulative indexes, conservative aggregation, and
+synthetic hostile coverage. It also demonstrated that decisive manifest,
+qualification, run-outcome, invalidity, proof, chronology, semantic-envelope,
+and external-anchor facts can still originate as caller assertions rather than
+trusted derivations. It reproduced acceptance of an undeclared `VAL-999`
+invalidity code, two typed artifacts with the same kind/ID and conflicting
+fingerprints, and a symlink-parent custody escape.
+
+Phase 7 status is therefore
+`PHASE7_MECHANISM_LAYER_COMPLETE_PIPELINE_CLOSURE_PENDING`. The four Phase 7
+controls remain `applicable / uncovered`; no real campaign may start and no
+formal reliance may attach until the trusted derivation, execution/authority,
+custody/global-identity, and decision-transition layers close and receive fresh
+exact-commit independent review.

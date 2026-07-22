@@ -173,6 +173,7 @@ campaign, bounded pass/fail,
 milestone acceptance, broader `SCN-001` acceptance, or production readiness.
 Durable repository extraction remains blocked by `REPO-001`.
 
-`PHASE7_READINESS.md` records the completed start approval, locally complete
-Phase 7 implementation, pending fresh exact-commit independent review, and the
-strict boundary between implementation completion and formal campaign authority.
+`PHASE7_READINESS.md` records the completed start approval and the later blocked
+independent review. Phase 7 currently has a substantial mechanism layer, but its
+trusted derivation/execution/custody pipeline remains open; no formal campaign
+authority or implementation-complete status is claimed.
