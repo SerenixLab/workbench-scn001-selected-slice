@@ -2,24 +2,34 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  SUT_PUBLIC_BOUNDARY_METHODS,
+  createSutBoundary
+} from "@zoey/scn001-sut-core";
+
+import {
   executeBoundedSelectedSliceCampaign,
   executeBoundedSelectedSliceCampaignForMechanismTest
 } from "../src/boundedCampaignRunner.js";
+import { createExactArtifactReference } from "../src/formalArtifactIdentity.js";
+import { createAuthorityNamespaceIndex } from "../src/formalEvidence.js";
 import { createFormalCampaignFixture } from "../test_support/formalCampaignFixtures.js";
 import {
   createFixtureAnchorReceiptBytes,
   createFixtureFreshStartAttestationBytes
 } from "../test_support/anchorFixture.js";
 
-test("trusted campaign executes every primary slot and derives bounded pass pending standing", async () => {
+test("qualified campaign suspends before scoring when formal output diverges from its baseline", async () => {
   const setup = await createFormalCampaignFixture();
   const result = await executeBoundedSelectedSliceCampaignForMechanismTest(inputFor(setup));
-  assert.equal(result.attempt_results.length, 4);
-  assert.ok(result.attempt_results.every((attempt) => attempt.execution_status === "SEALED"));
-  assert.equal(result.campaign_index.identity_payload.campaign_lifecycle, "closed");
-  assert.equal(result.bounded_result.identity_payload.bounded_result, "BOUNDED_PASS");
-  assert.equal(result.execution_status, "RESULT_PENDING_OWNER_STANDING");
-  assert.equal(result.standing_decision, null);
+  assert.equal(result.attempt_results.length, 1);
+  assert.equal(result.attempt_results[0].execution_status, "SEALED");
+  assert.equal(
+    result.execution_status,
+    "QUALIFICATION_DIVERGENCE_REQUIRES_ACCEPTED_DECISION"
+  );
+  assert.equal(result.required_decision.reason_code, "deterministic_qualification_invalidated");
+  assert.equal(result.campaign_index, null);
+  assert.equal(result.bounded_result, null);
   assert.equal(result.claim_authorized, false);
 });
 
@@ -50,11 +60,99 @@ test("campaign input cannot import an owner standing decision", async () => {
   );
 });
 
+test("pre-seal interruption is retained and suspends without fabricating invalidity", async () => {
+  const setup = await createFormalCampaignFixture({ qualification: "NOT_QUALIFIED" });
+  const base = createSutBoundary();
+  const interrupted = Object.freeze(Object.fromEntries(
+    SUT_PUBLIC_BOUNDARY_METHODS.map((method) => [
+      method,
+      method === "ingestSutVisibleInputs"
+        ? () => { throw new Error("injected campaign interruption"); }
+        : (...argumentsReceived) => base[method](...argumentsReceived)
+    ])
+  ));
+  const result = await executeBoundedSelectedSliceCampaignForMechanismTest(
+    inputFor(setup),
+    { sut_boundary_factory: () => interrupted }
+  );
+  assert.equal(result.attempt_results.length, 1);
+  assert.equal(result.attempt_results[0].attempt_disposition, "ABANDONED_RETAINED");
+  assert.equal(result.attempt_results[0].run_record, null);
+  assert.equal(result.campaign_index.identity_payload.campaign_lifecycle, "suspended");
+  assert.equal(result.campaign_index.identity_payload.lifecycle_reason, "authority_review_required");
+  assert.equal(
+    result.campaign_index.identity_payload.attempt_inventory[0].invalidity_decision_ref,
+    null
+  );
+  assert.equal(
+    result.bounded_result.identity_payload.bounded_result,
+    "NOT_YET_DETERMINABLE"
+  );
+  assert.equal(result.claim_authorized, false);
+});
+
 test("trusted campaign entry rejects generic authorization without measurement roots", async () => {
   const setup = await createFormalCampaignFixture();
   await assert.rejects(
     () => executeBoundedSelectedSliceCampaign(inputFor(setup)),
     /missing=\[repository_root,canonical_meta_root\]/
+  );
+});
+
+test("trusted campaign cannot measure a repository other than its loaded runtime", async () => {
+  const setup = await createFormalCampaignFixture();
+  await assert.rejects(
+    () => executeBoundedSelectedSliceCampaign({
+      ...inputFor(setup),
+      repository_root: setup.store.root,
+      canonical_meta_root: setup.store.root
+    }),
+    /measurement root must be the exact loaded evaluator repository/
+  );
+});
+
+test("campaign rejects omitted prior history before executing an attempt", async () => {
+  const setup = await createFormalCampaignFixture({ qualification: "NOT_QUALIFIED" });
+  const prior = setup.namespace.identity_payload;
+  const priorCampaignRef = {
+    artifact_id: "artifact:campaign-index:prior:unresolved",
+    artifact_kind: "CAMPAIGN_EVIDENCE_INDEX",
+    schema_id: "zoey.campaign-evidence-index",
+    schema_revision: 1,
+    content_fingerprint: `sha256:${"a".repeat(64)}`
+  };
+  const namespace = createAuthorityNamespaceIndex({
+    artifact_id: "artifact:namespace-index:with-prior-campaign",
+    namespace_id: prior.namespace_id,
+    revision: prior.revision + 1,
+    authority_identity: prior.authority_identity,
+    prior_index: setup.namespace,
+    prior_index_receipt_ref: createExactArtifactReference(setup.anchorReceipt),
+    qualification_plan_refs: prior.qualification_plan_refs,
+    qualification_result_refs: prior.qualification_result_refs,
+    campaign_authorization_refs: prior.campaign_authorization_refs,
+    campaign_index_refs: [...prior.campaign_index_refs, priorCampaignRef],
+    bounded_result_refs: prior.bounded_result_refs,
+    decision_refs: prior.decision_refs,
+    anchor_receipt_refs: [
+      ...prior.anchor_receipt_refs,
+      createExactArtifactReference(setup.anchorReceipt)
+    ].sort(referenceSort),
+    manifest_bindings: prior.manifest_bindings,
+    anchor_declarations: prior.anchor_declarations,
+    cutoff_label: "namespace:history:required",
+    producer_identity: prior.authority_identity,
+    validator_identity: "actor:namespace-index-validator",
+    validation_result: "VALIDATED",
+    created_at: "2026-07-22T17:50:00Z",
+    created_by: prior.authority_identity
+  });
+  await assert.rejects(
+    () => executeBoundedSelectedSliceCampaignForMechanismTest({
+      ...inputFor(setup),
+      authorizing_namespace: namespace
+    }),
+    /history context must close every prior indexed campaign exactly/
   );
 });
 
@@ -83,6 +181,9 @@ function inputFor(setup) {
       issued_at: "2026-07-22T18:30:00Z"
     }),
     qualification_evidence_artifacts: setup.qualificationEvidenceArtifacts,
+    campaign_decisions: [],
+    historical_campaigns: [],
+    additional_unresolved_closure: [],
     artifact_namespace: "artifact:trusted-campaign",
     campaign_index_artifact_id: "artifact:trusted-campaign:index",
     closure_namespace_artifact_id: "artifact:trusted-campaign:namespace",
@@ -108,4 +209,10 @@ function inputFor(setup) {
     closure_receipt_sealed_at: "2026-07-22T18:30:00Z",
     result_created_at: "2026-07-22T18:35:00Z"
   };
+}
+
+function referenceSort(left, right) {
+  return `${left.artifact_kind}:${left.artifact_id}:${left.content_fingerprint}`.localeCompare(
+    `${right.artifact_kind}:${right.artifact_id}:${right.content_fingerprint}`
+  );
 }

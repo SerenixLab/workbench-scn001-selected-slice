@@ -174,9 +174,12 @@ milestone acceptance, broader `SCN-001` acceptance, or production readiness.
 Durable repository extraction remains blocked by `REPO-001`.
 
 `PHASE7_READINESS.md` records the completed start approval and the later blocked
-independent review. The internal Phase 7 implementation pipeline is now complete
-through bounded-result creation, but formal reliance remains blocked pending
-fresh exact-commit independent review, protected integration, and real external
+independent reviews. The authoritative status remains
+`PHASE7_MECHANISM_LAYER_COMPLETE_PIPELINE_CLOSURE_PENDING`: the measured
+conservative path now reaches bounded-result creation, but the full
+invalidity/replacement and owner-governed contingency lifecycle is not yet an
+end-to-end executable path. Formal reliance also remains blocked pending fresh
+exact-commit independent review, protected integration, and real external
 project-owner authority. No real campaign authority is claimed.
 
 The current corrective implementation adds clean-commit configuration

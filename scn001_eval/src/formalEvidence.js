@@ -1744,6 +1744,12 @@ export function normalizeQualificationComparatorInput(value) {
   return visit(value);
 }
 
+export function qualificationComparatorInputFromTranscript(transcript) {
+  const oracleProjection = JSON.parse(JSON.stringify(transcript));
+  delete oracleProjection.run_ref;
+  return normalizeQualificationComparatorInput(oracleProjection);
+}
+
 function buildTypedArtifact(artifactId, artifactKind, payload) {
   assertOpaqueId(artifactId, "typed artifact_id");
   const artifact = {

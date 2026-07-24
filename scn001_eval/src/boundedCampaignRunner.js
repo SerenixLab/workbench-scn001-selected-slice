@@ -1,25 +1,48 @@
+import { realpathSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import {
   assertExactKeys,
   assertOpaqueId,
+  canonicalizeJson,
   createExactArtifactReference,
-  deepFreeze
+  deepFreeze,
+  fingerprintCanonicalJson
 } from "./formalArtifactIdentity.js";
-import { validateCampaignAuthorization } from "./formalAuthority.js";
+import {
+  REQUIRED_CLAIM_CLASSES,
+  validateCampaignAuthorization
+} from "./formalAuthority.js";
 import {
   captureAuthenticatedAnchorReceipt,
   createAuthorityNamespaceIndex,
   createCampaignEvidenceIndex,
+  qualificationComparatorInputFingerprint,
+  qualificationComparatorInputFromTranscript,
   validateAuthorityNamespaceIndex,
   validateCampaignEvidenceIndex
 } from "./formalEvidence.js";
 import { createBoundedCampaignResult } from "./boundedScoring.js";
-import { executeFormalSelectedSliceAttempt } from "./selectedSliceFormalPipeline.js";
+import {
+  executeFormalSelectedSliceAttempt,
+  executeFormalSelectedSliceAttemptForMechanismTest
+} from "./selectedSliceFormalPipeline.js";
 import { verifyConfigurationManifestsFromCommit } from "./configurationMeasurement.js";
+
+const TRUSTED_RUNTIME_ROOT = realpathSync(resolve(
+  dirname(fileURLToPath(import.meta.url)), "../.."
+));
 
 export async function executeBoundedSelectedSliceCampaign(input) {
   assertExactKeys(input, [
     ...CAMPAIGN_INPUT_KEYS, "repository_root", "canonical_meta_root"
   ], ["source_commit"], "trusted bounded selected-slice campaign input");
+  if (realpathSync(input.repository_root) !== TRUSTED_RUNTIME_ROOT) {
+    throw new Error(
+      "Trusted campaign measurement root must be the exact loaded evaluator repository."
+    );
+  }
   await verifyConfigurationManifestsFromCommit({
     repository_root: input.repository_root,
     canonical_meta_root: input.canonical_meta_root,
@@ -44,11 +67,20 @@ export async function executeBoundedSelectedSliceCampaign(input) {
   return executeCampaign(campaignInput);
 }
 
-export async function executeBoundedSelectedSliceCampaignForMechanismTest(input) {
-  return executeCampaign(input);
+export async function executeBoundedSelectedSliceCampaignForMechanismTest(
+  input, options = {}
+) {
+  assertExactKeys(
+    options, [], ["sut_boundary_factory"], "bounded campaign mechanism-test options"
+  );
+  if (options.sut_boundary_factory !== undefined
+    && typeof options.sut_boundary_factory !== "function") {
+    throw new Error("Campaign mechanism-test boundary factory must be callable.");
+  }
+  return executeCampaign(input, options);
 }
 
-async function executeCampaign(input) {
+async function executeCampaign(input, mechanismOptions = null) {
   validateInput(input);
   const authorization = input.authorization;
   const authorizationRef = createExactArtifactReference(authorization);
@@ -58,9 +90,12 @@ async function executeCampaign(input) {
   ];
   const attemptResults = [];
   let decisiveHardFailure = null;
+  let qualificationDivergence = null;
+  let authorityReviewRequired = false;
   for (const slot of authorization.identity_payload.attempt_slots) {
-    if (decisiveHardFailure !== null) break;
-    const result = await executeFormalSelectedSliceAttempt({
+    if (decisiveHardFailure !== null || qualificationDivergence !== null
+      || authorityReviewRequired) break;
+    const attemptInput = {
       store: input.store,
       authorization,
       authority_context: input.authority_context,
@@ -76,11 +111,37 @@ async function executeCampaign(input) {
       run_producer_identity: input.run_producer_identity,
       run_validator_identity: input.run_validator_identity,
       sealed_at: input.attempts_sealed_at
-    });
+    };
+    const boundary = mechanismOptions?.sut_boundary_factory?.(structuredClone(slot));
+    const result = boundary === undefined
+      ? await executeFormalSelectedSliceAttempt(attemptInput)
+      : await executeFormalSelectedSliceAttemptForMechanismTest(attemptInput, boundary);
     attemptResults.push(result);
-    if (result.run_record?.identity_payload.invariant_result === "HARD_FAIL") {
+    if (result.run_record === null) {
+      authorityReviewRequired = true;
+    } else if (result.run_record.identity_payload.invariant_result === "HARD_FAIL") {
       decisiveHardFailure = result;
+    } else {
+      qualificationDivergence = detectQualificationDivergence(
+        input.authority_context, result
+      );
     }
+  }
+  if (qualificationDivergence !== null) {
+    return deepFreeze({
+      execution_status: "QUALIFICATION_DIVERGENCE_REQUIRES_ACCEPTED_DECISION",
+      attempt_results: attemptResults,
+      qualification_divergence: qualificationDivergence,
+      required_decision: requiredQualificationDivergenceDecision(
+        input.authority_context, qualificationDivergence
+      ),
+      campaign_index: null,
+      closure_namespace: null,
+      closure_receipt: null,
+      bounded_result: null,
+      standing_decision: null,
+      claim_authorized: false
+    });
   }
   const inventory = allSlots.map((slot) => inventoryEntry(
     slot, attemptResults, decisiveHardFailure, authorizationRef,
@@ -101,7 +162,8 @@ async function executeCampaign(input) {
     evidence_refs: evidenceArtifacts.map(createExactArtifactReference).sort(referenceSort),
     run_record_refs: runEntries.map((entry) => createExactArtifactReference(entry.record))
       .sort(referenceSort),
-    decision_refs: [],
+    decision_refs: input.campaign_decisions.map(createExactArtifactReference)
+      .sort(referenceSort),
     anchor_receipt_refs: [createExactArtifactReference(input.authorization_anchor_receipt)],
     qualification_plan_ref: authorization.identity_payload.qualification_plan_ref,
     qualification_result_ref: authorization.identity_payload.qualification_result_ref,
@@ -151,10 +213,10 @@ async function executeCampaign(input) {
     closure_receipt: closureReceipt,
     anchor_public_key: input.anchor_public_key,
     run_records: runEntries,
-    campaign_decisions: [],
+    campaign_decisions: input.campaign_decisions,
     qualification_evidence_artifacts: input.qualification_evidence_artifacts,
-    historical_campaigns: [],
-    additional_unresolved_closure: [],
+    historical_campaigns: input.historical_campaigns,
+    additional_unresolved_closure: input.additional_unresolved_closure,
     producer_identity: input.result_producer_identity,
     validator_identity: input.result_validator_identity,
     validation_result: "VALIDATED",
@@ -282,10 +344,69 @@ function campaignLifecycleReason(results, hardFailure) {
     : "planned_attempt_set_closed";
 }
 
+function detectQualificationDivergence(authorityContext, attemptResult) {
+  if (authorityContext.qualification_result?.identity_payload.result !== "QUALIFIED"
+    || attemptResult.execution_status !== "SEALED") {
+    return null;
+  }
+  const expected = authorityContext.qualification_result.identity_payload.executions.filter(
+    (execution) => execution.path_id === attemptResult.slot.path_id
+  ).map((execution) => execution.comparator_input_digest);
+  if (expected.length !== 2 || new Set(expected).size !== 1) {
+    throw new Error("Qualified campaign lacks one closed comparator baseline per path.");
+  }
+  const observed = qualificationComparatorInputFingerprint(
+    qualificationComparatorInputFromTranscript(attemptResult.transcript)
+  );
+  if (observed === expected[0]) return null;
+  return deepFreeze({
+    path_id: attemptResult.slot.path_id,
+    attempt_id: attemptResult.slot.attempt_id,
+    run_record_ref: createExactArtifactReference(attemptResult.run_record),
+    qualification_result_ref: createExactArtifactReference(
+      authorityContext.qualification_result
+    ),
+    expected_comparator_input_digest: expected[0],
+    observed_comparator_input_digest: observed,
+    basis_delta_digest: qualificationDivergenceBasisDigest(
+      authorityContext, attemptResult, expected[0], observed
+    )
+  });
+}
+
+function qualificationDivergenceBasisDigest(
+  authorityContext, attemptResult, expectedDigest, observedDigest
+) {
+  return fingerprintCanonicalJson("zoey:post-qualification-divergence:v1", {
+    qualification_result_ref: createExactArtifactReference(
+      authorityContext.qualification_result
+    ),
+    path_id: attemptResult.slot.path_id,
+    attempt_id: attemptResult.slot.attempt_id,
+    run_record_ref: createExactArtifactReference(attemptResult.run_record),
+    expected_comparator_input_digest: expectedDigest,
+    observed_comparator_input_digest: observedDigest
+  });
+}
+
+function requiredQualificationDivergenceDecision(authorityContext, divergence) {
+  return {
+    decision_kind: "QUALIFICATION_RESULT_CORRECTION",
+    subject_ref: createExactArtifactReference(authorityContext.qualification_result),
+    reason_code: "deterministic_qualification_invalidated",
+    original_disposition: "QUALIFIED",
+    replacement_disposition: "INVALIDATED_BY_POST_QUALIFICATION_DIVERGENCE",
+    basis_delta_digest: divergence.basis_delta_digest,
+    affected_claims: [...REQUIRED_CLAIM_CLASSES].sort(),
+    required_authority: "INDEPENDENT_REVIEW_AND_OWNER_ACCEPTANCE"
+  };
+}
+
 const CAMPAIGN_INPUT_KEYS = Object.freeze([
   "store", "authorization", "authority_context", "authorizing_namespace",
   "authorization_anchor_receipt", "anchor_public_key", "fresh_start_attestor",
-  "closure_receipt_attestor", "qualification_evidence_artifacts", "artifact_namespace",
+  "closure_receipt_attestor", "qualification_evidence_artifacts", "campaign_decisions",
+  "historical_campaigns", "additional_unresolved_closure", "artifact_namespace",
   "campaign_index_artifact_id", "closure_namespace_artifact_id",
   "closure_receipt_artifact_id", "bounded_result_artifact_id", "bounded_result_id",
   "campaign_cutoff_label", "namespace_cutoff_label", "evidence_producer_identity",
@@ -303,6 +424,31 @@ function validateInput(input) {
   if (typeof input.fresh_start_attestor !== "function"
     || typeof input.closure_receipt_attestor !== "function") {
     throw new Error("Bounded campaign requires external start and closure attestors.");
+  }
+  for (const [field, value] of [
+    ["campaign_decisions", input.campaign_decisions],
+    ["historical_campaigns", input.historical_campaigns],
+    ["additional_unresolved_closure", input.additional_unresolved_closure]
+  ]) {
+    if (!Array.isArray(value)) {
+      throw new Error(`Bounded campaign ${field} must be an explicit closed array.`);
+    }
+  }
+  const indexedHistory = new Set(
+    input.authorizing_namespace.identity_payload.campaign_index_refs.map(canonicalizeJson)
+  );
+  const suppliedHistory = new Set(input.historical_campaigns.map((campaign) => {
+    if (campaign === null || typeof campaign !== "object"
+      || campaign.campaign_index === undefined) {
+      throw new Error("Historical campaign context lacks its exact campaign index.");
+    }
+    return canonicalizeJson(createExactArtifactReference(campaign.campaign_index));
+  }));
+  if (indexedHistory.size !== suppliedHistory.size
+    || [...indexedHistory].some((reference) => !suppliedHistory.has(reference))) {
+    throw new Error(
+      "Bounded campaign history context must close every prior indexed campaign exactly."
+    );
   }
   for (const field of [
     "artifact_namespace", "campaign_index_artifact_id", "closure_namespace_artifact_id",

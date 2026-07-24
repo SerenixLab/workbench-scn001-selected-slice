@@ -251,13 +251,44 @@ execution in regression tests. The returned state is always
 standing still requires its separate independent reviewer and project-owner act
 and later result-indexing namespace. The aggregate local gate passes 477 tests.
 
-This closes the internal Phase 7 implementation pipeline at
-`PHASE7_IMPLEMENTATION_COMPLETE_EXTERNAL_CLOSURE_PENDING`. All current artifacts
-remain synthetic and non-promotable. Fresh exact-commit independent review,
-protected required-check verification/integration, project-owner key/effective
-namespace designation, real external events, and the human standing decision
-remain mandatory before formal reliance or any bounded claim. The four controls
-remain `applicable / uncovered` until those external closures are recorded.
+This historical implementing-task conclusion is superseded by the integration
+red-team correction below. All current artifacts remain synthetic and
+non-promotable.
+
+## Phase 7 Integration Red-Team Correction Addendum
+
+Corrective date: 2026-07-25.
+
+The trusted campaign entry now requires commit reconstruction from the exact
+repository that loaded the evaluator, rejects qualification-supported V1
+authority, and permits only the measured conservative branch. Durable
+qualification replay reconstructs comparator inputs from retained oracle
+material, independently reproduces every pair comparison and the final result,
+and rejects supplied equivalence labels that disagree.
+
+The attempt pipeline now captures the raw initial inspection before either
+initial-state or isolation proof. Formal-run replay requires both proofs to
+resolve the same exact inspection artifact, replays its canonical bytes, and
+reconstructs the empty boundary, run scope, and both proof digests. A
+pre-seal interruption retains all available evidence and suspends the campaign
+as `authority_review_required`; it does not fabricate a sealed invalid run,
+invalidity decision, or replacement authority.
+
+The campaign runner requires an explicit historical-campaign context whose
+campaign-index set exactly equals the prior namespace set. It also compares a
+qualified mechanism run with the retained qualification baseline. Divergence
+halts ordinary execution before index/result creation and returns the exact
+owner/independent-review decision basis with `claim_authorized: false`.
+Qualified execution remains non-authoritative in measured V1.
+
+The accepted sealable-invalidity to decision, deterministic replacement,
+replacement execution, limit exhaustion, and accepted contingency/supersession
+continuation are still not one end-to-end orchestrated path. The authoritative
+status is therefore restored to
+`PHASE7_MECHANISM_LAYER_COMPLETE_PIPELINE_CLOSURE_PENDING`, with subordinate
+status `PHASE7_HAPPY_PATH_PIPELINE_IMPLEMENTED`. The four controls remain
+`applicable / uncovered`; fresh exact-commit independent review, protected
+integration, project-owner authority, and real external events remain required.
 
 ## First Phase 7 Change Requirements
 

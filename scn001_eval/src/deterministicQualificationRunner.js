@@ -14,8 +14,8 @@ import {
 } from "./formalAuthority.js";
 import {
   createFormalEvidenceRecorder,
-  normalizeQualificationComparatorInput,
   qualificationComparatorInputFingerprint,
+  qualificationComparatorInputFromTranscript,
   qualificationOracleProjectionFingerprint,
   qualificationValidationBasisFingerprint,
   validateAuthorityNamespaceIndex,
@@ -122,7 +122,7 @@ async function executeQualification(input, sessionFactory) {
       const completed = transcript.execution_status === "COMPLETED";
       const oracleMaterial = qualificationOracleMaterial(transcript);
       const comparatorInput = completed
-        ? normalizeQualificationComparatorInput(oracleMaterial)
+        ? qualificationComparatorInputFromTranscript(transcript)
         : null;
       const oracleProjectionDigest = qualificationOracleProjectionFingerprint(oracleMaterial);
       const comparatorInputDigest = qualificationComparatorInputFingerprint(comparatorInput);
