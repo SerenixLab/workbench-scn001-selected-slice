@@ -19,7 +19,9 @@ import {
   REQUIRED_CLAIM_CLASSES,
   REQUIRED_PATHS,
   validateAttemptAllocation,
-  validateCampaignAuthorization
+  validateCampaignAuthorization,
+  validateProspectiveExecutionStartPrerequisites,
+  validateReplacementExecutionStartPrerequisites
 } from "./formalAuthority.js";
 import {
   validateAuthorityNamespaceIndex,
@@ -27,7 +29,10 @@ import {
   replayTypedControlProof,
   resolveDurableExecutionAuthority,
   replayDurableExecutionAuthority,
-  verifyDurableEvidence
+  verifyDurableEvidence,
+  verifyRunInvalidityObservation,
+  verifySutFailureObservation,
+  verifyWithheldFixtureObservation
 } from "./formalEvidence.js";
 
 export const CLAIM_OBLIGATION_MAP = deepFreeze({
@@ -272,7 +277,7 @@ export function validateFormalRunRecord(record, context) {
   }
   validateProviderHandles(payload.provider_handles);
   assertSortedUniqueStrings(payload.delivered_bundle_ids, "formal run delivered bundle IDs");
-  if (payload.delivered_bundle_ids.length === 0) {
+  if (payload.run_validity === "VALID" && payload.delivered_bundle_ids.length === 0) {
     throw new Error("Formal run requires at least one delivered bundle identity.");
   }
   validateRunEvidencePayload(payload, context.evidenceArtifacts);
@@ -322,6 +327,7 @@ export async function verifyDurableFormalRunRecord(store, record, context) {
     anchor_public_key: context.anchor_public_key,
     start_grant: context.start_grant,
     attempt_allocation: record.identity_payload.attempt_allocation,
+    run_validity: record.identity_payload.run_validity,
     evidence_artifacts: evidenceArtifacts,
     qualification_evidence_artifacts: context.qualification_evidence_artifacts,
     replay_authority: true
@@ -346,9 +352,14 @@ async function validateRunInputs(input) {
   if (!Array.isArray(artifacts)) throw new Error("Formal run evidence must be an array.");
   await verifyDurableEvidence(input.store, input.anchor_receipt);
   const controlProofs = new Map();
+  const attemptControlRoles = new Set([
+    "FRESH_START_PROOF", "INITIAL_STATE_PROOF", "RUN_ISOLATION_PROOF",
+    "SELECTION_INDEPENDENCE"
+  ]);
   for (const artifact of artifacts) {
     await verifyDurableEvidence(input.store, artifact);
-    if (artifact.identity_payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE") {
+    if (artifact.identity_payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE"
+      && attemptControlRoles.has(artifact.identity_payload.semantic_envelope.capture_role)) {
       const replay = await replayTypedControlProof(input.store, artifact);
       if (controlProofs.has(replay.proof.proof_role)) {
         throw new Error("Formal run repeats one typed control-proof role.");
@@ -385,17 +396,23 @@ async function validateRunInputs(input) {
     createExactArtifactReference(artifact)
   ) === canonicalizeJson(input.start_grant.fresh_start_capture_ref));
   if (!freshStart) throw new Error("Formal run is missing its durable fresh-start capture.");
-  const reconstructedPreflight = {
-    authorization_ref: structuredClone(input.start_grant.authorization_ref),
-    slot: structuredClone(input.start_grant.slot),
-    authorizing_namespace_ref: structuredClone(input.start_grant.authorizing_namespace_ref),
-    anchor_receipt_ref: structuredClone(input.start_grant.anchor_receipt_ref),
-    anchor_verification: structuredClone(input.start_grant.anchor_verification),
-    fresh_start_proof: structuredClone(input.start_grant.fresh_start_proof),
-    lifecycle: "authorized",
-    authority_status: "READY_FOR_DURABLE_AUTHORITY_RESOLUTION",
-    execution_start_authorized: false
+  const prerequisiteBasis = {
+    authorization: input.authorization,
+    authorizing_namespace_ref: input.start_grant.authorizing_namespace_ref,
+    anchor_receipt_ref: input.start_grant.anchor_receipt_ref,
+    anchor_verification: input.start_grant.anchor_verification,
+    fresh_start_proof: input.start_grant.fresh_start_proof
   };
+  const reconstructedPreflight = input.attempt_allocation.allocation_kind
+    === "INVALIDITY_DERIVED_REPLACEMENT"
+    ? validateReplacementExecutionStartPrerequisites({
+      ...prerequisiteBasis,
+      attempt_allocation: input.attempt_allocation
+    })
+    : validateProspectiveExecutionStartPrerequisites({
+      ...prerequisiteBasis,
+      slot_id: input.attempt_allocation.slot_id
+    });
   const authorityResolver = input.replay_authority === true
     ? replayDurableExecutionAuthority : resolveDurableExecutionAuthority;
   const reconstructedGrant = await authorityResolver({
@@ -422,6 +439,61 @@ async function validateRunInputs(input) {
   }
   const refsByKind = {};
   const digestsByKind = {};
+  const sutFailureArtifacts = artifacts.filter((artifact) => (
+    artifact.identity_payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE"
+      && artifact.identity_payload.semantic_envelope.capture_role === "SUT_FAILURE_OBSERVATION"
+  ));
+  if (sutFailureArtifacts.length > 1) {
+    throw new Error("Formal run cannot contain multiple SUT failure observations.");
+  }
+  if (sutFailureArtifacts.length === 1) {
+    if (input.run_validity !== "VALID") {
+      throw new Error("SUT failure evidence cannot be relabeled as infrastructure invalidity.");
+    }
+    await verifySutFailureObservation(input.store, sutFailureArtifacts[0], {
+      attempt_id: slot.attempt_id,
+      path_id: slot.path_id
+    });
+  }
+  const invalidityObservationArtifacts = artifacts.filter((artifact) => (
+    artifact.identity_payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE"
+      && artifact.identity_payload.semantic_envelope.capture_role
+        === "RUN_INVALIDITY_OBSERVATION"
+  ));
+  if ((input.run_validity === "INVALID_UNSCORABLE")
+      !== (invalidityObservationArtifacts.length === 1)) {
+    throw new Error(
+      "Formal run invalidity requires one exact replayable invalidity observation."
+    );
+  }
+  if (invalidityObservationArtifacts.length === 1) {
+    await verifyRunInvalidityObservation(
+      input.store,
+      invalidityObservationArtifacts[0],
+      {
+        attempt_id: slot.attempt_id,
+        path_id: slot.path_id,
+        reason_code: invalidityObservationArtifacts[0].identity_payload.semantic_envelope
+          .reason_code
+      }
+    );
+  }
+  const withheldArtifacts = artifacts.filter((artifact) => (
+    artifact.identity_payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE"
+      && artifact.identity_payload.semantic_envelope.capture_role
+        === "WITHHELD_FIXTURE_OBSERVATION"
+  ));
+  for (const artifact of withheldArtifacts) {
+    await verifyWithheldFixtureObservation(input.store, artifact, {
+      attempt_id: slot.attempt_id,
+      path_id: slot.path_id
+    });
+  }
+  const mandatoryEvidenceKinds = input.run_validity === "INVALID_UNSCORABLE"
+    ? ["SUT_INSPECTION_CAPTURE", "EVALUATOR_PRIVATE_CAPTURE"]
+    : sutFailureArtifacts.length === 1
+      ? ["SUT_INPUT_CAPTURE", "SUT_INSPECTION_CAPTURE", "EVALUATOR_PRIVATE_CAPTURE"]
+    : MANDATORY_EVIDENCE_KINDS;
   for (const kind of REQUIRED_EVIDENCE_KINDS) {
     const matching = artifacts.filter(
       (artifact) => artifact.identity_payload.evidence_kind === kind
@@ -431,7 +503,7 @@ async function validateRunInputs(input) {
       evidence_ref: createExactArtifactReference(artifact),
       raw_byte_digest: artifact.identity_payload.raw_byte_digest
     }));
-    if (MANDATORY_EVIDENCE_KINDS.includes(kind) && refsByKind[kind].length === 0) {
+    if (mandatoryEvidenceKinds.includes(kind) && refsByKind[kind].length === 0) {
       throw new Error(`Formal run is missing required ${kind} evidence.`);
     }
   }
@@ -496,6 +568,27 @@ function validateRunEvidencePayload(payload, artifacts) {
   }
   if (canonicalizeJson(payload.raw_capture_refs_by_kind) !== canonicalizeJson(byKind)) {
     throw new Error("Formal run evidence kind partition is incomplete.");
+  }
+  const sutFailureArtifacts = artifacts.filter((artifact) => (
+    artifact.identity_payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE"
+      && artifact.identity_payload.semantic_envelope.capture_role === "SUT_FAILURE_OBSERVATION"
+  ));
+  if (sutFailureArtifacts.length === 1) {
+    if (payload.run_validity !== "VALID"
+      || !payload.obligation_results.some((entry) => entry.result === "OBLIGATION_FAIL")) {
+      throw new Error("SUT failure observation must remain a valid scored obligation failure.");
+    }
+  }
+  const invalidityObservationCount = artifacts.filter((artifact) => (
+    artifact.identity_payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE"
+      && artifact.identity_payload.semantic_envelope.capture_role
+        === "RUN_INVALIDITY_OBSERVATION"
+  )).length;
+  if ((payload.run_validity === "INVALID_UNSCORABLE")
+      !== (invalidityObservationCount === 1)) {
+    throw new Error(
+      "Formal run validity conflicts with its replayable invalidity observation."
+    );
   }
   const digestsByKind = Object.fromEntries(Object.entries(byKind).map(([kind, references]) => [
     kind,
@@ -718,6 +811,7 @@ function findAllocationSlot(allocation, authorization) {
     slot_id: allocation.slot_id,
     attempt_id: allocation.attempt_id,
     path_id: allocation.path_id,
+    selection_basis_digest: allocation.selection_basis_digest,
     seed_commitment: allocation.seed_commitment
   };
 }

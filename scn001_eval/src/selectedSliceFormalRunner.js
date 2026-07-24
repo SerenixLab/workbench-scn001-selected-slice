@@ -46,7 +46,7 @@ export function createSelectedSlicePathSessionForMechanismTest(input, sutBoundar
 }
 
 function createExecutionSession(pathId, sutBoundary) {
-  const harness = createHarnessForFormalRunner(sutBoundary);
+  const harness = instrumentHarness(createHarnessForFormalRunner(sutBoundary));
   const runRef = harness.startRun();
   const initialInspection = harness.captureInspectionSnapshot(runRef);
   const events = [];
@@ -94,6 +94,40 @@ function createExecutionSession(pathId, sutBoundary) {
           ...derivation
         });
       } catch (error) {
+        if (error instanceof HarnessOperationFailure
+          && error.failure_attribution === "SUT") {
+          try {
+            record("SUT_PROCESSING_FAILED", null, {
+              operation: error.operation,
+              error_name: error.cause_name,
+              message: error.cause_message
+            });
+            const projection = harness.captureFormalOracleProjection(runRef);
+            const derivation = derivePathOutcomes(pathId, projection);
+            return deepFreeze({
+              execution_status: "COMPLETED_WITH_SUT_FAILURE",
+              path_id: pathId,
+              fixture_oracle_package: "SCN001-SSFO-V0.2.0",
+              runner_policy: "CONSERVATIVE_THREE_RUN_V1",
+              run_ref: runRef,
+              initial_inspection: initialInspection,
+              event_count: events.length,
+              events,
+              oracle_projection: projection,
+              execution_diagnostic: {
+                operation: error.operation,
+                error_name: error.cause_name,
+                message: error.cause_message
+              },
+              ...derivation
+            });
+          } catch (captureError) {
+            error = captureError;
+          }
+        }
+        const reasonCode = error instanceof HarnessOperationFailure
+          ? error.reason_code
+          : "SCN001-SSFO-V0.2.0-VAL-005";
         return deepFreeze({
           execution_status: "INTERRUPTED",
           path_id: pathId,
@@ -104,9 +138,13 @@ function createExecutionSession(pathId, sutBoundary) {
           event_count: events.length,
           events,
           interruption: {
-            reason_code: "SCN001-SSFO-V0.2.0-VAL-010",
-            error_name: error instanceof Error ? error.name : "NonErrorThrow",
-            message: error instanceof Error ? error.message : String(error)
+            reason_code: reasonCode ?? "SCN001-SSFO-V0.2.0-VAL-005",
+            error_name: error instanceof HarnessOperationFailure
+              ? error.cause_name
+              : error instanceof Error ? error.name : "NonErrorThrow",
+            message: error instanceof HarnessOperationFailure
+              ? error.cause_message
+              : error instanceof Error ? error.message : String(error)
           },
           run_validity: "INVALID_UNSCORABLE",
           invariant_result: null,
@@ -130,7 +168,7 @@ function executeCanonical(harness, runRef, record) {
   const active = one(harness.inspectActiveDelayedCorrectionCheckpoint(runRef));
   deliverBundle(
     harness, runRef, record, "B-LATER-USE",
-    laterUseRecords(active?.activeTrialRef, false), "deliverLaterUseInputsIfEligible"
+    laterUseRecords(active?.activeTrialRef ?? null, false), "deliverLaterUseInputsIfEligible"
   );
   record("PROCESSED", null, harness.processCurrentInteraction(runRef));
   record("REALIZED", "B-LATER-REALIZATION", harness.realizeAvailableOutputs(runRef));
@@ -153,7 +191,7 @@ function executeDrillOptIn(harness, runRef, record) {
   const active = one(harness.inspectActiveDelayedCorrectionCheckpoint(runRef));
   deliverBundle(
     harness, runRef, record, "B-CF2-LATER-USE",
-    laterUseRecords(active?.activeTrialRef, true), "deliverDrillOptInInputsIfEligible"
+    laterUseRecords(active?.activeTrialRef ?? null, true), "deliverDrillOptInInputsIfEligible"
   );
   record("PROCESSED", null, harness.processCurrentInteraction(runRef));
 }
@@ -656,8 +694,88 @@ function one(values) {
 }
 
 function deliverBundle(harness, runRef, record, bundleId, records, method) {
-  const result = harness[method](runRef, records);
-  return record("DELIVERED", bundleId, result, records);
+  try {
+    const result = harness[method](runRef, records);
+    return record(
+      Array.isArray(result) && result.length === 0
+        ? "WITHHELD_NOT_ELIGIBLE"
+        : "DELIVERED",
+      bundleId,
+      result,
+      records
+    );
+  } catch (error) {
+    record("DELIVERY_INTERRUPTED", bundleId, {
+      reason_code: error instanceof HarnessOperationFailure
+        ? error.reason_code
+        : "SCN001-SSFO-V0.2.0-VAL-002",
+      error_name: error instanceof HarnessOperationFailure
+        ? error.cause_name
+        : error instanceof Error ? error.name : "NonErrorThrow",
+      message: error instanceof HarnessOperationFailure
+        ? error.cause_message
+        : error instanceof Error ? error.message : String(error)
+    }, records);
+    throw error;
+  }
+}
+
+class HarnessOperationFailure extends Error {
+  constructor(operation, reasonCode, attribution, cause) {
+    super(`Selected-slice ${operation} failed.`);
+    this.name = "HarnessOperationFailure";
+    this.operation = operation;
+    this.reason_code = reasonCode;
+    this.failure_attribution = attribution;
+    this.cause_name = cause instanceof Error ? cause.name : "NonErrorThrow";
+    this.cause_message = cause instanceof Error ? cause.message : String(cause);
+  }
+}
+
+function instrumentHarness(harness) {
+  return Object.freeze(Object.fromEntries(
+    Object.entries(harness).map(([property, value]) => [
+      property,
+      typeof value !== "function" ? value : (...args) => {
+        try {
+          return value(...args);
+        } catch (error) {
+          const classification = classifyHarnessOperation(property);
+          throw new HarnessOperationFailure(
+            String(property), classification.reasonCode, classification.attribution, error
+          );
+        }
+      }
+    ])
+  ));
+}
+
+function classifyHarnessOperation(operation) {
+  if (operation === "processCurrentInteraction") {
+    return { reasonCode: null, attribution: "SUT" };
+  }
+  if (operation === "realizeAvailableOutputs") {
+    return {
+      reasonCode: "SCN001-SSFO-V0.2.0-VAL-007",
+      attribution: "INFRASTRUCTURE"
+    };
+  }
+  if (String(operation).startsWith("deliver")) {
+    return {
+      reasonCode: "SCN001-SSFO-V0.2.0-VAL-002",
+      attribution: "INFRASTRUCTURE"
+    };
+  }
+  if (String(operation).startsWith("inspect")) {
+    return {
+      reasonCode: "SCN001-SSFO-V0.2.0-VAL-006",
+      attribution: "INFRASTRUCTURE"
+    };
+  }
+  return {
+    reasonCode: "SCN001-SSFO-V0.2.0-VAL-005",
+    attribution: "INFRASTRUCTURE"
+  };
 }
 
 function assertRunnerInput(input) {

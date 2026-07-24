@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createExactArtifactReference } from "../src/formalArtifactIdentity.js";
+import {
+  canonicalizeJson,
+  createExactArtifactReference,
+  fingerprintCanonicalJson
+} from "../src/formalArtifactIdentity.js";
 import { REQUIRED_CLAIM_CLASSES } from "../src/formalAuthority.js";
 import {
   CLAIM_OBLIGATION_MAP,
@@ -54,7 +58,34 @@ test("invalid attempts remain unscorable instead of fabricating SUT failure", as
   const attempt = await createAuthorizedAttempt(
     setup, setup.campaignAuthorization.identity_payload.attempt_slots[0]
   );
+  const sourceMaterial = [{ fixture_record_id: "fixture:undelivered" }];
+  const observation = {
+    reason_code: "SCN001-SSFO-V0.2.0-VAL-002",
+    event_kind: "DELIVERY_INTERRUPTED",
+    bundle_id: "bundle:undelivered",
+    source_material: sourceMaterial,
+    error_name: "Error",
+    message: "required fixture input was not delivered"
+  };
+  const invalidityEvidence = await attempt.recorder.captureRuntimeEvidence({
+    artifact_id: `artifact:run-invalidity:${attempt.slot.attempt_id}`,
+    evidence_kind: "EVALUATOR_PRIVATE_CAPTURE",
+    raw_bytes: Buffer.from(`${canonicalizeJson(observation)}\n`, "utf8"),
+    semantic_data: {
+      capture_role: "RUN_INVALIDITY_OBSERVATION",
+      reason_code: observation.reason_code,
+      event_kind: observation.event_kind,
+      bundle_id: observation.bundle_id,
+      source_material_digest: fingerprintCanonicalJson(
+        "zoey:run-invalidity-source-material:v1", sourceMaterial
+      ),
+      error_name: observation.error_name
+    },
+    deliver_to_sut: false,
+    sealed_at: "2026-07-21T13:35:00Z"
+  });
   const invalid = runInput(setup, attempt, {
+    evidence_artifacts: [...attempt.evidenceArtifacts, invalidityEvidence],
     run_validity: "INVALID_UNSCORABLE",
     invariant_result: null,
     obligation_results: [],
@@ -63,7 +94,18 @@ test("invalid attempts remain unscorable instead of fabricating SUT failure", as
   const record = await createFormalRunRecord(invalid);
   assert.equal(record.identity_payload.run_validity, "INVALID_UNSCORABLE");
 
+  await assert.rejects(
+    () => createFormalRunRecord(runInput(setup, attempt, {
+      run_validity: "INVALID_UNSCORABLE",
+      invariant_result: null,
+      obligation_results: [],
+      failure_findings: []
+    })),
+    /replayable invalidity observation/
+  );
+
   const mislabeled = runInput(setup, attempt, {
+    evidence_artifacts: [...attempt.evidenceArtifacts, invalidityEvidence],
     run_validity: "INVALID_UNSCORABLE",
     invariant_result: "HARD_FAIL",
     obligation_results: passObligations(attempt.slot.path_id)

@@ -7,8 +7,11 @@ import {
   fingerprintCanonicalJson
 } from "./formalArtifactIdentity.js";
 import {
+  attemptStartAllocationBindingFingerprint,
+  validateAttemptAllocation,
   validateCampaignAuthorization,
-  validateProspectiveExecutionStartPrerequisites
+  validateProspectiveExecutionStartPrerequisites,
+  validateReplacementExecutionStartPrerequisites
 } from "./formalAuthority.js";
 import {
   createFormalEvidenceRecorder,
@@ -38,10 +41,20 @@ async function executeFormalAttempt(input, sutBoundary) {
   const authorizationRef = createExactArtifactReference(input.authorization);
   const namespaceRef = createExactArtifactReference(input.authorizing_namespace);
   const receiptRef = createExactArtifactReference(input.anchor_receipt);
-  const slot = input.authorization.identity_payload.attempt_slots.find(
+  const authorizedSlot = input.authorization.identity_payload.attempt_slots.find(
     (candidate) => candidate.slot_id === input.slot_id
   );
-  if (!slot) throw new Error("Formal pipeline slot is not a primary authorized attempt.");
+  const attemptAllocation = input.attempt_allocation === undefined
+    ? prospectiveAllocation(input.authorization, authorizedSlot)
+    : structuredClone(input.attempt_allocation);
+  validateAttemptAllocation(attemptAllocation, input.authorization);
+  if (attemptAllocation.slot_id !== input.slot_id
+    || (input.attempt_allocation === undefined && authorizedSlot === undefined)
+    || (input.attempt_allocation !== undefined
+      && attemptAllocation.allocation_kind !== "INVALIDITY_DERIVED_REPLACEMENT")) {
+    throw new Error("Formal pipeline lacks one exact primary or replacement allocation.");
+  }
+  const slot = input.attempt_allocation === undefined ? authorizedSlot : attemptAllocation;
   const sessionInput = { path_id: slot.path_id };
   const session = sutBoundary === null
     ? createSelectedSlicePathSession(sessionInput)
@@ -57,6 +70,7 @@ async function executeFormalAttempt(input, sutBoundary) {
     event_namespace: `${input.artifact_namespace}:recorder`
   });
   const evidenceArtifacts = [];
+  let startGrant = null;
   try {
     const attestationRequest = deepFreeze({
       profile: input.authorization.identity_payload.anchor_requirement.fresh_start_profile,
@@ -67,7 +81,8 @@ async function executeFormalAttempt(input, sutBoundary) {
       attempt_id: slot.attempt_id,
       path_id: slot.path_id,
       anchor_event_id: input.anchor_receipt.identity_payload.semantic_envelope.external_event_id,
-      run_scope_id: session.run_ref
+      run_scope_id: session.run_ref,
+      allocation_binding_digest: attemptStartAllocationBindingFingerprint(slot)
     });
     const freshAttestationBytes = await input.fresh_start_attestor(attestationRequest);
     const freshStart = await recorder.captureAuthenticatedFreshStart({
@@ -79,6 +94,7 @@ async function executeFormalAttempt(input, sutBoundary) {
       anchor_receipt_ref: receiptRef,
       slot_id: slot.slot_id,
       run_scope_id: session.run_ref,
+      allocation_binding_digest: attestationRequest.allocation_binding_digest,
       sealed_at: input.sealed_at
     });
     evidenceArtifacts.push(freshStart);
@@ -87,9 +103,8 @@ async function executeFormalAttempt(input, sutBoundary) {
       ...freshStartProof
     } = freshStart.identity_payload.semantic_envelope;
     void ignoredCaptureRole;
-    const preflight = validateProspectiveExecutionStartPrerequisites({
+    const prerequisiteBasis = {
       authorization: input.authorization,
-      slot_id: slot.slot_id,
       authorizing_namespace_ref: namespaceRef,
       anchor_receipt_ref: receiptRef,
       anchor_verification: deriveAnchorVerification(
@@ -99,7 +114,16 @@ async function executeFormalAttempt(input, sutBoundary) {
         ...structuredClone(freshStartProof),
         verification_result: "VERIFIED"
       }
-    });
+    };
+    const preflight = attemptAllocation.allocation_kind === "INVALIDITY_DERIVED_REPLACEMENT"
+      ? validateReplacementExecutionStartPrerequisites({
+        ...prerequisiteBasis,
+        attempt_allocation: attemptAllocation
+      })
+      : validateProspectiveExecutionStartPrerequisites({
+        ...prerequisiteBasis,
+        slot_id: slot.slot_id
+      });
     const initialInspection = await recorder.captureInitialInspection({
       artifact_id: `${input.artifact_namespace}:initial-inspection`,
       raw_bytes: canonicalBytes(session.initial_inspection),
@@ -154,7 +178,7 @@ async function executeFormalAttempt(input, sutBoundary) {
       sealed_at: input.sealed_at
     });
     evidenceArtifacts.push(selection);
-    const startGrant = await resolveDurableExecutionAuthority({
+    startGrant = await resolveDurableExecutionAuthority({
       store: input.store,
       authorization: input.authorization,
       authority_context: input.authority_context,
@@ -171,33 +195,11 @@ async function executeFormalAttempt(input, sutBoundary) {
       input.artifact_namespace, input.sealed_at
     );
     evidenceArtifacts.push(...captured.evidenceArtifacts);
-    if (transcript.execution_status === "INTERRUPTED") {
-      return deepFreeze({
-        execution_status: "INTERRUPTED_RETAINED",
-        slot: structuredClone(slot),
-        start_grant: startGrant,
-        evidence_artifacts: evidenceArtifacts,
-        evidence_refs: evidenceArtifacts.map(createExactArtifactReference),
-        run_record: null,
-        attempt_disposition: "ABANDONED_RETAINED",
-        invalidity: structuredClone(transcript.interruption)
-      });
-    }
     const inspectionRefs = captured.inspectionArtifacts.map(createExactArtifactReference);
     const findings = transcript.failure_assertions.map((assertion) => createFailureFinding({
       ...structuredClone(assertion),
       observed_refs: inspectionRefs
     }));
-    const attemptAllocation = {
-      allocation_kind: "PROSPECTIVE_SLOT",
-      authorization_ref: authorizationRef,
-      slot_id: slot.slot_id,
-      attempt_id: slot.attempt_id,
-      path_id: slot.path_id,
-      selection_basis_digest: slot.selection_basis_digest,
-      lifecycle: "authorized",
-      outcome_independent: true
-    };
     const runInput = {
       store: input.store,
       artifact_id: `${input.artifact_namespace}:formal-run`,
@@ -228,7 +230,10 @@ async function executeFormalAttempt(input, sutBoundary) {
       invariant_result: transcript.invariant_result,
       obligation_results: transcript.obligation_results,
       failure_findings: findings,
-      predecessor_run_ref: null,
+      predecessor_run_ref: attemptAllocation.allocation_kind
+        === "INVALIDITY_DERIVED_REPLACEMENT"
+        ? structuredClone(attemptAllocation.predecessor_run_ref)
+        : null,
       producer_identity: input.run_producer_identity,
       validator_identity: input.run_validator_identity,
       seal_result: "VALIDATED_AND_SEALED",
@@ -236,6 +241,23 @@ async function executeFormalAttempt(input, sutBoundary) {
       sealed_by: input.run_validator_identity
     };
     const runRecord = await createFormalRunRecord(runInput);
+    if (transcript.execution_status === "INTERRUPTED") {
+      return deepFreeze({
+        execution_status: "SEALED_INVALID",
+        slot: structuredClone(slot),
+        start_grant: startGrant,
+        transcript,
+        evidence_artifacts: evidenceArtifacts,
+        evidence_refs: evidenceArtifacts.map(createExactArtifactReference),
+        invalidity_evidence_refs: captured.invalidityArtifacts.map(
+          createExactArtifactReference
+        ),
+        run_record: runRecord,
+        run_record_context: runInput,
+        attempt_disposition: "INVALID_RETAINED",
+        invalidity: structuredClone(transcript.interruption)
+      });
+    }
     return deepFreeze({
       execution_status: "SEALED",
       slot: structuredClone(slot),
@@ -243,10 +265,29 @@ async function executeFormalAttempt(input, sutBoundary) {
       transcript,
       evidence_artifacts: evidenceArtifacts,
       evidence_refs: evidenceArtifacts.map(createExactArtifactReference),
+      invalidity_evidence_refs: [],
       run_record: runRecord,
       run_record_context: runInput,
       attempt_disposition: "SEALED_RECORD",
       invalidity: null
+    });
+  } catch (error) {
+    if (startGrant === null) throw error;
+    return deepFreeze({
+      execution_status: "INTERRUPTED_RETAINED",
+      slot: structuredClone(slot),
+      start_grant: startGrant,
+      evidence_artifacts: evidenceArtifacts,
+      evidence_refs: evidenceArtifacts.map(createExactArtifactReference),
+      run_record: null,
+      attempt_disposition: "ABANDONED_RETAINED",
+      invalidity_evidence_refs: [],
+      invalidity: null,
+      abandonment: {
+        reason_code: "POST_START_AUTHORITY_CLOSURE_FAILURE",
+        error_name: error instanceof Error ? error.name : "NonErrorThrow",
+        message: error instanceof Error ? error.message : String(error)
+      }
     });
   } finally {
     session.close();
@@ -259,6 +300,7 @@ async function captureTranscript(
   const evidenceArtifacts = [];
   const inspectionArtifacts = [];
   const deliveredArtifacts = [];
+  const invalidityArtifacts = [];
   const boundary = authorityContext.behavior_manifest.identity_payload.public_boundary;
   const inputContractDigest = boundary.input_contract_digest;
   const outputContractDigest = boundary.output_contract_digest;
@@ -282,6 +324,76 @@ async function captureTranscript(
       });
       evidenceArtifacts.push(inputArtifact);
       deliveredArtifacts.push(inputArtifact);
+    }
+    if (event.event_kind === "DELIVERY_INTERRUPTED") {
+      const observation = {
+        reason_code: event.result.reason_code,
+        event_kind: event.event_kind,
+        bundle_id: event.bundle_id,
+        source_material: event.source_material,
+        error_name: event.result.error_name,
+        message: event.result.message
+      };
+      const invalidityArtifact = await recorder.captureRuntimeEvidence({
+        artifact_id: `${namespace}:run-invalidity:${suffix}`,
+        evidence_kind: "EVALUATOR_PRIVATE_CAPTURE",
+        raw_bytes: canonicalBytes(observation),
+        semantic_data: {
+          capture_role: "RUN_INVALIDITY_OBSERVATION",
+          reason_code: event.result.reason_code,
+          event_kind: event.event_kind,
+          bundle_id: event.bundle_id,
+          source_material_digest: fingerprintCanonicalJson(
+            "zoey:run-invalidity-source-material:v1", event.source_material
+          ),
+          error_name: event.result.error_name
+        },
+        deliver_to_sut: false,
+        sealed_at: sealedAt
+      });
+      evidenceArtifacts.push(invalidityArtifact);
+      invalidityArtifacts.push(invalidityArtifact);
+    }
+    if (event.event_kind === "WITHHELD_NOT_ELIGIBLE") {
+      const observation = {
+        event_kind: event.event_kind,
+        bundle_id: event.bundle_id,
+        source_material: event.source_material,
+        result: event.result
+      };
+      const withheldArtifact = await recorder.captureRuntimeEvidence({
+        artifact_id: `${namespace}:withheld-fixture:${suffix}`,
+        evidence_kind: "EVALUATOR_PRIVATE_CAPTURE",
+        raw_bytes: canonicalBytes(observation),
+        semantic_data: {
+          capture_role: "WITHHELD_FIXTURE_OBSERVATION",
+          bundle_id: event.bundle_id,
+          source_material_digest: fingerprintCanonicalJson(
+            "zoey:withheld-fixture-source-material:v1", event.source_material
+          ),
+          result_digest: fingerprintCanonicalJson(
+            "zoey:withheld-fixture-result:v1", event.result
+          )
+        },
+        deliver_to_sut: false,
+        sealed_at: sealedAt
+      });
+      evidenceArtifacts.push(withheldArtifact);
+    }
+    if (event.event_kind === "SUT_PROCESSING_FAILED") {
+      const failureArtifact = await recorder.captureRuntimeEvidence({
+        artifact_id: `${namespace}:sut-failure:${suffix}`,
+        evidence_kind: "EVALUATOR_PRIVATE_CAPTURE",
+        raw_bytes: canonicalBytes(event.result),
+        semantic_data: {
+          capture_role: "SUT_FAILURE_OBSERVATION",
+          operation: event.result.operation,
+          error_name: event.result.error_name
+        },
+        deliver_to_sut: false,
+        sealed_at: sealedAt
+      });
+      evidenceArtifacts.push(failureArtifact);
     }
     if (event.event_kind === "PROCESSED") {
       latestOutput = await recorder.captureRuntimeEvidence({
@@ -357,7 +469,9 @@ async function captureTranscript(
     evidenceArtifacts.push(inspection);
     inspectionArtifacts.push(inspection);
   }
-  return { evidenceArtifacts, inspectionArtifacts, deliveredArtifacts };
+  return {
+    evidenceArtifacts, inspectionArtifacts, deliveredArtifacts, invalidityArtifacts
+  };
 }
 
 function deriveAnchorVerification(authorization, namespace, receipt) {
@@ -382,6 +496,22 @@ function deriveAnchorVerification(authorization, namespace, receipt) {
   };
 }
 
+function prospectiveAllocation(authorization, slot) {
+  if (slot === undefined) {
+    throw new Error("Formal pipeline slot is not a primary authorized attempt.");
+  }
+  return {
+    allocation_kind: "PROSPECTIVE_SLOT",
+    authorization_ref: createExactArtifactReference(authorization),
+    slot_id: slot.slot_id,
+    attempt_id: slot.attempt_id,
+    path_id: slot.path_id,
+    selection_basis_digest: slot.selection_basis_digest,
+    lifecycle: "authorized",
+    outcome_independent: true
+  };
+}
+
 function validatePipelineInput(input) {
   assertExactKeys(input, [
     "store", "authorization", "authority_context", "authorizing_namespace",
@@ -389,7 +519,7 @@ function validatePipelineInput(input) {
     "qualification_evidence_artifacts", "artifact_namespace",
     "evidence_producer_identity", "evidence_validator_identity",
     "run_producer_identity", "run_validator_identity", "sealed_at"
-  ], [], "formal selected-slice pipeline input");
+  ], ["attempt_allocation"], "formal selected-slice pipeline input");
   validateCampaignAuthorization(input.authorization, input.authority_context);
   validateAuthorityNamespaceIndex(input.authorizing_namespace);
   validateFormalEvidenceArtifact(input.anchor_receipt);

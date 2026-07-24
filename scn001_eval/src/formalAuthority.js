@@ -563,9 +563,62 @@ export function validateProspectiveExecutionStartPrerequisites(input) {
     input.anchor_verification,
     input.slot_id
   );
+  if (input.fresh_start_proof.allocation_binding_digest
+    !== attemptStartAllocationBindingFingerprint(slot)) {
+    throw new Error("Fresh start does not bind the exact prospective allocation.");
+  }
   return deepFreeze({
     authorization_ref: createExactArtifactReference(input.authorization),
     slot: structuredClone(slot),
+    authorizing_namespace_ref: structuredClone(input.authorizing_namespace_ref),
+    anchor_receipt_ref: structuredClone(input.anchor_receipt_ref),
+    anchor_verification: structuredClone(input.anchor_verification),
+    fresh_start_proof: structuredClone(input.fresh_start_proof),
+    lifecycle: "authorized",
+    authority_status: "READY_FOR_DURABLE_AUTHORITY_RESOLUTION",
+    execution_start_authorized: false
+  });
+}
+
+export function validateReplacementExecutionStartPrerequisites(input) {
+  assertExactKeys(input, [
+    "authorization",
+    "attempt_allocation",
+    "authorizing_namespace_ref",
+    "anchor_receipt_ref",
+    "anchor_verification",
+    "fresh_start_proof"
+  ], [], "replacement execution start");
+  validateCanonicalArtifact(input.authorization, { allowedKinds: ["CAMPAIGN_AUTHORIZATION"] });
+  validateAttemptAllocation(input.attempt_allocation, input.authorization);
+  if (input.attempt_allocation.allocation_kind !== "INVALIDITY_DERIVED_REPLACEMENT") {
+    throw new Error("Replacement execution start requires a derived replacement allocation.");
+  }
+  validateExactArtifactReference(input.authorizing_namespace_ref, {
+    allowedKinds: ["AUTHORITY_NAMESPACE_INDEX"]
+  });
+  validateExactArtifactReference(input.anchor_receipt_ref, {
+    allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT"]
+  });
+  validateAnchorVerification(
+    input.anchor_verification,
+    input.authorization,
+    input.authorizing_namespace_ref,
+    input.anchor_receipt_ref
+  );
+  validateFreshStartProof(
+    input.fresh_start_proof,
+    input.authorization.identity_payload.anchor_requirement,
+    input.anchor_verification,
+    input.attempt_allocation.slot_id
+  );
+  if (input.fresh_start_proof.allocation_binding_digest
+    !== attemptStartAllocationBindingFingerprint(input.attempt_allocation)) {
+    throw new Error("Fresh start does not bind the exact replacement allocation.");
+  }
+  return deepFreeze({
+    authorization_ref: createExactArtifactReference(input.authorization),
+    slot: structuredClone(input.attempt_allocation),
     authorizing_namespace_ref: structuredClone(input.authorizing_namespace_ref),
     anchor_receipt_ref: structuredClone(input.anchor_receipt_ref),
     anchor_verification: structuredClone(input.anchor_verification),
@@ -700,6 +753,13 @@ export function validateInitialRunInvalidityDecision(decision, authorization) {
   }
   validateCreated(payload.decided_at, payload.decided_by);
   return decision;
+}
+
+export function validateRunInvalidityReasonCode(value) {
+  if (!RUN_INVALIDITY_REASON_CODES.includes(value)) {
+    throw new Error("Run-invalidity reason is outside the pre-registered catalogue.");
+  }
+  return value;
 }
 
 export function allocateReplacementAttempt(input) {
@@ -1251,7 +1311,8 @@ function validateAnchorVerification(value, authorization, namespaceRef, receiptR
 function validateFreshStartProof(value, anchorRequirement, verification, slotId) {
   assertExactKeys(value, [
     "profile", "slot_id", "challenge", "issued_by", "observed_by", "anchor_event_id",
-    "start_event_id", "run_scope_id", "capture_binding_digest", "verification_result"
+    "start_event_id", "run_scope_id", "allocation_binding_digest",
+    "capture_binding_digest", "verification_result"
   ], [], "fresh-start proof");
   if (value.profile !== anchorRequirement.fresh_start_profile
     || value.slot_id !== slotId
@@ -1267,7 +1328,12 @@ function validateFreshStartProof(value, anchorRequirement, verification, slotId)
   assertOpaqueId(value.observed_by, "fresh-start proof.observed_by");
   assertOpaqueId(value.start_event_id, "fresh-start proof.start_event_id");
   assertOpaqueId(value.run_scope_id, "fresh-start proof.run_scope_id");
+  assertSha256(value.allocation_binding_digest, "fresh-start proof.allocation_binding_digest");
   assertSha256(value.capture_binding_digest, "fresh-start proof.capture_binding_digest");
+}
+
+export function attemptStartAllocationBindingFingerprint(value) {
+  return fingerprintCanonicalJson("zoey:formal-attempt-start-allocation:v1", value);
 }
 
 function validateCustodyPlan(value) {

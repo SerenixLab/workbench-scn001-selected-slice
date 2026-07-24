@@ -15,6 +15,7 @@ import {
 } from "../src/formalArtifactIdentity.js";
 import {
   REQUIRED_CLAIM_CLASSES,
+  attemptStartAllocationBindingFingerprint,
   validateCampaignAuthorization,
   validateProspectiveExecutionStartPrerequisites,
   validateQualificationPlan,
@@ -176,6 +177,7 @@ export async function createAuthorizedAttempt(setup, slot, options = {}) {
     validator_identity: "actor:formal-evidence-validator",
     event_namespace: `recorder:${slot.attempt_id}`
   });
+  const allocationBindingDigest = attemptStartAllocationBindingFingerprint(slot);
   const freshAttestationBytes = createFixtureFreshStartAttestationBytes({
     profile: "GATE_LAUNCHED_ATTEMPT",
     authorization_ref: authorizationRef,
@@ -190,6 +192,7 @@ export async function createAuthorizedAttempt(setup, slot, options = {}) {
     anchor_event_id: "event:protected-gate:formal-campaign-fixture",
     start_event_id: `event:start:${slot.attempt_id}`,
     run_scope_id: `run-scope:${slot.attempt_id}`,
+    allocation_binding_digest: allocationBindingDigest,
     producer_identity: "actor:external-start-platform",
     issued_at: "2026-07-21T13:24:00Z"
   });
@@ -202,6 +205,7 @@ export async function createAuthorizedAttempt(setup, slot, options = {}) {
     anchor_receipt_ref: receiptRef,
     slot_id: slot.slot_id,
     run_scope_id: `run-scope:${slot.attempt_id}`,
+    allocation_binding_digest: allocationBindingDigest,
     sealed_at: "2026-07-21T13:25:00Z"
   });
   const freshSemantics = freshStart.identity_payload.semantic_envelope;
@@ -234,6 +238,7 @@ export async function createAuthorizedAttempt(setup, slot, options = {}) {
       anchor_event_id: "event:protected-gate:formal-campaign-fixture",
       start_event_id: `event:start:${slot.attempt_id}`,
       run_scope_id: `run-scope:${slot.attempt_id}`,
+      allocation_binding_digest: allocationBindingDigest,
       capture_binding_digest: freshSemantics.capture_binding_digest,
       verification_result: "VERIFIED"
     }
@@ -376,6 +381,7 @@ export async function createAuthorizedAttempt(setup, slot, options = {}) {
   ];
   return {
     slot,
+    recorder,
     startGrant,
     evidenceArtifacts,
     initialState,

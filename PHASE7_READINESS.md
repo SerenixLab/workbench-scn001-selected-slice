@@ -270,9 +270,11 @@ The attempt pipeline now captures the raw initial inspection before either
 initial-state or isolation proof. Formal-run replay requires both proofs to
 resolve the same exact inspection artifact, replays its canonical bytes, and
 reconstructs the empty boundary, run scope, and both proof digests. A
-pre-seal interruption retains all available evidence and suspends the campaign
-as `authority_review_required`; it does not fabricate a sealed invalid run,
-invalidity decision, or replacement authority.
+fixture-delivery interruption retains exact attempted source material and
+`VAL-002` without claiming delivery, seals only when the captured evidence
+satisfies invalid-run integrity, and receives an invalidity decision only after
+raw replay. The replacement start is signed over the complete deterministic
+allocation and exact predecessor chain.
 
 The campaign runner requires an explicit historical-campaign context whose
 campaign-index set exactly equals the prior namespace set. It also compares a
@@ -281,12 +283,24 @@ halts ordinary execution before index/result creation and returns the exact
 owner/independent-review decision basis with `claim_authorized: false`.
 Qualified execution remains non-authoritative in measured V1.
 
-The accepted sealable-invalidity to decision, deterministic replacement,
-replacement execution, limit exhaustion, and accepted contingency/supersession
-continuation are still not one end-to-end orchestrated path. The authoritative
-status is therefore restored to
+The bounded runner now executes the complete sealable-invalidity path through
+decision, deterministic replacement, replacement execution, and repeated-root,
+per-path, or campaign-wide suspension. A SUT processing failure after material
+delivery remains a valid scored obligation failure and cannot trigger
+replacement. A withheld prerequisite-dependent fixture is not mislabeled as a
+delivered SUT input. A post-start evidence/seal failure that cannot close a run
+remains abandoned for authority review.
+
+The complete local gate passes 489 tests with none failed, skipped, or
+cancelled, together with governance, formatting, syntax, dependency, boundary,
+and state checks. These results remain implementing-task evidence only.
+
+The accepted owner-governed resume/supersession transition after
+qualified-branch divergence is still not one resumable end-to-end path.
+Qualified execution is deliberately non-authoritative in measured V1. The
+authoritative status therefore remains
 `PHASE7_MECHANISM_LAYER_COMPLETE_PIPELINE_CLOSURE_PENDING`, with subordinate
-status `PHASE7_HAPPY_PATH_PIPELINE_IMPLEMENTED`. The four controls remain
+status `PHASE7_MEASURED_CONSERVATIVE_PIPELINE_IMPLEMENTED`. The four controls remain
 `applicable / uncovered`; fresh exact-commit independent review, protected
 integration, project-owner authority, and real external events remain required.
 

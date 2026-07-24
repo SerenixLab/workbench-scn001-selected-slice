@@ -7,7 +7,10 @@ import {
 } from "@zoey/scn001-sut-core";
 
 import { REQUIRED_PATHS } from "../src/formalAuthority.js";
-import { verifyDurableEvidence } from "../src/formalEvidence.js";
+import {
+  verifyDurableEvidence,
+  verifyRunInvalidityObservation
+} from "../src/formalEvidence.js";
 import {
   executeFormalSelectedSliceAttempt,
   executeFormalSelectedSliceAttemptForMechanismTest
@@ -84,7 +87,7 @@ test("unsigned fresh-start material is rejected before path execution", async ()
   );
 });
 
-test("execution interruption retains partial evidence without sealing a scored run", async () => {
+test("execution interruption seals retained evidence only as invalid and unscorable", async () => {
   const setup = await createFormalCampaignFixture();
   const slot = setup.campaignAuthorization.identity_payload.attempt_slots[0];
   const base = createSutBoundary();
@@ -100,15 +103,85 @@ test("execution interruption retains partial evidence without sealing a scored r
     pipelineInput(setup, slot, "artifact:pipeline:interrupted"),
     interruptedBoundary
   );
-  assert.equal(result.execution_status, "INTERRUPTED_RETAINED");
-  assert.equal(result.attempt_disposition, "ABANDONED_RETAINED");
-  assert.equal(result.run_record, null);
-  assert.equal(result.invalidity.reason_code, "SCN001-SSFO-V0.2.0-VAL-010");
+  assert.equal(
+    result.execution_status, "SEALED_INVALID", JSON.stringify(result.abandonment)
+  );
+  assert.equal(result.attempt_disposition, "INVALID_RETAINED");
+  assert.equal(result.run_record.identity_payload.run_validity, "INVALID_UNSCORABLE");
+  assert.equal(result.run_record.identity_payload.invariant_result, null);
+  assert.deepEqual(result.run_record.identity_payload.obligation_results, []);
+  assert.equal(result.invalidity.reason_code, "SCN001-SSFO-V0.2.0-VAL-002");
   assert.match(result.invalidity.message, /injected fixture ingress interruption/);
-  assert.equal(result.evidence_artifacts.length, 5);
+  assert.equal(result.invalidity_evidence_refs.length, 1);
+  const invalidityEvidence = result.evidence_artifacts.find(
+    (artifact) => artifact.identity_payload.semantic_envelope.capture_role
+      === "RUN_INVALIDITY_OBSERVATION"
+  );
+  const replay = await verifyRunInvalidityObservation(setup.store, invalidityEvidence, {
+    attempt_id: slot.attempt_id,
+    path_id: slot.path_id,
+    reason_code: "SCN001-SSFO-V0.2.0-VAL-002"
+  });
+  assert.equal(replay.observation.event_kind, "DELIVERY_INTERRUPTED");
+  assert.equal(
+    result.run_record.identity_payload.delivered_bundle_ids.includes("B-OLD-HISTORY"),
+    false
+  );
+  assert.equal(result.evidence_artifacts.length, 7);
   for (const artifact of result.evidence_artifacts) {
     await verifyDurableEvidence(setup.store, artifact);
   }
+});
+
+test("post-start seal failure remains abandoned and cannot fabricate replacement authority", async () => {
+  const setup = await createFormalCampaignFixture();
+  const slot = setup.campaignAuthorization.identity_payload.attempt_slots[0];
+  const rejectingStore = Object.freeze({
+    ...setup.store,
+    async writeArtifact(artifact, validator) {
+      if (artifact.artifact_kind === "FORMAL_RUN_RECORD") {
+        throw new Error("injected formal-run seal failure");
+      }
+      return setup.store.writeArtifact(artifact, validator);
+    }
+  });
+  const input = pipelineInput(setup, slot, "artifact:pipeline:seal-failure");
+  input.store = rejectingStore;
+  const result = await executeFormalSelectedSliceAttempt(input);
+  assert.equal(result.execution_status, "INTERRUPTED_RETAINED");
+  assert.equal(result.attempt_disposition, "ABANDONED_RETAINED");
+  assert.equal(result.run_record, null);
+  assert.equal(result.invalidity, null);
+  assert.match(result.abandonment.message, /injected formal-run seal failure/);
+  assert.ok(result.evidence_artifacts.length > 5);
+  for (const artifact of result.evidence_artifacts) {
+    await verifyDurableEvidence(setup.store, artifact);
+  }
+});
+
+test("SUT processing failure after delivered material is scored and cannot buy a retry", async () => {
+  const setup = await createFormalCampaignFixture();
+  const slot = setup.campaignAuthorization.identity_payload.attempt_slots[0];
+  const base = createSutBoundary();
+  const failedSut = Object.freeze(Object.fromEntries(
+    SUT_PUBLIC_BOUNDARY_METHODS.map((method) => [
+      method,
+      method === "processCurrentInteraction"
+        ? () => { throw new Error("injected SUT processing failure"); }
+        : (...argumentsReceived) => base[method](...argumentsReceived)
+    ])
+  ));
+  const result = await executeFormalSelectedSliceAttemptForMechanismTest(
+    pipelineInput(setup, slot, "artifact:pipeline:sut-failure"),
+    failedSut
+  );
+  assert.equal(result.execution_status, "SEALED", JSON.stringify(result.abandonment));
+  assert.equal(result.transcript.execution_status, "COMPLETED_WITH_SUT_FAILURE");
+  assert.equal(result.run_record.identity_payload.run_validity, "VALID");
+  assert.equal(result.invalidity, null);
+  assert.ok(result.run_record.identity_payload.obligation_results.some(
+    (entry) => entry.result === "OBLIGATION_FAIL"
+  ));
 });
 
 test("pipeline seals runner-derived failure and downstream not-reached outcomes", async () => {
@@ -127,11 +200,20 @@ test("pipeline seals runner-derived failure and downstream not-reached outcomes"
     pipelineInput(setup, slot, "artifact:pipeline:derived-failure"),
     missingOutputsBoundary
   );
+  assert.notEqual(result.run_record, null, JSON.stringify(result.abandonment));
   const byClaim = new Map(result.run_record.identity_payload.obligation_results.map(
     (entry) => [entry.claim_class, entry.result]
   ));
   assert.equal(result.execution_status, "SEALED");
   assert.equal(result.run_record.identity_payload.invariant_result, "INVARIANTS_CLEAR");
+  assert.equal(
+    result.run_record.identity_payload.delivered_bundle_ids.includes("B-PROPOSAL-ACCEPT"),
+    false
+  );
+  assert.ok(result.evidence_artifacts.some(
+    (artifact) => artifact.identity_payload.semantic_envelope.capture_role
+      === "WITHHELD_FIXTURE_OBSERVATION"
+  ));
   assert.equal(byClaim.get("CC-EVIDENCE-TRIAL-FORMATION"), "OBLIGATION_FAIL");
   assert.equal(byClaim.get("CC-SCOPE-TRIAL-USE"), "NOT_REACHED");
   assert.deepEqual(

@@ -12,7 +12,10 @@ import {
 } from "./formalArtifactIdentity.js";
 import {
   REQUIRED_CLAIM_CLASSES,
-  validateCampaignAuthorization
+  allocateReplacementAttempt,
+  createInitialRunInvalidityDecision,
+  validateCampaignAuthorization,
+  validateInitialRunInvalidityDecision
 } from "./formalAuthority.js";
 import {
   captureAuthenticatedAnchorReceipt,
@@ -21,7 +24,9 @@ import {
   qualificationComparatorInputFingerprint,
   qualificationComparatorInputFromTranscript,
   validateAuthorityNamespaceIndex,
-  validateCampaignEvidenceIndex
+  validateCampaignEvidenceIndex,
+  validateFormalEvidenceArtifact,
+  verifyRunInvalidityObservation
 } from "./formalEvidence.js";
 import { createBoundedCampaignResult } from "./boundedScoring.js";
 import {
@@ -84,17 +89,18 @@ async function executeCampaign(input, mechanismOptions = null) {
   validateInput(input);
   const authorization = input.authorization;
   const authorizationRef = createExactArtifactReference(authorization);
-  const allSlots = [
-    ...authorization.identity_payload.attempt_slots,
-    ...authorization.identity_payload.contingency_slots
-  ];
   const attemptResults = [];
+  const attemptQueue = [...authorization.identity_payload.attempt_slots];
+  const replacementAllocations = [];
+  const invalidityDecisions = [];
   let decisiveHardFailure = null;
   let qualificationDivergence = null;
   let authorityReviewRequired = false;
-  for (const slot of authorization.identity_payload.attempt_slots) {
+  let invalidityStopReason = null;
+  while (attemptQueue.length > 0) {
     if (decisiveHardFailure !== null || qualificationDivergence !== null
-      || authorityReviewRequired) break;
+      || authorityReviewRequired || invalidityStopReason !== null) break;
+    const slot = attemptQueue.shift();
     const attemptInput = {
       store: input.store,
       authorization,
@@ -105,12 +111,17 @@ async function executeCampaign(input, mechanismOptions = null) {
       slot_id: slot.slot_id,
       fresh_start_attestor: input.fresh_start_attestor,
       qualification_evidence_artifacts: input.qualification_evidence_artifacts,
-      artifact_namespace: `${input.artifact_namespace}:attempt:${slot.attempt_id}`,
+      artifact_namespace: `${input.artifact_namespace}:attempt:${
+        String(attemptResults.length + 1).padStart(3, "0")
+      }`,
       evidence_producer_identity: input.evidence_producer_identity,
       evidence_validator_identity: input.evidence_validator_identity,
       run_producer_identity: input.run_producer_identity,
       run_validator_identity: input.run_validator_identity,
-      sealed_at: input.attempts_sealed_at
+      sealed_at: input.attempts_sealed_at,
+      ...(slot.allocation_kind === "INVALIDITY_DERIVED_REPLACEMENT"
+        ? { attempt_allocation: slot }
+        : {})
     };
     const boundary = mechanismOptions?.sut_boundary_factory?.(structuredClone(slot));
     const result = boundary === undefined
@@ -119,6 +130,57 @@ async function executeCampaign(input, mechanismOptions = null) {
     attemptResults.push(result);
     if (result.run_record === null) {
       authorityReviewRequired = true;
+    } else if (result.run_record.identity_payload.run_validity === "INVALID_UNSCORABLE") {
+      if (result.invalidity_evidence_refs.length !== 1) {
+        throw new Error("Sealed invalid attempt requires one exact replayable observation.");
+      }
+      const invalidityEvidence = await input.store.readArtifact(
+        result.invalidity_evidence_refs[0],
+        validateFormalEvidenceArtifact
+      );
+      await verifyRunInvalidityObservation(input.store, invalidityEvidence, {
+        attempt_id: result.slot.attempt_id,
+        path_id: result.slot.path_id,
+        reason_code: result.invalidity.reason_code
+      });
+      const consequence = invalidityConsequence(
+        invalidityDecisions, result.slot.path_id, result.invalidity.reason_code
+      );
+      const invalidityDecision = createInitialRunInvalidityDecision({
+        artifact_id: `${input.artifact_namespace}:invalidity:${
+          String(invalidityDecisions.length + 1).padStart(3, "0")
+        }`,
+        campaign_authorization: authorization,
+        run_record_ref: createExactArtifactReference(result.run_record),
+        attempt_allocation: result.run_record.identity_payload.attempt_allocation,
+        attempt_id: result.slot.attempt_id,
+        path_id: result.slot.path_id,
+        reason_code: result.invalidity.reason_code,
+        basis_evidence_refs: result.invalidity_evidence_refs.slice().sort(referenceSort),
+        evaluator_identity: input.campaign_actor_identity,
+        validator_identity: input.index_validator_identity,
+        validator_result: "CONFIRMED",
+        replacement_eligible: consequence.replacementEligible,
+        campaign_consequence: consequence.campaignConsequence,
+        decided_at: input.index_frozen_at,
+        decided_by: input.index_validator_identity
+      });
+      await input.store.writeArtifact(
+        invalidityDecision,
+        (artifact) => validateInitialRunInvalidityDecision(artifact, authorization)
+      );
+      invalidityDecisions.push(invalidityDecision);
+      if (consequence.replacementEligible) {
+        const replacement = allocateReplacementAttempt({
+          authorization,
+          invalidity_decisions: invalidityDecisions,
+          target_decision: invalidityDecision
+        });
+        replacementAllocations.push(replacement);
+        attemptQueue.unshift(replacement);
+      } else {
+        invalidityStopReason = consequence.stopReason;
+      }
     } else if (result.run_record.identity_payload.invariant_result === "HARD_FAIL") {
       decisiveHardFailure = result;
     } else {
@@ -127,6 +189,15 @@ async function executeCampaign(input, mechanismOptions = null) {
       );
     }
   }
+  const allSlots = [
+    ...authorization.identity_payload.attempt_slots,
+    ...authorization.identity_payload.contingency_slots,
+    ...replacementAllocations
+  ];
+  const campaignDecisions = [
+    ...input.campaign_decisions,
+    ...invalidityDecisions
+  ];
   if (qualificationDivergence !== null) {
     return deepFreeze({
       execution_status: "QUALIFICATION_DIVERGENCE_REQUIRES_ACCEPTED_DECISION",
@@ -145,7 +216,7 @@ async function executeCampaign(input, mechanismOptions = null) {
   }
   const inventory = allSlots.map((slot) => inventoryEntry(
     slot, attemptResults, decisiveHardFailure, authorizationRef,
-    input.campaign_actor_identity, input.index_frozen_at
+    input.campaign_actor_identity, input.index_frozen_at, invalidityDecisions
   ));
   const evidenceArtifacts = [
     input.authorization_anchor_receipt,
@@ -162,14 +233,18 @@ async function executeCampaign(input, mechanismOptions = null) {
     evidence_refs: evidenceArtifacts.map(createExactArtifactReference).sort(referenceSort),
     run_record_refs: runEntries.map((entry) => createExactArtifactReference(entry.record))
       .sort(referenceSort),
-    decision_refs: input.campaign_decisions.map(createExactArtifactReference)
+    decision_refs: campaignDecisions.map(createExactArtifactReference)
       .sort(referenceSort),
     anchor_receipt_refs: [createExactArtifactReference(input.authorization_anchor_receipt)],
     qualification_plan_ref: authorization.identity_payload.qualification_plan_ref,
     qualification_result_ref: authorization.identity_payload.qualification_result_ref,
     prior_index: null,
-    campaign_lifecycle: campaignLifecycle(attemptResults, decisiveHardFailure),
-    lifecycle_reason: campaignLifecycleReason(attemptResults, decisiveHardFailure),
+    campaign_lifecycle: campaignLifecycle(
+      attemptResults, decisiveHardFailure, invalidityStopReason
+    ),
+    lifecycle_reason: campaignLifecycleReason(
+      attemptResults, decisiveHardFailure, invalidityStopReason
+    ),
     cutoff_label: input.campaign_cutoff_label,
     producer_identity: input.index_producer_identity,
     validator_identity: input.index_validator_identity,
@@ -213,7 +288,7 @@ async function executeCampaign(input, mechanismOptions = null) {
     closure_receipt: closureReceipt,
     anchor_public_key: input.anchor_public_key,
     run_records: runEntries,
-    campaign_decisions: input.campaign_decisions,
+    campaign_decisions: campaignDecisions,
     qualification_evidence_artifacts: input.qualification_evidence_artifacts,
     historical_campaigns: input.historical_campaigns,
     additional_unresolved_closure: input.additional_unresolved_closure,
@@ -237,8 +312,29 @@ async function executeCampaign(input, mechanismOptions = null) {
   });
 }
 
-function inventoryEntry(slot, results, hardFailure, authorizationRef, actor, recordedAt) {
+function inventoryEntry(
+  slot, results, hardFailure, authorizationRef, actor, recordedAt, invalidityDecisions
+) {
   const result = results.find((candidate) => candidate.slot.attempt_id === slot.attempt_id);
+  const replacementAllocation = slot.allocation_kind === "INVALIDITY_DERIVED_REPLACEMENT"
+    ? structuredClone(slot)
+    : null;
+  const invalidityDecision = invalidityDecisions.find((decision) => (
+    decision.identity_payload.attempt_id === slot.attempt_id
+  ));
+  if (result?.run_record?.identity_payload.run_validity === "INVALID_UNSCORABLE") {
+    return {
+      slot_id: slot.slot_id,
+      attempt_id: slot.attempt_id,
+      path_id: slot.path_id,
+      disposition: "INVALID_RETAINED",
+      run_record_ref: createExactArtifactReference(result.run_record),
+      evidence_refs: result.evidence_refs.slice().sort(referenceSort),
+      invalidity_decision_ref: createExactArtifactReference(invalidityDecision),
+      replacement_allocation: replacementAllocation,
+      unused_slot_disposition: null
+    };
+  }
   if (result?.run_record) return {
     slot_id: slot.slot_id,
     attempt_id: slot.attempt_id,
@@ -247,7 +343,7 @@ function inventoryEntry(slot, results, hardFailure, authorizationRef, actor, rec
     run_record_ref: createExactArtifactReference(result.run_record),
     evidence_refs: result.evidence_refs.slice().sort(referenceSort),
     invalidity_decision_ref: null,
-    replacement_allocation: null,
+    replacement_allocation: replacementAllocation,
     unused_slot_disposition: null
   };
   if (result !== undefined) return {
@@ -332,16 +428,43 @@ function createClosureNamespace(input, campaignIndex) {
   });
 }
 
-function campaignLifecycle(results, hardFailure) {
+function campaignLifecycle(results, hardFailure, invalidityStopReason) {
   if (hardFailure !== null) return "closed";
+  if (invalidityStopReason !== null) return "suspended";
   return results.some((result) => result.run_record === null) ? "suspended" : "closed";
 }
 
-function campaignLifecycleReason(results, hardFailure) {
+function campaignLifecycleReason(results, hardFailure, invalidityStopReason) {
   if (hardFailure !== null) return "authoritative_global_hard_failure";
+  if (invalidityStopReason !== null) return invalidityStopReason;
   return results.some((result) => result.run_record === null)
     ? "authority_review_required"
     : "planned_attempt_set_closed";
+}
+
+function invalidityConsequence(priorDecisions, pathId, reasonCode) {
+  const history = [
+    ...priorDecisions.map((decision) => decision.identity_payload),
+    { path_id: pathId, reason_code: reasonCode }
+  ];
+  const pathCount = history.filter((entry) => entry.path_id === pathId).length;
+  const sameRootCount = history.filter((entry) => (
+    entry.path_id === pathId && entry.reason_code === reasonCode
+  )).length;
+  const replacementEligible = pathCount <= 2
+    && sameRootCount < 2
+    && history.length < 3;
+  return {
+    replacementEligible,
+    campaignConsequence: replacementEligible
+      ? "CONTINUE_WITH_REPLACEMENT"
+      : "SUSPEND_FOR_REVIEW",
+    stopReason: replacementEligible
+      ? null
+      : sameRootCount >= 2
+        ? "repeated_invalidity_root_cause"
+        : "invalid_attempt_limit_reached"
+  };
 }
 
 function detectQualificationDivergence(authorityContext, attemptResult) {

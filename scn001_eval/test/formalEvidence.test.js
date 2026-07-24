@@ -18,6 +18,7 @@ import {
   fingerprintCanonicalJson
 } from "../src/formalArtifactIdentity.js";
 import {
+  attemptStartAllocationBindingFingerprint,
   validateCampaignAuthorization,
   validateProspectiveExecutionStartPrerequisites,
   validateQualificationPlan,
@@ -211,7 +212,8 @@ test("recorder owns chronology and typed proof replay rejects label-only asserti
       observed_by: "actor:external-gate",
       anchor_event_id: "event:protected-gate:formal-campaign-fixture",
       start_event_id: "event:start:chronology-test",
-      run_scope_id: "run-scope:chronology-test"
+      run_scope_id: "run-scope:chronology-test",
+      allocation_binding_digest: attemptStartAllocationBindingFingerprint(slot)
     },
     sealed_at: "2026-07-21T13:29:00Z"
   });
@@ -353,7 +355,8 @@ test("recorder rejects concurrent capture before chronology can fork", async () 
     observed_by: "actor:external-gate",
     anchor_event_id: "event:protected-gate:formal-campaign-fixture",
     start_event_id: "event:start:concurrency-test",
-    run_scope_id: "run-scope:concurrency-test"
+    run_scope_id: "run-scope:concurrency-test",
+    allocation_binding_digest: attemptStartAllocationBindingFingerprint(slot)
   };
   const results = await Promise.allSettled([
     recorder.captureControlProof({
@@ -750,6 +753,7 @@ async function durableStartSetup() {
   const receiptBytes = campaign.receiptBytes;
   const receipt = campaign.anchorReceipt;
   const slot = fixture.campaignAuthorization.identity_payload.attempt_slots[0];
+  const allocationBindingDigest = attemptStartAllocationBindingFingerprint(slot);
   const recorder = createFormalEvidenceRecorder({
     store,
     authority_subject_ref: authorizationRef,
@@ -774,6 +778,7 @@ async function durableStartSetup() {
     anchor_event_id: "event:protected-gate:formal-campaign-fixture",
     start_event_id: "event:attempt-start:001",
     run_scope_id: "run-scope:attempt-start:001",
+    allocation_binding_digest: allocationBindingDigest,
     producer_identity: "actor:external-start-platform",
     issued_at: "2026-07-21T13:29:00Z"
   });
@@ -786,6 +791,7 @@ async function durableStartSetup() {
     anchor_receipt_ref: createExactArtifactReference(receipt),
     slot_id: slot.slot_id,
     run_scope_id: "run-scope:attempt-start:001",
+    allocation_binding_digest: allocationBindingDigest,
     sealed_at: "2026-07-21T13:30:00Z"
   });
   const startInput = {
@@ -817,6 +823,7 @@ async function durableStartSetup() {
       anchor_event_id: "event:protected-gate:formal-campaign-fixture",
       start_event_id: "event:attempt-start:001",
       run_scope_id: "run-scope:attempt-start:001",
+      allocation_binding_digest: allocationBindingDigest,
       capture_binding_digest: freshStart.identity_payload.semantic_envelope.capture_binding_digest,
       verification_result: "VERIFIED"
     }

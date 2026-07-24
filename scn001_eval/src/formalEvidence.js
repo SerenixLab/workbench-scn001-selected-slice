@@ -33,9 +33,12 @@ import {
   REQUIRED_PATHS,
   validateAttemptAllocation,
   validateCampaignAuthorization,
+  validateInitialRunInvalidityDecision,
   validateProspectiveExecutionStartPrerequisites,
   validateQualificationPlan,
-  validateQualificationResult
+  validateQualificationResult,
+  validateReplacementExecutionStartPrerequisites,
+  validateRunInvalidityReasonCode
 } from "./formalAuthority.js";
 
 const EVIDENCE_VISIBILITY = Object.freeze([
@@ -348,7 +351,7 @@ export async function verifyAuthenticatedFreshStartProof(
   const document = parseAndAuthenticateFreshStart(raw, anchorRequirement, publicKey);
   assertExactKeys(expected, [
     "authorization_ref", "namespace_index_ref", "anchor_receipt_ref", "slot_id",
-    "attempt_id", "path_id", "run_scope_id"
+    "attempt_id", "path_id", "run_scope_id", "allocation_binding_digest"
   ], [], "authenticated fresh-start expectation");
   const signed = document.signed_payload;
   for (const [field, expectedValue] of Object.entries(expected)) {
@@ -542,7 +545,8 @@ export function createFormalEvidenceRecorder(input) {
       try {
         assertExactKeys(attestationInput, [
           "artifact_id", "raw_attestation_bytes", "anchor_requirement", "public_key",
-          "namespace_index_ref", "anchor_receipt_ref", "slot_id", "run_scope_id", "sealed_at"
+          "namespace_index_ref", "anchor_receipt_ref", "slot_id", "run_scope_id",
+          "allocation_binding_digest", "sealed_at"
         ], [], "authenticated fresh-start capture input");
         assertRecorderProofTransition(
           input.attempt_id, proofRoles, "FRESH_START_PROOF",
@@ -563,7 +567,8 @@ export function createFormalEvidenceRecorder(input) {
           slot_id: attestationInput.slot_id,
           attempt_id: input.attempt_id,
           path_id: input.path_id,
-          run_scope_id: attestationInput.run_scope_id
+          run_scope_id: attestationInput.run_scope_id,
+          allocation_binding_digest: attestationInput.allocation_binding_digest
         };
         for (const [field, expected] of Object.entries(expectations)) {
           if (canonicalizeJson(signed[field]) !== canonicalizeJson(expected)) {
@@ -744,6 +749,105 @@ export async function replayTypedControlProof(store, artifact) {
     throw new Error("Control-proof semantic envelope was not derived from its canonical raw bytes.");
   }
   return deepFreeze({ artifact: stored, proof });
+}
+
+export async function verifyRunInvalidityObservation(store, artifact, expected) {
+  assertExactKeys(expected, [
+    "attempt_id", "path_id", "reason_code"
+  ], [], "run-invalidity observation expectation");
+  assertOpaqueId(expected.attempt_id, "run-invalidity observation attempt_id");
+  if (!REQUIRED_PATHS.includes(expected.path_id)) {
+    throw new Error("Run-invalidity observation path is unknown.");
+  }
+  validateRunInvalidityReasonCode(expected.reason_code);
+  const stored = await verifyDurableEvidence(store, artifact);
+  const payload = stored.identity_payload;
+  if (payload.evidence_kind !== "EVALUATOR_PRIVATE_CAPTURE"
+    || payload.semantic_envelope.capture_role !== "RUN_INVALIDITY_OBSERVATION"
+    || payload.attempt_id !== expected.attempt_id
+    || payload.path_id !== expected.path_id
+    || payload.semantic_envelope.reason_code !== expected.reason_code) {
+    throw new Error("Run-invalidity observation does not bind the expected attempt and reason.");
+  }
+  const raw = parseCanonicalJsonBytes(
+    await store.readRawBytes(payload.raw_custody), "run-invalidity observation"
+  );
+  assertExactKeys(raw, [
+    "reason_code", "event_kind", "bundle_id", "source_material", "error_name", "message"
+  ], [], "run-invalidity observation");
+  if (raw.reason_code !== payload.semantic_envelope.reason_code
+    || raw.event_kind !== payload.semantic_envelope.event_kind
+    || raw.bundle_id !== payload.semantic_envelope.bundle_id
+    || raw.error_name !== payload.semantic_envelope.error_name
+    || fingerprintCanonicalJson(
+      "zoey:run-invalidity-source-material:v1", raw.source_material
+    ) !== payload.semantic_envelope.source_material_digest) {
+    throw new Error("Run-invalidity observation semantics do not replay from exact raw bytes.");
+  }
+  assertNonemptyString(raw.message, "run-invalidity observation message");
+  return deepFreeze({ artifact: stored, observation: raw });
+}
+
+export async function verifySutFailureObservation(store, artifact, expected) {
+  assertExactKeys(expected, [
+    "attempt_id", "path_id"
+  ], [], "SUT failure observation expectation");
+  assertOpaqueId(expected.attempt_id, "SUT failure observation attempt_id");
+  if (!REQUIRED_PATHS.includes(expected.path_id)) {
+    throw new Error("SUT failure observation path is unknown.");
+  }
+  const stored = await verifyDurableEvidence(store, artifact);
+  const payload = stored.identity_payload;
+  if (payload.evidence_kind !== "EVALUATOR_PRIVATE_CAPTURE"
+    || payload.semantic_envelope.capture_role !== "SUT_FAILURE_OBSERVATION"
+    || payload.attempt_id !== expected.attempt_id
+    || payload.path_id !== expected.path_id) {
+    throw new Error("SUT failure observation does not bind the expected attempt.");
+  }
+  const raw = parseCanonicalJsonBytes(
+    await store.readRawBytes(payload.raw_custody), "SUT failure observation"
+  );
+  assertExactKeys(raw, [
+    "operation", "error_name", "message"
+  ], [], "SUT failure observation");
+  if (raw.operation !== payload.semantic_envelope.operation
+    || raw.error_name !== payload.semantic_envelope.error_name) {
+    throw new Error("SUT failure observation semantics do not replay from exact raw bytes.");
+  }
+  assertNonemptyString(raw.message, "SUT failure observation message");
+  return deepFreeze({ artifact: stored, observation: raw });
+}
+
+export async function verifyWithheldFixtureObservation(store, artifact, expected) {
+  assertExactKeys(expected, [
+    "attempt_id", "path_id"
+  ], [], "withheld fixture observation expectation");
+  const stored = await verifyDurableEvidence(store, artifact);
+  const payload = stored.identity_payload;
+  if (payload.evidence_kind !== "EVALUATOR_PRIVATE_CAPTURE"
+    || payload.semantic_envelope.capture_role !== "WITHHELD_FIXTURE_OBSERVATION"
+    || payload.attempt_id !== expected.attempt_id
+    || payload.path_id !== expected.path_id) {
+    throw new Error("Withheld fixture observation does not bind the expected attempt.");
+  }
+  const raw = parseCanonicalJsonBytes(
+    await store.readRawBytes(payload.raw_custody), "withheld fixture observation"
+  );
+  assertExactKeys(raw, [
+    "event_kind", "bundle_id", "source_material", "result"
+  ], [], "withheld fixture observation");
+  if (raw.event_kind !== "WITHHELD_NOT_ELIGIBLE"
+    || !Array.isArray(raw.result) || raw.result.length !== 0
+    || raw.bundle_id !== payload.semantic_envelope.bundle_id
+    || fingerprintCanonicalJson(
+      "zoey:withheld-fixture-source-material:v1", raw.source_material
+    ) !== payload.semantic_envelope.source_material_digest
+    || fingerprintCanonicalJson(
+      "zoey:withheld-fixture-result:v1", raw.result
+    ) !== payload.semantic_envelope.result_digest) {
+    throw new Error("Withheld fixture observation does not replay exact non-delivery.");
+  }
+  return deepFreeze({ artifact: stored, observation: raw });
 }
 
 export function validateFormalEvidenceArtifact(artifact) {
@@ -1286,14 +1390,25 @@ async function resolveDurableExecutionAuthorityInternal(input, requireCurrentHea
   validateAuthorityNamespaceIndex(input.namespace_index);
   validateFormalEvidenceArtifact(input.anchor_receipt);
   validateFormalEvidenceArtifact(input.fresh_start_capture);
-  const expectedPreflight = validateProspectiveExecutionStartPrerequisites({
-    authorization: input.authorization,
-    slot_id: input.preflight.slot?.slot_id,
-    authorizing_namespace_ref: input.preflight.authorizing_namespace_ref,
-    anchor_receipt_ref: input.preflight.anchor_receipt_ref,
-    anchor_verification: input.preflight.anchor_verification,
-    fresh_start_proof: input.preflight.fresh_start_proof
-  });
+  const replacementStart = input.preflight.slot?.allocation_kind
+    === "INVALIDITY_DERIVED_REPLACEMENT";
+  const expectedPreflight = replacementStart
+    ? validateReplacementExecutionStartPrerequisites({
+      authorization: input.authorization,
+      attempt_allocation: input.preflight.slot,
+      authorizing_namespace_ref: input.preflight.authorizing_namespace_ref,
+      anchor_receipt_ref: input.preflight.anchor_receipt_ref,
+      anchor_verification: input.preflight.anchor_verification,
+      fresh_start_proof: input.preflight.fresh_start_proof
+    })
+    : validateProspectiveExecutionStartPrerequisites({
+      authorization: input.authorization,
+      slot_id: input.preflight.slot?.slot_id,
+      authorizing_namespace_ref: input.preflight.authorizing_namespace_ref,
+      anchor_receipt_ref: input.preflight.anchor_receipt_ref,
+      anchor_verification: input.preflight.anchor_verification,
+      fresh_start_proof: input.preflight.fresh_start_proof
+    });
   if (canonicalizeJson(input.preflight) !== canonicalizeJson(expectedPreflight)
     || input.preflight.execution_start_authorized !== false
     || input.preflight.authority_status !== "READY_FOR_DURABLE_AUTHORITY_RESOLUTION") {
@@ -1313,6 +1428,19 @@ async function resolveDurableExecutionAuthorityInternal(input, requireCurrentHea
   await input.store.readArtifact(authorizationRef, (artifact) => validateCampaignAuthorization(
     artifact, input.authority_context
   ));
+  if (replacementStart) {
+    const allocation = input.preflight.slot;
+    const invalidity = await input.store.readArtifact(
+      allocation.invalidity_decision_ref,
+      (artifact) => validateInitialRunInvalidityDecision(artifact, input.authorization)
+    );
+    if (invalidity.identity_payload.replacement_eligible !== true
+      || canonicalizeJson(invalidity.identity_payload.run_record_ref)
+        !== canonicalizeJson(allocation.predecessor_run_ref)
+      || invalidity.identity_payload.path_id !== allocation.path_id) {
+      throw new Error("Replacement start lacks its exact eligible predecessor invalidity.");
+    }
+  }
   if (input.authorization.identity_payload.qualification_plan_ref !== null) {
     await input.store.readArtifact(
       input.authorization.identity_payload.qualification_plan_ref,
@@ -1390,7 +1518,8 @@ async function resolveDurableExecutionAuthorityInternal(input, requireCurrentHea
       slot_id: input.preflight.slot.slot_id,
       attempt_id: input.preflight.slot.attempt_id,
       path_id: input.preflight.slot.path_id,
-      run_scope_id: input.preflight.fresh_start_proof.run_scope_id
+      run_scope_id: input.preflight.fresh_start_proof.run_scope_id,
+      allocation_binding_digest: input.preflight.fresh_start_proof.allocation_binding_digest
     }
   );
   const receiptSemantics = input.anchor_receipt.identity_payload.semantic_envelope;
@@ -1423,6 +1552,8 @@ async function resolveDurableExecutionAuthorityInternal(input, requireCurrentHea
     || startSemantics.anchor_event_id !== receiptSemantics.external_event_id
     || startSemantics.start_event_id !== input.preflight.fresh_start_proof.start_event_id
     || startSemantics.run_scope_id !== input.preflight.fresh_start_proof.run_scope_id
+    || startSemantics.allocation_binding_digest
+      !== input.preflight.fresh_start_proof.allocation_binding_digest
     || startSemantics.capture_binding_digest
       !== input.preflight.fresh_start_proof.capture_binding_digest
     || input.fresh_start_capture.identity_payload.attempt_id
@@ -1896,13 +2027,18 @@ function validateEvidenceSemantics(payload) {
     }
     assertExactKeys(payload.semantic_envelope, [
       "capture_role", "profile", "slot_id", "challenge", "issued_by", "observed_by",
-      "anchor_event_id", "start_event_id", "run_scope_id", "capture_binding_digest"
+      "anchor_event_id", "start_event_id", "run_scope_id", "allocation_binding_digest",
+      "capture_binding_digest"
     ], [], "fresh-start capture semantics");
     assertNonemptyString(payload.semantic_envelope.profile, "fresh-start capture profile");
     for (const field of [
       "slot_id", "challenge", "issued_by", "observed_by", "anchor_event_id", "start_event_id",
       "run_scope_id"
     ]) assertOpaqueId(payload.semantic_envelope[field], `fresh-start capture ${field}`);
+    assertSha256(
+      payload.semantic_envelope.allocation_binding_digest,
+      "fresh-start capture allocation_binding_digest"
+    );
     assertSha256(
       payload.semantic_envelope.capture_binding_digest,
       "fresh-start capture capture_binding_digest"
@@ -1974,6 +2110,71 @@ function validateEvidenceSemantics(payload) {
       || canonicalizeJson(payload.authority_subject_ref)
         !== canonicalizeJson(payload.semantic_envelope.plan_ref)) {
       throw new Error("Qualification oracle capture identity/digest closure is invalid.");
+    }
+  } else if (payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE"
+    && payload.semantic_envelope.capture_role === "RUN_INVALIDITY_OBSERVATION") {
+    assertExactKeys(payload.semantic_envelope, [
+      "capture_role", "reason_code", "event_kind", "bundle_id", "source_material_digest",
+      "error_name", "content_digest", "event_id"
+    ], [], "run-invalidity observation semantics");
+    if (payload.visibility !== "EVALUATOR_PRIVATE" || payload.attempt_id === null
+      || payload.delivered_order !== null
+      || payload.semantic_envelope.event_kind !== "DELIVERY_INTERRUPTED") {
+      throw new Error("Run-invalidity observation has invalid visibility or event context.");
+    }
+    validateRunInvalidityReasonCode(payload.semantic_envelope.reason_code);
+    for (const field of ["bundle_id", "error_name", "event_id"]) {
+      assertOpaqueId(
+        payload.semantic_envelope[field], `run-invalidity observation ${field}`
+      );
+    }
+    assertSha256(
+      payload.semantic_envelope.content_digest,
+      "run-invalidity observation content_digest"
+    );
+    assertSha256(
+      payload.semantic_envelope.source_material_digest,
+      "run-invalidity observation source_material_digest"
+    );
+    if (payload.semantic_envelope.content_digest !== payload.raw_byte_digest) {
+      throw new Error("Run-invalidity observation digest does not bind exact raw bytes.");
+    }
+  } else if (payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE"
+    && payload.semantic_envelope.capture_role === "SUT_FAILURE_OBSERVATION") {
+    assertExactKeys(payload.semantic_envelope, [
+      "capture_role", "operation", "error_name", "content_digest", "event_id"
+    ], [], "SUT failure observation semantics");
+    if (payload.visibility !== "EVALUATOR_PRIVATE" || payload.attempt_id === null
+      || payload.delivered_order !== null) {
+      throw new Error("SUT failure observation has invalid visibility or attempt context.");
+    }
+    for (const field of ["operation", "error_name", "event_id"]) {
+      assertOpaqueId(payload.semantic_envelope[field], `SUT failure observation ${field}`);
+    }
+    assertSha256(
+      payload.semantic_envelope.content_digest, "SUT failure observation content_digest"
+    );
+    if (payload.semantic_envelope.content_digest !== payload.raw_byte_digest) {
+      throw new Error("SUT failure observation digest does not bind exact raw bytes.");
+    }
+  } else if (payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE"
+    && payload.semantic_envelope.capture_role === "WITHHELD_FIXTURE_OBSERVATION") {
+    assertExactKeys(payload.semantic_envelope, [
+      "capture_role", "bundle_id", "source_material_digest", "result_digest",
+      "content_digest", "event_id"
+    ], [], "withheld fixture observation semantics");
+    if (payload.visibility !== "EVALUATOR_PRIVATE" || payload.attempt_id === null
+      || payload.delivered_order !== null) {
+      throw new Error("Withheld fixture observation has invalid visibility or attempt context.");
+    }
+    for (const field of ["bundle_id", "event_id"]) {
+      assertOpaqueId(payload.semantic_envelope[field], `withheld fixture observation ${field}`);
+    }
+    for (const field of ["source_material_digest", "result_digest", "content_digest"]) {
+      assertSha256(payload.semantic_envelope[field], `withheld fixture observation ${field}`);
+    }
+    if (payload.semantic_envelope.content_digest !== payload.raw_byte_digest) {
+      throw new Error("Withheld fixture observation digest does not bind exact raw bytes.");
     }
   } else if (payload.evidence_kind === "EVALUATOR_PRIVATE_CAPTURE") {
     assertExactKeys(payload.semantic_envelope, [
@@ -2121,7 +2322,8 @@ function validateFreshStartSignedPayload(payload) {
   assertExactKeys(payload, [
     "profile", "authorization_ref", "namespace_index_ref", "anchor_receipt_ref",
     "slot_id", "attempt_id", "path_id", "challenge", "issued_by", "observed_by",
-    "anchor_event_id", "start_event_id", "run_scope_id", "producer_identity", "issued_at"
+    "anchor_event_id", "start_event_id", "run_scope_id", "allocation_binding_digest",
+    "producer_identity", "issued_at"
   ], [], "fresh-start signed payload");
   validateExactArtifactReference(payload.authorization_ref, {
     allowedKinds: ["CAMPAIGN_AUTHORIZATION"]
@@ -2136,6 +2338,7 @@ function validateFreshStartSignedPayload(payload) {
     "profile", "slot_id", "attempt_id", "path_id", "challenge", "issued_by",
     "observed_by", "anchor_event_id", "start_event_id", "run_scope_id", "producer_identity"
   ]) assertOpaqueId(payload[field], `fresh-start signed payload.${field}`);
+  assertSha256(payload.allocation_binding_digest, "fresh-start allocation binding");
   if (!REQUIRED_PATHS.includes(payload.path_id)
     || payload.anchor_event_id === payload.start_event_id) {
     throw new Error("Fresh-start signed path or causal event closure is invalid.");
@@ -2183,6 +2386,7 @@ function freshStartSemanticsFrom(payload, rawBytes) {
     anchor_event_id: payload.anchor_event_id,
     start_event_id: payload.start_event_id,
     run_scope_id: payload.run_scope_id,
+    allocation_binding_digest: payload.allocation_binding_digest,
     capture_binding_digest: sha256Bytes(toBuffer(rawBytes))
   };
 }
@@ -2283,7 +2487,8 @@ function controlProofFromFreshStartAttestation(document, artifact) {
       observed_by: signed.observed_by,
       anchor_event_id: signed.anchor_event_id,
       start_event_id: signed.start_event_id,
-      run_scope_id: signed.run_scope_id
+      run_scope_id: signed.run_scope_id,
+      allocation_binding_digest: signed.allocation_binding_digest
     }
   };
 }
@@ -2448,7 +2653,7 @@ function validateValidationAttestationProposition(value) {
 function validateFreshStartProposition(value, proof) {
   assertExactKeys(value, [
     "profile", "slot_id", "challenge", "issued_by", "observed_by", "anchor_event_id",
-    "start_event_id", "run_scope_id"
+    "start_event_id", "run_scope_id", "allocation_binding_digest"
   ], [], "fresh-start proposition");
   if (proof.attempt_id === null) throw new Error("Fresh-start proof must be attempt-bound.");
   assertNonemptyString(value.profile, "fresh-start profile");
@@ -2456,6 +2661,7 @@ function validateFreshStartProposition(value, proof) {
     "slot_id", "challenge", "issued_by", "observed_by", "anchor_event_id", "start_event_id",
     "run_scope_id"
   ]) assertOpaqueId(value[field], `fresh-start proposition.${field}`);
+  assertSha256(value.allocation_binding_digest, "fresh-start allocation binding");
   if (value.anchor_event_id === value.start_event_id) {
     throw new Error("Fresh-start proof cannot reuse its anchor event as start.");
   }
@@ -2569,6 +2775,7 @@ function runtimeEvidenceVisibility(evidenceKind) {
   if (["SIMULATOR_REQUEST_CAPTURE", "SIMULATOR_REALIZATION_CAPTURE"].includes(
     evidenceKind
   )) return "EVALUATOR_PRIVATE";
+  if (evidenceKind === "EVALUATOR_PRIVATE_CAPTURE") return "EVALUATOR_PRIVATE";
   throw new Error("Recorder runtime evidence kind is outside the closed catalogue.");
 }
 
@@ -2620,6 +2827,56 @@ function runtimeEvidenceSemantics(evidenceKind, data, rawBytes, eventId) {
       fidelity: data.fidelity,
       mismatch_digest: data.mismatch_digest,
       origin: data.origin,
+      event_id: eventId
+    };
+  }
+  if (evidenceKind === "EVALUATOR_PRIVATE_CAPTURE") {
+    if (data.capture_role === "WITHHELD_FIXTURE_OBSERVATION") {
+      assertExactKeys(data, [
+        "capture_role", "bundle_id", "source_material_digest", "result_digest"
+      ], [], "withheld fixture observation data");
+      assertOpaqueId(data.bundle_id, "withheld fixture observation bundle_id");
+      assertSha256(
+        data.source_material_digest, "withheld fixture observation source_material_digest"
+      );
+      assertSha256(data.result_digest, "withheld fixture observation result_digest");
+      return {
+        ...structuredClone(data),
+        content_digest: digest,
+        event_id: eventId
+      };
+    }
+    if (data.capture_role === "SUT_FAILURE_OBSERVATION") {
+      assertExactKeys(data, [
+        "capture_role", "operation", "error_name"
+      ], [], "SUT failure observation data");
+      for (const field of ["operation", "error_name"]) {
+        assertOpaqueId(data[field], `SUT failure observation ${field}`);
+      }
+      return {
+        ...structuredClone(data),
+        content_digest: digest,
+        event_id: eventId
+      };
+    }
+    assertExactKeys(data, [
+      "capture_role", "reason_code", "event_kind", "bundle_id",
+      "source_material_digest", "error_name"
+    ], [], "run-invalidity observation data");
+    if (data.capture_role !== "RUN_INVALIDITY_OBSERVATION"
+      || data.event_kind !== "DELIVERY_INTERRUPTED") {
+      throw new Error("Runtime evaluator-private capture role is outside the closed catalogue.");
+    }
+    validateRunInvalidityReasonCode(data.reason_code);
+    for (const field of ["bundle_id", "error_name"]) {
+      assertOpaqueId(data[field], `run-invalidity observation ${field}`);
+    }
+    assertSha256(
+      data.source_material_digest, "run-invalidity observation source_material_digest"
+    );
+    return {
+      ...structuredClone(data),
+      content_digest: digest,
       event_id: eventId
     };
   }

@@ -15,6 +15,7 @@ import {
 import {
   REQUIRED_PATHS,
   allocateReplacementAttempt,
+  attemptStartAllocationBindingFingerprint,
   createCampaignAuthorization,
   createInitialRunInvalidityDecision,
   createMaterialAuthorityDecision,
@@ -564,6 +565,9 @@ function executionStartInput(authorization) {
       anchor_event_id: "event:protected-gate:001",
       start_event_id: "event:attempt-start:001",
       run_scope_id: "run-scope:attempt-start:001",
+      allocation_binding_digest: attemptStartAllocationBindingFingerprint(
+        authorization.identity_payload.attempt_slots[0]
+      ),
       capture_binding_digest: digest("a"),
       verification_result: "VERIFIED"
     }

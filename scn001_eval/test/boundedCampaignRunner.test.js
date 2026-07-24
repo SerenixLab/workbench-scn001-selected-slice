@@ -60,7 +60,7 @@ test("campaign input cannot import an owner standing decision", async () => {
   );
 });
 
-test("pre-seal interruption is retained and suspends without fabricating invalidity", async () => {
+test("sealable interruption is retained, classified, and replaced prospectively", async () => {
   const setup = await createFormalCampaignFixture({ qualification: "NOT_QUALIFIED" });
   const base = createSutBoundary();
   const interrupted = Object.freeze(Object.fromEntries(
@@ -71,24 +71,201 @@ test("pre-seal interruption is retained and suspends without fabricating invalid
         : (...argumentsReceived) => base[method](...argumentsReceived)
     ])
   ));
+  let boundaryCount = 0;
   const result = await executeBoundedSelectedSliceCampaignForMechanismTest(
     inputFor(setup),
-    { sut_boundary_factory: () => interrupted }
+    {
+      sut_boundary_factory: () => {
+        boundaryCount += 1;
+        return boundaryCount === 1 ? interrupted : undefined;
+      }
+    }
   );
-  assert.equal(result.attempt_results.length, 1);
-  assert.equal(result.attempt_results[0].attempt_disposition, "ABANDONED_RETAINED");
-  assert.equal(result.attempt_results[0].run_record, null);
-  assert.equal(result.campaign_index.identity_payload.campaign_lifecycle, "suspended");
-  assert.equal(result.campaign_index.identity_payload.lifecycle_reason, "authority_review_required");
+  assert.equal(result.attempt_results.length, 13);
+  assert.equal(result.attempt_results[0].attempt_disposition, "INVALID_RETAINED");
   assert.equal(
-    result.campaign_index.identity_payload.attempt_inventory[0].invalidity_decision_ref,
-    null
+    result.attempt_results[0].run_record.identity_payload.run_validity,
+    "INVALID_UNSCORABLE"
+  );
+  assert.equal(result.attempt_results[1].slot.allocation_kind, "INVALIDITY_DERIVED_REPLACEMENT");
+  assert.equal(result.attempt_results[1].execution_status, "SEALED");
+  assert.equal(result.campaign_index.identity_payload.decision_refs.length, 1);
+  assert.equal(result.campaign_index.identity_payload.campaign_lifecycle, "closed");
+  assert.equal(result.campaign_index.identity_payload.lifecycle_reason, "planned_attempt_set_closed");
+  assert.equal(result.bounded_result.identity_payload.bounded_result, "BOUNDED_PASS");
+  assert.equal(result.claim_authorized, false);
+});
+
+test("SUT processing failure remains scored and cannot trigger replacement", async () => {
+  const setup = await createFormalCampaignFixture({ qualification: "NOT_QUALIFIED" });
+  let boundaryCount = 0;
+  const result = await executeBoundedSelectedSliceCampaignForMechanismTest(
+    inputFor(setup),
+    {
+      sut_boundary_factory: () => {
+        boundaryCount += 1;
+        if (boundaryCount !== 1) return undefined;
+        const base = createSutBoundary();
+        return Object.freeze(Object.fromEntries(
+          SUT_PUBLIC_BOUNDARY_METHODS.map((method) => [
+            method,
+            method === "processCurrentInteraction"
+              ? () => { throw new Error("campaign SUT processing failure"); }
+              : (...argumentsReceived) => base[method](...argumentsReceived)
+          ])
+        ));
+      }
+    }
+  );
+  assert.equal(result.attempt_results.length, 12);
+  assert.equal(result.attempt_results[0].transcript.execution_status,
+    "COMPLETED_WITH_SUT_FAILURE");
+  assert.equal(result.attempt_results[0].run_record.identity_payload.run_validity, "VALID");
+  assert.equal(result.campaign_index.identity_payload.decision_refs.length, 0);
+  assert.equal(
+    result.campaign_index.identity_payload.attempt_inventory.filter(
+      (entry) => entry.replacement_allocation !== null
+    ).length,
+    0
+  );
+  assert.equal(result.bounded_result.identity_payload.bounded_result, "BOUNDED_FAIL");
+});
+
+test("repeated sealable interruption suspends at the accepted root-cause limit", async () => {
+  const setup = await createFormalCampaignFixture({ qualification: "NOT_QUALIFIED" });
+  const interrupted = () => {
+    const base = createSutBoundary();
+    return Object.freeze(Object.fromEntries(
+      SUT_PUBLIC_BOUNDARY_METHODS.map((method) => [
+        method,
+        method === "ingestSutVisibleInputs"
+          ? () => { throw new Error("repeated campaign interruption"); }
+          : (...argumentsReceived) => base[method](...argumentsReceived)
+      ])
+    ));
+  };
+  const result = await executeBoundedSelectedSliceCampaignForMechanismTest(
+    inputFor(setup),
+    { sut_boundary_factory: interrupted }
+  );
+  assert.equal(result.attempt_results.length, 2);
+  assert.ok(result.attempt_results.every(
+    (attempt) => attempt.attempt_disposition === "INVALID_RETAINED"
+  ));
+  assert.equal(result.campaign_index.identity_payload.decision_refs.length, 2);
+  assert.equal(result.campaign_index.identity_payload.campaign_lifecycle, "suspended");
+  assert.equal(
+    result.campaign_index.identity_payload.lifecycle_reason,
+    "repeated_invalidity_root_cause"
   );
   assert.equal(
     result.bounded_result.identity_payload.bounded_result,
     "NOT_YET_DETERMINABLE"
   );
   assert.equal(result.claim_authorized, false);
+});
+
+test("post-start seal failure freezes an abandoned authority-review suspension", async () => {
+  const setup = await createFormalCampaignFixture({ qualification: "NOT_QUALIFIED" });
+  const rejectingStore = Object.freeze({
+    ...setup.store,
+    async writeArtifact(artifact, validator) {
+      if (artifact.artifact_kind === "FORMAL_RUN_RECORD") {
+        throw new Error("injected campaign seal failure");
+      }
+      return setup.store.writeArtifact(artifact, validator);
+    }
+  });
+  const input = inputFor(setup);
+  input.store = rejectingStore;
+  const result = await executeBoundedSelectedSliceCampaignForMechanismTest(input);
+  assert.equal(result.attempt_results.length, 1);
+  assert.equal(result.attempt_results[0].attempt_disposition, "ABANDONED_RETAINED");
+  assert.equal(result.campaign_index.identity_payload.campaign_lifecycle, "suspended");
+  assert.equal(result.campaign_index.identity_payload.lifecycle_reason, "authority_review_required");
+  assert.equal(result.campaign_index.identity_payload.decision_refs.length, 0);
+  assert.equal(
+    result.bounded_result.identity_payload.bounded_result,
+    "NOT_YET_DETERMINABLE"
+  );
+  assert.equal(result.claim_authorized, false);
+});
+
+test("three campaign-wide invalid attempts suspend before a third replacement", async () => {
+  const setup = await createFormalCampaignFixture({ qualification: "NOT_QUALIFIED" });
+  const interruptedPaths = new Set(
+    setup.campaignAuthorization.identity_payload.required_paths.slice(0, 3)
+  );
+  const result = await executeBoundedSelectedSliceCampaignForMechanismTest(
+    inputFor(setup),
+    {
+      sut_boundary_factory: (slot) => {
+        if (slot.slot_kind !== "PRIMARY" || slot.ordinal !== 1
+          || !interruptedPaths.has(slot.path_id)) {
+          return undefined;
+        }
+        const base = createSutBoundary();
+        return Object.freeze(Object.fromEntries(
+          SUT_PUBLIC_BOUNDARY_METHODS.map((method) => [
+            method,
+            method === "ingestSutVisibleInputs"
+              ? () => { throw new Error(`campaign-wide interruption:${slot.path_id}`); }
+              : (...argumentsReceived) => base[method](...argumentsReceived)
+          ])
+        ));
+      }
+    }
+  );
+  assert.equal(result.campaign_index.identity_payload.decision_refs.length, 3);
+  assert.equal(result.campaign_index.identity_payload.campaign_lifecycle, "suspended");
+  assert.equal(
+    result.campaign_index.identity_payload.lifecycle_reason,
+    "invalid_attempt_limit_reached"
+  );
+  assert.equal(
+    result.campaign_index.identity_payload.attempt_inventory.filter(
+      (entry) => entry.replacement_allocation !== null
+    ).length,
+    2
+  );
+  assert.equal(result.bounded_result.identity_payload.bounded_result, "NOT_YET_DETERMINABLE");
+  assert.equal(result.claim_authorized, false);
+});
+
+test("replacement start rejects a signed substitution of its allocation basis", async () => {
+  const setup = await createFormalCampaignFixture({ qualification: "NOT_QUALIFIED" });
+  const base = createSutBoundary();
+  const interrupted = Object.freeze(Object.fromEntries(
+    SUT_PUBLIC_BOUNDARY_METHODS.map((method) => [
+      method,
+      method === "ingestSutVisibleInputs"
+        ? () => { throw new Error("replacement-binding interruption"); }
+        : (...argumentsReceived) => base[method](...argumentsReceived)
+    ])
+  ));
+  const input = inputFor(setup);
+  input.fresh_start_attestor = async (request) => createFixtureFreshStartAttestationBytes({
+    ...structuredClone(request),
+    allocation_binding_digest: request.attempt_id.includes(":replacement-attempt:")
+      ? `sha256:${"f".repeat(64)}`
+      : request.allocation_binding_digest,
+    challenge: `challenge:campaign:${request.attempt_id}`,
+    issued_by: "actor:external-gate",
+    observed_by: "actor:external-gate",
+    start_event_id: `event:campaign-start:${request.attempt_id}`,
+    producer_identity: "actor:external-start-platform",
+    issued_at: "2026-07-22T17:59:00Z"
+  });
+  let boundaryCount = 0;
+  await assert.rejects(
+    () => executeBoundedSelectedSliceCampaignForMechanismTest(input, {
+      sut_boundary_factory: () => {
+        boundaryCount += 1;
+        return boundaryCount === 1 ? interrupted : undefined;
+      }
+    }),
+    /conflicts on allocation_binding_digest/
+  );
 });
 
 test("trusted campaign entry rejects generic authorization without measurement roots", async () => {

@@ -176,19 +176,20 @@ Durable repository extraction remains blocked by `REPO-001`.
 `PHASE7_READINESS.md` records the completed start approval and the later blocked
 independent reviews. The authoritative status remains
 `PHASE7_MECHANISM_LAYER_COMPLETE_PIPELINE_CLOSURE_PENDING`: the measured
-conservative path now reaches bounded-result creation, but the full
-invalidity/replacement and owner-governed contingency lifecycle is not yet an
-end-to-end executable path. Formal reliance also remains blocked pending fresh
+conservative path now reaches bounded-result creation and closes sealable
+invalidity through replayable evidence, deterministic replacement, replacement
+execution, and accepted stop limits. The owner-governed continuation after
+qualified-branch divergence is not yet a resumable end-to-end path. Formal
+reliance also remains blocked pending fresh
 exact-commit independent review, protected integration, and real external
 project-owner authority. No real campaign authority is claimed.
 
 The current corrective implementation adds clean-commit configuration
-measurement and a non-public trusted authorization path that reconstructs both
+measurement at the non-public trusted campaign entry, reconstructs both
 manifests and forces three runs per path. It also rejects unknown runtime-source
 members, import/environment escapes, non-regular source members, private-layout
-test assumptions, and conflicting in-memory artifact identities. This measured-
-configuration component alone is not a formal runner or permission to execute
-a campaign.
+test assumptions, and conflicting in-memory artifact identities. These
+mechanisms are not permission to execute a real campaign.
 
 An internal corrective runner executes the exact four-path fixture flow and
 derives path/claim outcomes from evaluator-private checkpoint reconstruction;
@@ -197,9 +198,14 @@ also owns the event transcript containing delivered fixture material and post-
 event inspections. A new internal attempt pipeline binds a signed post-anchor
 fresh-start attestation to the exact recorder-owned run scope, converts that
 transcript into byte-exact typed custody, derives failure findings from captured
-inspections, and either seals the resulting formal run or retains an interrupted
-attempt without scoring it. It is not exported by the package root and cannot
-start or authorize a real campaign by itself.
+inspections, and distinguishes three failure classes: undelivered fixture input
+is retained as replayable infrastructure invalidity, a SUT processing failure
+after material delivery remains a valid scored obligation failure, and a
+post-start authority/seal failure remains abandoned for review. Sealable
+invalidity is indexed, independently replayed, deterministically replaced, and
+bounded by the accepted per-path, repeated-root, and campaign-wide limits. The
+pipeline is not exported by the package root and cannot start or authorize a
+real campaign by itself.
 
 The evidence-trust corrective layer now pins an Ed25519 verifier in the
 owner-approved anchor policy, derives receipt semantics from canonical signed
