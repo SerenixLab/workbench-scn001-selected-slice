@@ -374,6 +374,9 @@ async function validateRunInputs(input) {
     || selectionProof.proposition.seed_commitment !== slot.seed_commitment) {
     throw new Error("Formal run typed proofs conflict with run isolation or prospective selection.");
   }
+  await replayInitialInspectionSnapshot(
+    input.store, artifacts, freshProof, initialProof, isolationProof
+  );
   const refs = artifacts.map(createExactArtifactReference);
   if (new Set(refs.map(canonicalizeJson)).size !== refs.length) {
     throw new Error("Formal run evidence references must be unique.");
@@ -433,6 +436,50 @@ async function validateRunInputs(input) {
     }
   }
   return { slot, evidenceRefs: refs, refsByKind, digestsByKind };
+}
+
+async function replayInitialInspectionSnapshot(
+  store, artifacts, freshProof, initialProof, isolationProof
+) {
+  const initialReference = initialProof.proposition.initial_snapshot_ref;
+  if (canonicalizeJson(initialReference)
+    !== canonicalizeJson(isolationProof.proposition.initial_snapshot_ref)) {
+    throw new Error("Initial-state and isolation proofs do not bind one exact initial snapshot.");
+  }
+  const snapshotArtifact = artifacts.find((artifact) => canonicalizeJson(
+    createExactArtifactReference(artifact)
+  ) === canonicalizeJson(initialReference));
+  if (snapshotArtifact?.identity_payload.evidence_kind !== "SUT_INSPECTION_CAPTURE") {
+    throw new Error("Initial snapshot does not resolve to this run's inspection capture.");
+  }
+  const raw = await store.readRawBytes(snapshotArtifact.identity_payload.raw_custody);
+  let snapshot;
+  try {
+    snapshot = JSON.parse(raw.toString("utf8"));
+  } catch {
+    throw new Error("Initial inspection snapshot is not canonical JSON.");
+  }
+  assertPlainObject(snapshot, "initial inspection snapshot");
+  assertExactKeys(snapshot, ["runRef", "records", "relations"], [], "initial inspection snapshot");
+  assertOpaqueId(snapshot.runRef, "initial inspection runRef");
+  if (!Array.isArray(snapshot.records) || !Array.isArray(snapshot.relations)
+    || snapshot.records.length !== 0 || snapshot.relations.length !== 0) {
+    throw new Error("Initial inspection snapshot does not establish an empty boundary.");
+  }
+  if (raw.toString("utf8") !== `${canonicalizeJson(snapshot)}\n`) {
+    throw new Error("Initial inspection snapshot bytes are not the exact canonical encoding.");
+  }
+  const snapshotDigest = fingerprintCanonicalJson(
+    "zoey:formal-initial-inspection:v1", snapshot
+  );
+  if (snapshot.runRef !== freshProof.proposition.run_scope_id
+    || snapshot.runRef !== initialProof.proposition.run_scope_id
+    || snapshot.runRef !== isolationProof.proposition.run_scope_id
+    || initialProof.proposition.initial_record_count !== snapshot.records.length
+    || initialProof.proposition.initial_snapshot_digest !== snapshotDigest
+    || isolationProof.proposition.inspection_snapshot_digest !== snapshotDigest) {
+    throw new Error("Initial inspection snapshot cannot reconstruct the typed proof assertions.");
+  }
 }
 
 function validateRunEvidencePayload(payload, artifacts) {

@@ -148,6 +148,22 @@ test("run sealing rejects actor collapse, missing control evidence, and cross-at
   await assert.rejects(() => createFormalRunRecord(crossed), /crosses campaign, attempt, or path|evidence list/);
 });
 
+test("run sealing replays the durable initial snapshot instead of trusting proof labels", async () => {
+  const setup = await createFormalCampaignFixture();
+  const slot = setup.campaignAuthorization.identity_payload.attempt_slots[0];
+  const attempt = await createAuthorizedAttempt(setup, slot, {
+    initialSnapshot: {
+      runRef: `run-scope:${slot.attempt_id}`,
+      records: [{ recordId: "record:foreign-material" }],
+      relations: []
+    }
+  });
+  await assert.rejects(
+    () => createFormalRunRecord(runInput(setup, attempt)),
+    /does not establish an empty boundary/
+  );
+});
+
 function runInput(setup, attempt, overrides = {}) {
   return {
     store: setup.store,

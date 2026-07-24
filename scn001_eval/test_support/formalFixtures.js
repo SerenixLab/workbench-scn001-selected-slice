@@ -2,7 +2,10 @@ import {
   createBehaviorConfigurationManifest,
   createEvaluationConfigurationManifest
 } from "../src/configurationIdentity.js";
-import { createExactArtifactReference } from "../src/formalArtifactIdentity.js";
+import {
+  createExactArtifactReference,
+  fingerprintCanonicalJson
+} from "../src/formalArtifactIdentity.js";
 import {
   REQUIRED_PATHS,
   createCampaignAuthorization,
@@ -222,7 +225,12 @@ function qualificationComparisons(plan, executions = null) {
       right_execution_id: right.execution_id,
       equivalent,
       mismatch_class: equivalent ? null : "VALUE_MISMATCH",
-      details_digest: equivalent ? null : digest("f")
+      details_digest: equivalent ? null : fingerprintCanonicalJson(
+        "zoey:qualification-comparison-mismatch:v1", {
+          left_comparator_input_digest: leftExecution.comparator_input_digest,
+          right_comparator_input_digest: rightExecution.comparator_input_digest
+        }
+      )
     };
   });
 }

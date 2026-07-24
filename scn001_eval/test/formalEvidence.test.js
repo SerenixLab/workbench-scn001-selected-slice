@@ -215,15 +215,33 @@ test("recorder owns chronology and typed proof replay rejects label-only asserti
     },
     sealed_at: "2026-07-21T13:29:00Z"
   });
+  const initialSnapshot = {
+    runRef: "run-scope:chronology-test",
+    records: [],
+    relations: []
+  };
+  const initialInspection = await recorder.captureInitialInspection({
+    artifact_id: "artifact:inspection:initial:chronology-test",
+    raw_bytes: Buffer.from(`${canonicalizeJson(initialSnapshot)}\n`, "utf8"),
+    semantic_data: {
+      subject_identity: "inspection:initial:chronology-test",
+      contract_digest: digest("2")
+    },
+    sealed_at: "2026-07-21T13:29:30Z"
+  });
+  const initialInspectionRef = createExactArtifactReference(initialInspection);
   const initial = await recorder.captureControlProof({
     artifact_id: "artifact:proof:initial:chronology-test",
     proof_role: "INITIAL_STATE_PROOF",
     proposition: {
-      initial_snapshot_digest: digest("1"),
+      initial_snapshot_digest: fingerprintCanonicalJson(
+        "zoey:formal-initial-inspection:v1", initialSnapshot
+      ),
       initial_record_count: 0,
       prior_material_output_count: 0,
       run_scope_id: "run-scope:chronology-test",
-      observation_source: "FRESH_BOUNDARY_INSPECTION"
+      observation_source: "FRESH_BOUNDARY_INSPECTION",
+      initial_snapshot_ref: initialInspectionRef
     },
     sealed_at: "2026-07-21T13:30:00Z"
   });
@@ -234,7 +252,10 @@ test("recorder owns chronology and typed proof replay rejects label-only asserti
       run_scope_id: "run-scope:chronology-test",
       foreign_run_ids: [],
       isolated: true,
-      inspection_snapshot_digest: digest("3")
+      inspection_snapshot_digest: fingerprintCanonicalJson(
+        "zoey:formal-initial-inspection:v1", initialSnapshot
+      ),
+      initial_snapshot_ref: initialInspectionRef
     },
     sealed_at: "2026-07-21T13:32:00Z"
   });
@@ -262,12 +283,13 @@ test("recorder owns chronology and typed proof replay rejects label-only asserti
   });
   assert.deepEqual([
     fresh.identity_payload.created_order,
+    initialInspection.identity_payload.created_order,
     initial.identity_payload.created_order,
     isolation.identity_payload.created_order,
     selection.identity_payload.created_order,
     inputCapture.identity_payload.created_order,
     inputCapture.identity_payload.delivered_order
-  ], [1, 2, 3, 4, 5, 6]);
+  ], [1, 2, 3, 4, 5, 6, 7]);
   assert.equal((await verifyTypedControlProof(setup.store, initial)).content_fingerprint,
     initial.content_fingerprint);
 

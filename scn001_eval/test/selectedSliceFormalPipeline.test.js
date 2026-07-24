@@ -105,7 +105,7 @@ test("execution interruption retains partial evidence without sealing a scored r
   assert.equal(result.run_record, null);
   assert.equal(result.invalidity.reason_code, "SCN001-SSFO-V0.2.0-VAL-010");
   assert.match(result.invalidity.message, /injected fixture ingress interruption/);
-  assert.equal(result.evidence_artifacts.length, 4);
+  assert.equal(result.evidence_artifacts.length, 5);
   for (const artifact of result.evidence_artifacts) {
     await verifyDurableEvidence(setup.store, artifact);
   }

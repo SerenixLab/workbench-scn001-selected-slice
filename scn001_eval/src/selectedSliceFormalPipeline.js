@@ -100,6 +100,18 @@ async function executeFormalAttempt(input, sutBoundary) {
         verification_result: "VERIFIED"
       }
     });
+    const initialInspection = await recorder.captureInitialInspection({
+      artifact_id: `${input.artifact_namespace}:initial-inspection`,
+      raw_bytes: canonicalBytes(session.initial_inspection),
+      semantic_data: {
+        subject_identity: `${input.artifact_namespace}:initial-inspection`,
+        contract_digest: input.authority_context.behavior_manifest.identity_payload
+          .public_boundary.inspection_contract_digest
+      },
+      sealed_at: input.sealed_at
+    });
+    evidenceArtifacts.push(initialInspection);
+    const initialInspectionRef = createExactArtifactReference(initialInspection);
     const initialDigest = fingerprintCanonicalJson(
       "zoey:formal-initial-inspection:v1", session.initial_inspection
     );
@@ -111,7 +123,8 @@ async function executeFormalAttempt(input, sutBoundary) {
         initial_record_count: session.initial_inspection.records.length,
         prior_material_output_count: 0,
         run_scope_id: session.run_ref,
-        observation_source: "FRESH_BOUNDARY_INSPECTION"
+        observation_source: "FRESH_BOUNDARY_INSPECTION",
+        initial_snapshot_ref: initialInspectionRef
       },
       sealed_at: input.sealed_at
     });
@@ -123,7 +136,8 @@ async function executeFormalAttempt(input, sutBoundary) {
         run_scope_id: session.run_ref,
         foreign_run_ids: [],
         isolated: true,
-        inspection_snapshot_digest: initialDigest
+        inspection_snapshot_digest: initialDigest,
+        initial_snapshot_ref: initialInspectionRef
       },
       sealed_at: input.sealed_at
     });

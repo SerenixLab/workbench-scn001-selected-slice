@@ -14,6 +14,7 @@ import {
 } from "./formalAuthority.js";
 import {
   createFormalEvidenceRecorder,
+  normalizeQualificationComparatorInput,
   qualificationComparatorInputFingerprint,
   qualificationOracleProjectionFingerprint,
   qualificationValidationBasisFingerprint,
@@ -120,7 +121,9 @@ async function executeQualification(input, sessionFactory) {
       const transcript = session.executeRetainingInterruption();
       const completed = transcript.execution_status === "COMPLETED";
       const oracleMaterial = qualificationOracleMaterial(transcript);
-      const comparatorInput = completed ? normalizeRunLocalIdentities(oracleMaterial) : null;
+      const comparatorInput = completed
+        ? normalizeQualificationComparatorInput(oracleMaterial)
+        : null;
       const oracleProjectionDigest = qualificationOracleProjectionFingerprint(oracleMaterial);
       const comparatorInputDigest = qualificationComparatorInputFingerprint(comparatorInput);
       const capture = await recorder.captureControlProof({
@@ -225,31 +228,6 @@ function qualificationOracleMaterial(transcript) {
   const copy = JSON.parse(JSON.stringify(transcript));
   delete copy.run_ref;
   return copy;
-}
-
-function normalizeRunLocalIdentities(value) {
-  const identities = new Map();
-  const nextByPrefix = new Map();
-  const visit = (current) => {
-    if (typeof current === "string") {
-      const match = /^(run|actor|state|source|interaction|transition|simulator)_[0-9a-f-]{36}$/.exec(
-        current
-      );
-      if (!match) return current;
-      if (!identities.has(current)) {
-        const next = (nextByPrefix.get(match[1]) ?? 0) + 1;
-        nextByPrefix.set(match[1], next);
-        identities.set(current, `${match[1]}#${String(next).padStart(6, "0")}`);
-      }
-      return identities.get(current);
-    }
-    if (Array.isArray(current)) return current.map(visit);
-    if (current !== null && typeof current === "object") {
-      return Object.fromEntries(Object.entries(current).map(([key, child]) => [key, visit(child)]));
-    }
-    return current;
-  };
-  return visit(value);
 }
 
 function deriveComparisons(plan, executions, evidenceArtifacts) {

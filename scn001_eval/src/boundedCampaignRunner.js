@@ -14,8 +14,41 @@ import {
 } from "./formalEvidence.js";
 import { createBoundedCampaignResult } from "./boundedScoring.js";
 import { executeFormalSelectedSliceAttempt } from "./selectedSliceFormalPipeline.js";
+import { verifyConfigurationManifestsFromCommit } from "./configurationMeasurement.js";
 
 export async function executeBoundedSelectedSliceCampaign(input) {
+  assertExactKeys(input, [
+    ...CAMPAIGN_INPUT_KEYS, "repository_root", "canonical_meta_root"
+  ], ["source_commit"], "trusted bounded selected-slice campaign input");
+  await verifyConfigurationManifestsFromCommit({
+    repository_root: input.repository_root,
+    canonical_meta_root: input.canonical_meta_root,
+    source_commit: input.source_commit,
+    behavior_manifest: input.authority_context.behavior_manifest,
+    evaluation_manifest: input.authority_context.evaluation_manifest
+  });
+  if (input.authorization.identity_payload.run_count_branch !== "NONDETERMINISTIC_THREE"
+    || input.authorization.identity_payload.qualification_plan_ref !== null
+    || input.authorization.identity_payload.qualification_result_ref !== null) {
+    throw new Error("Trusted V1 campaigns require measured conservative authorization.");
+  }
+  const {
+    repository_root: ignoredRepositoryRoot,
+    canonical_meta_root: ignoredCanonicalMetaRoot,
+    source_commit: ignoredSourceCommit,
+    ...campaignInput
+  } = input;
+  void ignoredRepositoryRoot;
+  void ignoredCanonicalMetaRoot;
+  void ignoredSourceCommit;
+  return executeCampaign(campaignInput);
+}
+
+export async function executeBoundedSelectedSliceCampaignForMechanismTest(input) {
+  return executeCampaign(input);
+}
+
+async function executeCampaign(input) {
   validateInput(input);
   const authorization = input.authorization;
   const authorizationRef = createExactArtifactReference(authorization);
@@ -245,24 +278,26 @@ function campaignLifecycle(results, hardFailure) {
 function campaignLifecycleReason(results, hardFailure) {
   if (hardFailure !== null) return "authoritative_global_hard_failure";
   return results.some((result) => result.run_record === null)
-    ? "attempt_interruption_requires_replacement"
+    ? "authority_review_required"
     : "planned_attempt_set_closed";
 }
 
+const CAMPAIGN_INPUT_KEYS = Object.freeze([
+  "store", "authorization", "authority_context", "authorizing_namespace",
+  "authorization_anchor_receipt", "anchor_public_key", "fresh_start_attestor",
+  "closure_receipt_attestor", "qualification_evidence_artifacts", "artifact_namespace",
+  "campaign_index_artifact_id", "closure_namespace_artifact_id",
+  "closure_receipt_artifact_id", "bounded_result_artifact_id", "bounded_result_id",
+  "campaign_cutoff_label", "namespace_cutoff_label", "evidence_producer_identity",
+  "evidence_validator_identity", "run_producer_identity", "run_validator_identity",
+  "index_producer_identity", "index_validator_identity", "namespace_validator_identity",
+  "receipt_validator_identity", "result_producer_identity", "result_validator_identity",
+  "campaign_actor_identity", "attempts_sealed_at", "index_frozen_at",
+  "namespace_created_at", "closure_receipt_sealed_at", "result_created_at"
+]);
+
 function validateInput(input) {
-  assertExactKeys(input, [
-    "store", "authorization", "authority_context", "authorizing_namespace",
-    "authorization_anchor_receipt", "anchor_public_key", "fresh_start_attestor",
-    "closure_receipt_attestor", "qualification_evidence_artifacts", "artifact_namespace",
-    "campaign_index_artifact_id", "closure_namespace_artifact_id",
-    "closure_receipt_artifact_id", "bounded_result_artifact_id", "bounded_result_id",
-    "campaign_cutoff_label", "namespace_cutoff_label", "evidence_producer_identity",
-    "evidence_validator_identity", "run_producer_identity", "run_validator_identity",
-    "index_producer_identity", "index_validator_identity", "namespace_validator_identity",
-    "receipt_validator_identity", "result_producer_identity", "result_validator_identity",
-    "campaign_actor_identity", "attempts_sealed_at", "index_frozen_at",
-    "namespace_created_at", "closure_receipt_sealed_at", "result_created_at"
-  ], [], "bounded selected-slice campaign input");
+  assertExactKeys(input, CAMPAIGN_INPUT_KEYS, [], "bounded selected-slice campaign input");
   validateCampaignAuthorization(input.authorization, input.authority_context);
   validateAuthorityNamespaceIndex(input.authorizing_namespace);
   if (typeof input.fresh_start_attestor !== "function"

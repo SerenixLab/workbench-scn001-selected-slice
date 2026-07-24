@@ -411,9 +411,59 @@ export function createFormalEvidenceRecorder(input) {
   let busy = false;
   let runtimeCaptureObserved = false;
   let materialOutputObserved = false;
+  let initialInspectionCaptured = false;
   const proofRoles = [];
 
   return Object.freeze({
+    async captureInitialInspection(evidenceInput) {
+      if (poisoned) throw new Error("Formal evidence recorder is terminal after a failed capture.");
+      if (busy) {
+        poisoned = true;
+        throw new Error("Formal evidence recorder rejects concurrent chronology mutation.");
+      }
+      busy = true;
+      try {
+        assertExactKeys(evidenceInput, [
+          "artifact_id", "raw_bytes", "semantic_data", "sealed_at"
+        ], [], "initial inspection capture input");
+        if (input.attempt_id === null || initialInspectionCaptured
+          || canonicalizeJson(proofRoles) !== canonicalizeJson(["FRESH_START_PROOF"])) {
+          throw new Error("Initial inspection must be captured exactly once after fresh start.");
+        }
+        const createdOrder = eventOrder + 1;
+        const eventId = `${input.event_namespace}:event:${String(createdOrder).padStart(6, "0")}`;
+        const raw = toBuffer(evidenceInput.raw_bytes);
+        const artifact = await captureFormalEvidence(input.store, {
+          artifact_id: evidenceInput.artifact_id,
+          evidence_kind: "SUT_INSPECTION_CAPTURE",
+          authority_subject_ref: input.authority_subject_ref,
+          campaign_authorization_ref: input.campaign_authorization_ref,
+          attempt_id: input.attempt_id,
+          path_id: input.path_id,
+          visibility: "SUT_VISIBLE",
+          media_type: "application/octet-stream",
+          encoding: "binary",
+          raw_bytes: raw,
+          semantic_envelope: runtimeEvidenceSemantics(
+            "SUT_INSPECTION_CAPTURE", evidenceInput.semantic_data, raw, eventId
+          ),
+          created_order: createdOrder,
+          delivered_order: null,
+          producer_identity: input.producer_identity,
+          validator_identity: input.validator_identity,
+          sealed_at: evidenceInput.sealed_at
+        });
+        eventOrder = createdOrder;
+        initialInspectionCaptured = true;
+        return artifact;
+      } catch (error) {
+        poisoned = true;
+        throw error;
+      } finally {
+        busy = false;
+      }
+    },
+
     async captureAuthenticatedQualificationStart(attestationInput) {
       if (poisoned) throw new Error("Formal evidence recorder is terminal after a failed capture.");
       if (busy) {
@@ -563,7 +613,7 @@ export function createFormalEvidenceRecorder(input) {
         ], [], "typed control proof input");
         assertRecorderProofTransition(
           input.attempt_id, proofRoles, proofInput.proof_role,
-          runtimeCaptureObserved, materialOutputObserved
+          runtimeCaptureObserved, materialOutputObserved, initialInspectionCaptured
         );
         const createdOrder = eventOrder + 1;
         const eventId = `${input.event_namespace}:event:${String(createdOrder).padStart(6, "0")}`;
@@ -1574,12 +1624,73 @@ export async function verifyDurableQualificationEvidence(
         || captureProof.proof.proposition.execution_status !== execution.status
         || captureProof.proof.proposition.run_scope_id
           !== matchingFresh?.identity_payload.semantic_envelope.run_scope_id
+        || canonicalizeJson(captureProof.proof.proposition.comparator_input)
+          !== canonicalizeJson(
+            captureProof.proof.proposition.execution_status === "COMPLETED"
+              ? normalizeQualificationComparatorInput(
+                captureProof.proof.proposition.oracle_projection
+              )
+              : null
+          )
         || canonicalizeJson(capture.identity_payload.authority_subject_ref)
           !== canonicalizeJson(planRef)) {
         throw new Error("Qualification execution capture has the wrong role or plan subject.");
       }
     }
   }
+  const recomputedComparisons = recomputeQualificationComparisons(
+    plan.identity_payload.execution_slots, payload.executions
+  );
+  const recomputedResult = payload.executions.some(
+    (execution) => execution.status !== "COMPLETED"
+  ) ? "INCONCLUSIVE" : recomputedComparisons.every(
+      (comparison) => comparison.equivalent === true
+    ) ? "QUALIFIED" : "NOT_QUALIFIED";
+  if (canonicalizeJson(recomputedComparisons) !== canonicalizeJson(payload.comparisons)
+    || recomputedResult !== payload.result) {
+    throw new Error("Qualification comparisons/result fail independent raw-material recomputation.");
+  }
+}
+
+function recomputeQualificationComparisons(slots, executions) {
+  const byId = new Map(executions.map((execution) => [execution.execution_id, execution]));
+  const comparisons = [];
+  for (const path of REQUIRED_PATHS) {
+    const ids = slots.filter((slot) => slot.path_id === path).map((slot) => slot.execution_id);
+    for (let leftIndex = 0; leftIndex < ids.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < ids.length; rightIndex += 1) {
+        const left = byId.get(ids[leftIndex]);
+        const right = byId.get(ids[rightIndex]);
+        if (left.status !== "COMPLETED" || right.status !== "COMPLETED") {
+          comparisons.push({
+            left_execution_id: left.execution_id,
+            right_execution_id: right.execution_id,
+            equivalent: null,
+            mismatch_class: "COMPARATOR_ERROR",
+            details_digest: fingerprintCanonicalJson("zoey:qualification-comparator-error:v1", {
+              left_status: left.status,
+              right_status: right.status
+            })
+          });
+          continue;
+        }
+        const equivalent = left.comparator_input_digest === right.comparator_input_digest;
+        comparisons.push({
+          left_execution_id: left.execution_id,
+          right_execution_id: right.execution_id,
+          equivalent,
+          mismatch_class: equivalent ? null : "VALUE_MISMATCH",
+          details_digest: equivalent ? null : fingerprintCanonicalJson(
+            "zoey:qualification-comparison-mismatch:v1", {
+              left_comparator_input_digest: left.comparator_input_digest,
+              right_comparator_input_digest: right.comparator_input_digest
+            }
+          )
+        });
+      }
+    }
+  }
+  return comparisons;
 }
 
 export function qualificationValidationBasisFingerprint(plan, result) {
@@ -1606,6 +1717,31 @@ export function qualificationOracleProjectionFingerprint(value) {
 
 export function qualificationComparatorInputFingerprint(value) {
   return fingerprintCanonicalJson("zoey:qualification-comparator-input:v1", value);
+}
+
+export function normalizeQualificationComparatorInput(value) {
+  const identities = new Map();
+  const nextByPrefix = new Map();
+  const visit = (current) => {
+    if (typeof current === "string") {
+      const match = /^(run|actor|state|source|interaction|transition|simulator)_[0-9a-f-]{36}$/.exec(
+        current
+      );
+      if (!match) return current;
+      if (!identities.has(current)) {
+        const next = (nextByPrefix.get(match[1]) ?? 0) + 1;
+        nextByPrefix.set(match[1], next);
+        identities.set(current, `${match[1]}#${String(next).padStart(6, "0")}`);
+      }
+      return identities.get(current);
+    }
+    if (Array.isArray(current)) return current.map(visit);
+    if (current !== null && typeof current === "object") {
+      return Object.fromEntries(Object.entries(current).map(([key, child]) => [key, visit(child)]));
+    }
+    return current;
+  };
+  return visit(value);
 }
 
 function buildTypedArtifact(artifactId, artifactKind, payload) {
@@ -2177,7 +2313,8 @@ function controlProofFromQualificationStartAttestation(document, artifact) {
 }
 
 function assertRecorderProofTransition(
-  attemptId, priorRoles, nextRole, runtimeCaptureObserved, materialOutputObserved
+  attemptId, priorRoles, nextRole, runtimeCaptureObserved, materialOutputObserved,
+  initialInspectionCaptured = false
 ) {
   if (priorRoles.includes(nextRole)) {
     throw new Error("Formal evidence recorder cannot repeat a control-proof role.");
@@ -2189,6 +2326,9 @@ function assertRecorderProofTransition(
     ];
     if (runtimeCaptureObserved || nextRole !== sequence[priorRoles.length]) {
       throw new Error("Attempt control proofs are outside the closed pre-output sequence.");
+    }
+    if (nextRole === "INITIAL_STATE_PROOF" && !initialInspectionCaptured) {
+      throw new Error("Initial-state proof requires its preceding raw inspection capture.");
     }
     if (nextRole === "SELECTION_INDEPENDENCE" && materialOutputObserved) {
       throw new Error("Prospective selection proof cannot follow material output.");
@@ -2241,7 +2381,7 @@ function validateControlProofDocument(proof) {
 function validateInitialStateProposition(value) {
   assertExactKeys(value, [
     "initial_snapshot_digest", "initial_record_count", "prior_material_output_count",
-    "run_scope_id", "observation_source"
+    "run_scope_id", "observation_source", "initial_snapshot_ref"
   ], [], "initial-state proposition");
   assertSha256(value.initial_snapshot_digest, "initial-state snapshot digest");
   if (value.initial_record_count !== 0 || value.prior_material_output_count !== 0
@@ -2249,15 +2389,22 @@ function validateInitialStateProposition(value) {
     throw new Error("Initial-state proof does not establish an empty fresh boundary.");
   }
   assertOpaqueId(value.run_scope_id, "initial-state run_scope_id");
+  validateExactArtifactReference(value.initial_snapshot_ref, {
+    allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT"]
+  });
 }
 
 function validateRunIsolationProposition(value) {
   assertExactKeys(value, [
-    "run_scope_id", "foreign_run_ids", "isolated", "inspection_snapshot_digest"
+    "run_scope_id", "foreign_run_ids", "isolated", "inspection_snapshot_digest",
+    "initial_snapshot_ref"
   ], [], "run-isolation proposition");
   assertOpaqueId(value.run_scope_id, "run-isolation run_scope_id");
   assertSortedUniqueStrings(value.foreign_run_ids, "run-isolation foreign_run_ids");
   assertSha256(value.inspection_snapshot_digest, "run-isolation inspection digest");
+  validateExactArtifactReference(value.initial_snapshot_ref, {
+    allowedKinds: ["FORMAL_EVIDENCE_ARTIFACT"]
+  });
   if (value.isolated !== true || value.foreign_run_ids.length !== 0) {
     throw new Error("Run-isolation proof reports foreign state or a non-isolated boundary.");
   }

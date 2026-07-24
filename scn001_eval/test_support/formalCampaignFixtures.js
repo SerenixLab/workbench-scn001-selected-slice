@@ -8,7 +8,11 @@ import {
   validateBehaviorConfigurationManifest,
   validateEvaluationConfigurationManifest
 } from "../src/configurationIdentity.js";
-import { createExactArtifactReference } from "../src/formalArtifactIdentity.js";
+import {
+  canonicalizeJson,
+  createExactArtifactReference,
+  fingerprintCanonicalJson
+} from "../src/formalArtifactIdentity.js";
 import {
   REQUIRED_CLAIM_CLASSES,
   validateCampaignAuthorization,
@@ -157,7 +161,7 @@ export async function createFormalCampaignFixture(options = {}) {
   };
 }
 
-export async function createAuthorizedAttempt(setup, slot) {
+export async function createAuthorizedAttempt(setup, slot, options = {}) {
   const authorization = setup.campaignAuthorization;
   const authorizationRef = createExactArtifactReference(authorization);
   const namespaceRef = createExactArtifactReference(setup.namespace);
@@ -246,15 +250,34 @@ export async function createAuthorizedAttempt(setup, slot) {
     fresh_start_capture: freshStart,
     qualification_evidence_artifacts: setup.qualificationEvidenceArtifacts
   });
+  const initialSnapshot = options.initialSnapshot ?? {
+    runRef: `run-scope:${slot.attempt_id}`,
+    records: [],
+    relations: []
+  };
+  const initialInspection = await recorder.captureInitialInspection({
+    artifact_id: `artifact:initial-inspection:${slot.attempt_id}`,
+    raw_bytes: Buffer.from(`${canonicalizeJson(initialSnapshot)}\n`, "utf8"),
+    semantic_data: {
+      subject_identity: `initial-inspection:${slot.attempt_id}`,
+      contract_digest: setup.behaviorManifest.identity_payload.public_boundary
+        .inspection_contract_digest
+    },
+    sealed_at: "2026-07-21T13:25:30Z"
+  });
+  const initialInspectionRef = createExactArtifactReference(initialInspection);
   const initialState = await recorder.captureControlProof({
     artifact_id: `artifact:initial-state-proof:${slot.attempt_id}`,
     proof_role: "INITIAL_STATE_PROOF",
     proposition: {
-      initial_snapshot_digest: digest("1"),
+      initial_snapshot_digest: fingerprintCanonicalJson(
+        "zoey:formal-initial-inspection:v1", initialSnapshot
+      ),
       initial_record_count: 0,
       prior_material_output_count: 0,
       run_scope_id: `run-scope:${slot.attempt_id}`,
-      observation_source: "FRESH_BOUNDARY_INSPECTION"
+      observation_source: "FRESH_BOUNDARY_INSPECTION",
+      initial_snapshot_ref: initialInspectionRef
     },
     sealed_at: "2026-07-21T13:26:00Z"
   });
@@ -265,7 +288,10 @@ export async function createAuthorizedAttempt(setup, slot) {
       run_scope_id: `run-scope:${slot.attempt_id}`,
       foreign_run_ids: [],
       isolated: true,
-      inspection_snapshot_digest: digest("2")
+      inspection_snapshot_digest: fingerprintCanonicalJson(
+        "zoey:formal-initial-inspection:v1", initialSnapshot
+      ),
+      initial_snapshot_ref: initialInspectionRef
     },
     sealed_at: "2026-07-21T13:27:00Z"
   });
@@ -345,8 +371,8 @@ export async function createAuthorizedAttempt(setup, slot) {
     sealed_at: "2026-07-21T13:34:00Z"
   });
   const evidenceArtifacts = [
-    freshStart, initialState, isolation, selectionIndependence, sutInput, sutOutput, inspection,
-    simulatorRequest, simulatorRealization
+    freshStart, initialInspection, initialState, isolation, selectionIndependence,
+    sutInput, sutOutput, inspection, simulatorRequest, simulatorRealization
   ];
   return {
     slot,

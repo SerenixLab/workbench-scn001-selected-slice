@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { executeBoundedSelectedSliceCampaign } from "../src/boundedCampaignRunner.js";
+import {
+  executeBoundedSelectedSliceCampaign,
+  executeBoundedSelectedSliceCampaignForMechanismTest
+} from "../src/boundedCampaignRunner.js";
 import { createFormalCampaignFixture } from "../test_support/formalCampaignFixtures.js";
 import {
   createFixtureAnchorReceiptBytes,
@@ -10,7 +13,7 @@ import {
 
 test("trusted campaign executes every primary slot and derives bounded pass pending standing", async () => {
   const setup = await createFormalCampaignFixture();
-  const result = await executeBoundedSelectedSliceCampaign(inputFor(setup));
+  const result = await executeBoundedSelectedSliceCampaignForMechanismTest(inputFor(setup));
   assert.equal(result.attempt_results.length, 4);
   assert.ok(result.attempt_results.every((attempt) => attempt.execution_status === "SEALED"));
   assert.equal(result.campaign_index.identity_payload.campaign_lifecycle, "closed");
@@ -29,7 +32,7 @@ test("conservative qualification branch executes all twelve primary slots", asyn
   input.closure_receipt_artifact_id = "artifact:trusted-campaign:conservative:receipt";
   input.bounded_result_artifact_id = "artifact:trusted-campaign:conservative:result";
   input.bounded_result_id = "result:trusted-campaign:conservative";
-  const result = await executeBoundedSelectedSliceCampaign(input);
+  const result = await executeBoundedSelectedSliceCampaignForMechanismTest(input);
   assert.equal(result.attempt_results.length, 12);
   assert.equal(result.bounded_result.identity_payload.run_count_branch, "CONSERVATIVE_THREE");
   assert.equal(result.bounded_result.identity_payload.bounded_result, "BOUNDED_PASS");
@@ -39,11 +42,19 @@ test("conservative qualification branch executes all twelve primary slots", asyn
 test("campaign input cannot import an owner standing decision", async () => {
   const setup = await createFormalCampaignFixture();
   await assert.rejects(
-    () => executeBoundedSelectedSliceCampaign({
+    () => executeBoundedSelectedSliceCampaignForMechanismTest({
       ...inputFor(setup),
       standing_decision: { standing: "CURRENT" }
     }),
     /invalid fields/
+  );
+});
+
+test("trusted campaign entry rejects generic authorization without measurement roots", async () => {
+  const setup = await createFormalCampaignFixture();
+  await assert.rejects(
+    () => executeBoundedSelectedSliceCampaign(inputFor(setup)),
+    /missing=\[repository_root,canonical_meta_root\]/
   );
 });
 
